@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 2 课 · 链表</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 2 课 · 链表</h1>
+<p class="one-line">链表的每个节点只记两样东西：<b>自己的值</b>和<b>下一个是谁</b>。像寻宝游戏，每张纸条告诉你下一张在哪。</p>
+
+<h2>长什么样</h2>
+<div class="row">
+  <span class="label">head →</span>
+  <span class="box">1</span><span>→</span><span class="box">2</span><span>→</span><span class="box">3</span><span>→</span>
+  <span class="label">None</span><span class="label">（tail 指向 3）</span>
+</div>
+<pre>class Node:
+    def __init__(self, value, next=None):
+        self.value = value
+        self.next = next</pre>
+<p>节点不用排在一起，散落在内存的任何地方都行，靠 <code>next</code> 串起来。</p>
+
+<h2>和数组比一比</h2>
+<table>
+  <tr><th>操作</th><th>数组</th><th>链表</th></tr>
+  <tr><td>按下标取第 i 个</td><td>O(1)</td><td>O(n)，只能从头一个个数</td></tr>
+  <tr><td>头部插入 / 删除</td><td>O(n)</td><td>O(1)</td></tr>
+  <tr><td>尾部插入</td><td>均摊 O(1)</td><td>O(1)（前提是记着 tail）</td></tr>
+</table>
+<p>一句话：数组擅长<b>随机访问</b>，链表擅长<b>在已知位置增删</b>。</p>
+
+<h2>头部插入：两步，顺序不能反</h2>
+<div class="row">
+  <span class="box hot">0</span><span>→</span><span class="box">1</span><span>→</span><span class="box">2</span><span>→</span><span class="label">None</span>
+</div>
+<pre>node = Node(0, self.head)   # ① 新节点先指向旧的头
+self.head = node            # ② 再把 head 挪到新节点</pre>
+<p>如果先挪 head，旧的头就找不到了。<b>改指针之前，先想清楚谁会因此“失联”。</b></p>
+
+<h2>删除：要找的是“前一个”</h2>
+<p>单链表只能往后走。要删掉 2，得站在 <b>1</b> 上，让 1 跳过 2：</p>
+<div class="row">
+  <span class="box">1</span><span>⤼</span><span class="box empty">2</span><span class="box">3</span>
+  <span class="label">prev.next = prev.next.next</span>
+</div>
+<p><b>小技巧：哨兵节点。</b>在 head 前面放一个假节点 <code>dummy</code>，这样删头节点和删中间节点就是同一种写法，不用单独判断。</p>
+
+<h2>反转：三个指针一起往前走</h2>
+<pre>prev, cur = None, self.head
+while cur:
+    nxt = cur.next      # 先记住后面
+    cur.next = prev     # 掉头
+    prev = cur          # 两个指针一起前进
+    cur = nxt</pre>
+<p>别忘了，反转之后 head 和 tail 要互换。</p>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li>链表<b>变空</b>的时候，head 和 tail 都要变回 None。</li>
+  <li>删掉的正好是<b>尾巴</b>，tail 要退回到前一个节点。</li>
+  <li><b>只有一个节点</b>时，head 和 tail 是同一个节点。</li>
+</ul>
+<p>测试会专门检查这三种情况。</p>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/linked_list.py</code>。建议顺序：<code>push_front</code> → <code>__iter__</code>（用 <code>yield</code>）→ <code>push_back</code> → <code>pop_front</code> → <code>find</code> → <code>remove</code> → <code>reverse</code>。</p>
+<pre>uv run pytest tests/test_linked_list.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 为什么链表取第 i 个是 O(n)？</summary>
+节点不连续，没法算地址，只能从 head 开始沿着 next 走 i 步。</details>
+<details><summary>2. 有 tail 指针，为什么 pop_back（删尾巴）还是 O(n)？</summary>
+删掉尾巴以后，tail 要指向倒数第二个节点，可单链表没法往回走，只能从头找。双向链表就能做到 O(1)。</details>
+<details><summary>3. Python 里什么东西是用链表实现的？</summary>
+<code>collections.deque</code> 底层是一串定长块组成的双向链表，所以它的两端增删都是 O(1)。</details>
+
+<div class="nav"><a href="01-dynamic-array.html">← 上一课：动态数组</a><a href="index.html">目录 →</a></div>
+</body>
+</html>

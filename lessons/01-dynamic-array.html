@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 1 课 · 动态数组</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 1 课 · 动态数组</h1>
+<p class="one-line">数组是一排<b>连续</b>的格子，所以按下标取数很快；“动态”的意思是：格子不够时，换一排更大的。</p>
+
+<h2>为什么按下标取数是 O(1)</h2>
+<p>格子连续、大小一样，第 i 格的位置可以直接算出来：<code>起点 + i × 格子大小</code>。不用从头数。</p>
+<div class="row">
+  <span class="box">7</span><span class="box">3</span><span class="box hot">9</span><span class="box">4</span>
+  <span class="box empty">·</span><span class="box empty">·</span>
+  <span class="label">size = 4，capacity = 6，arr[2] 一步就到</span>
+</div>
+<p><b>size</b> 是装了几个，<b>capacity</b> 是一共有几个格子。</p>
+
+<h2>满了怎么办：搬家</h2>
+<p>原地没法加长，只能新开一排<b>两倍大</b>的格子，把旧的逐个搬过去：</p>
+<div class="row"><span class="label">满了：</span>
+  <span class="box">1</span><span class="box">2</span><span class="box">3</span><span class="box">4</span>
+</div>
+<div class="row"><span class="label">搬家后：</span>
+  <span class="box">1</span><span class="box">2</span><span class="box">3</span><span class="box">4</span>
+  <span class="box hot">5</span><span class="box empty">·</span><span class="box empty">·</span><span class="box empty">·</span>
+</div>
+
+<h2>搬家这么贵，append 怎么还算 O(1)？</h2>
+<p>搬一次家要 O(n)，但是搬完以后，接下来 n 次 append 都不用再搬。把这次搬家的成本平摊到这 n 次上，每次只多出 O(1)。
+这叫<b>均摊 O(1)</b>。</p>
+<p>关键在于<b>翻倍</b>。如果每次只多加 10 个格子，几乎每加 10 个元素就要搬一次家，append 就退化成 O(n) 了。</p>
+
+<h2>插入和删除中间元素：O(n)</h2>
+<p>在中间插入，后面所有元素都要往右挪一格，给它腾地方：</p>
+<div class="row">
+  <span class="box">1</span><span class="box hot">★</span><span class="box">2 →</span><span class="box">3 →</span><span class="box">4 →</span>
+  <span class="label">insert(1, ★)</span>
+</div>
+<p>挪的时候要<b>从最后一个开始往右搬</b>，否则会把还没搬的元素盖掉。删除正好反过来：从被删的位置开始，把右边的逐个往左搬。</p>
+
+<h2>小结</h2>
+<table>
+  <tr><th>操作</th><th>复杂度</th></tr>
+  <tr><td>按下标读 / 写</td><td>O(1)</td></tr>
+  <tr><td>末尾 append / pop</td><td>均摊 O(1)</td></tr>
+  <tr><td>中间 insert / remove</td><td>O(n)</td></tr>
+</table>
+<p>Python 的 <code>list</code> 就是这样实现的。所以 <code>list.insert(0, x)</code> 很慢，要在头部频繁增删，就用 <code>collections.deque</code>。</p>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/dynamic_array.py</code>。规则写在文件顶部，最重要的一条：<code>_data</code> 只能用下标读写，<b>不许</b>对它调用 append。</p>
+<p>建议顺序：<code>__getitem__</code> / <code>__setitem__</code> → <code>_resize</code> → <code>append</code> → <code>pop</code> → <code>insert</code> → <code>remove_at</code>。</p>
+<pre>uv run pytest tests/test_dynamic_array.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 从空数组开始连续 append 9 次，capacity 依次变成多少？</summary>
+1, 2, 4, 4, 8, 8, 8, 8, 16。测试里检查的就是这个序列。</details>
+<details><summary>2. 写好 insert 以后，append 能不能直接写成一行？</summary>
+能：<code>self.insert(len(self), value)</code>。复用写好的代码，可以少一处出 bug 的地方。</details>
+<details><summary>3. 思考：如果 pop 到只剩一半就把容量缩一半，会出什么问题？</summary>
+刚好在临界点上反复 append、pop，就会不停地扩容、缩容，每次都是 O(n)。常见的做法是降到 1/4 才缩一半。</details>
+
+<div class="nav"><a href="00-complexity.html">← 上一课：复杂度</a><a href="02-linked-list.html">下一课：链表 →</a></div>
+</body>
+</html>

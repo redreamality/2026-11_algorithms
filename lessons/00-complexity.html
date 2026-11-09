@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 0 课 · 复杂度</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 0 课 · 复杂度</h1>
+<p class="one-line">复杂度说的不是“跑几秒”，而是<b>数据变多时，要做的工作涨得多快</b>。</p>
+
+<h2>一个类比</h2>
+<p>你在班里找一个人：</p>
+<ul>
+  <li>挨个问“你是小明吗？”：人数翻倍，问的次数也翻倍。这是 <b>O(n)</b>。</li>
+  <li>让每两个人都握一次手：人数翻倍，握手次数变成 4 倍。这是 <b>O(n²)</b>。</li>
+  <li>名单按字母排好了，每次翻到中间、扔掉一半：1000 人也只要翻 10 次左右。这是 <b>O(log n)</b>。</li>
+</ul>
+
+<h2>常见的几档（从快到慢）</h2>
+<table>
+  <tr><th>写法</th><th>n = 1000 时大约要做几步</th><th>典型例子</th></tr>
+  <tr><td>O(1)</td><td>1</td><td>按下标取数组元素</td></tr>
+  <tr><td>O(log n)</td><td>10</td><td>二分查找</td></tr>
+  <tr><td>O(n)</td><td>1,000</td><td>遍历一遍</td></tr>
+  <tr><td>O(n log n)</td><td>10,000</td><td>好的排序</td></tr>
+  <tr><td>O(n²)</td><td>1,000,000</td><td>两层循环</td></tr>
+</table>
+
+<h2>怎么看出来</h2>
+<p>只看<b>循环套了几层、每层跑多少次</b>，常数和小项都扔掉：</p>
+<pre>for i in range(n):          # n 次
+    for j in range(n):      #   × n 次
+        ...                 # → O(n²)
+
+for i in range(n): ...      # n
+for j in range(n): ...      # + n  → 2n → 还是 O(n)</pre>
+<p>注意“藏起来的循环”：<code>x in list</code>、<code>sorted()</code>、<code>list.insert(0, x)</code> 看着只有一行，其实都不是 O(1)。</p>
+
+<h2>空间复杂度</h2>
+<p>同样的道理，问的是：<b>额外</b>开了多少内存？只用几个变量是 O(1)；新建一个和输入一样大的 set 就是 O(n)。
+很多时候是<b>拿空间换时间</b>，这节课的练习就是例子。</p>
+
+<h2>练习</h2>
+<p>问题：列表里有没有重复的数？在 <code>dsa/complexity.py</code> 里用三种办法各写一遍：</p>
+<ol>
+  <li><code>has_duplicate_slow</code>：两层循环，两两比较。O(n²)。</li>
+  <li><code>has_duplicate_sorted</code>：排好序后，重复的数一定挨在一起。O(n log n)。</li>
+  <li><code>has_duplicate_fast</code>：用 set 记住见过的数。O(n)，但要 O(n) 的额外空间。</li>
+</ol>
+<pre>uv run pytest tests/test_complexity.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 下面这段是 O(?)<pre>i = 1
+while i &lt; n:
+    i = i * 2</pre></summary>
+O(log n)。i 每次翻倍，翻 log₂n 次就超过 n 了。</details>
+<details><summary>2. <code>has_duplicate_sorted</code> 为什么不能写 <code>nums.sort()</code>？</summary>
+<code>sort()</code> 会改掉调用者传进来的列表，这是副作用。用 <code>sorted(nums)</code> 生成一份新的。</details>
+<details><summary>3. 三种解法里，什么时候 slow 版反而合适？</summary>
+n 很小（比如 10 个以内），或者内存极紧张、又不能改原数据的时候。复杂度只描述“n 很大时”的趋势。</details>
+
+<div class="nav"><a href="index.html">← 目录</a><a href="01-dynamic-array.html">下一课：动态数组 →</a></div>
+</body>
+</html>
