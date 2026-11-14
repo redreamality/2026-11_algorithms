@@ -10,6 +10,24 @@
 <h1>第 2 课 · 链表</h1>
 <p class="one-line">链表的每个节点只记两样东西：<b>自己的值</b>和<b>下一个是谁</b>。像寻宝游戏，每张纸条告诉你下一张在哪。</p>
 
+<h2>实战里怎么写：用 deque 和 OrderedDict</h2>
+<p>业务代码里几乎没人手写链表节点。真正要用到链表“两端增删快、已知位置挪动快”的特性时，直接用标准库：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>两端都要增删（任务队列、工单、BFS）</td><td><code>collections.deque</code> 的 <code>append</code> / <code>appendleft</code> / <code>popleft</code></td><td>两端 O(1)；<code>list.pop(0)</code> 是 O(n)</td></tr>
+  <tr><td>只留最近 N 条</td><td><code>deque(maxlen=N)</code></td><td>O(1)，满了自动挤掉另一头</td></tr>
+  <tr><td>找到某项后挪到最前 / 最后（最近打开、LRU）</td><td><code>collections.OrderedDict</code> 的 <code>move_to_end</code></td><td>O(1)，底层是哈希表 + 双向链表</td></tr>
+  <tr><td>按值删中间某一项</td><td><code>deque.remove(value)</code></td><td>O(n)，要先找到它</td></tr>
+</table>
+<pre>from collections import deque
+
+tickets = deque(["退款-101", "咨询-102"])
+tickets.append("投诉-103")          # 普通工单排队尾，O(1)
+tickets.appendleft("加急-999")      # 加急插队头，O(1)
+next_ticket = tickets.popleft()     # 客服从队头取，O(1)
+tickets.remove("咨询-102")          # 用户撤回：O(n)，找不到抛 ValueError</pre>
+<p>完整可运行的版本在 <code>examples/linked_list_in_practice.py</code>（<code>uv run examples/linked_list_in_practice.py</code>），还有一个用 <code>OrderedDict</code> 做的“最近打开的文件”。下面看链表为什么能把这些操作做到 O(1)。</p>
+
 <h2>长什么样</h2>
 <div class="row">
   <span class="label">head →</span>
@@ -35,8 +53,12 @@
 <div class="row">
   <span class="box hot">0</span><span>→</span><span class="box">1</span><span>→</span><span class="box">2</span><span>→</span><span class="label">None</span>
 </div>
-<pre>node = Node(0, self.head)   # ① 新节点先指向旧的头
-self.head = node            # ② 再把 head 挪到新节点</pre>
+<pre>def appendleft(self, value):
+    new_node = Node(value, self.head)   # ① 新节点先指向旧的头
+    self.head = new_node                # ② 再把 head 挪到新节点
+    if self.tail is None:               # 原来是空链表：新节点既是头也是尾
+        self.tail = new_node
+    self._size += 1</pre>
 <p>如果先挪 head，旧的头就找不到了。<b>改指针之前，先想清楚谁会因此“失联”。</b></p>
 
 <h2>删除：要找的是“前一个”</h2>
@@ -48,13 +70,19 @@ self.head = node            # ② 再把 head 挪到新节点</pre>
 <p><b>小技巧：哨兵节点。</b>在 head 前面放一个假节点 <code>dummy</code>，这样删头节点和删中间节点就是同一种写法，不用单独判断。</p>
 
 <h2>反转：三个指针一起往前走</h2>
-<pre>prev, cur = None, self.head
-while cur:
-    nxt = cur.next      # 先记住后面
-    cur.next = prev     # 掉头
-    prev = cur          # 两个指针一起前进
-    cur = nxt</pre>
-<p>别忘了，反转之后 head 和 tail 要互换。</p>
+<pre>def reverse(self):
+    previous_node, current_node = None, self.head
+    while current_node is not None:
+        next_node = current_node.next      # 先记住后面
+        current_node.next = previous_node  # 掉头
+        previous_node = current_node       # 两个指针一起前进
+        current_node = next_node
+    self.head, self.tail = self.tail, self.head</pre>
+<p>别忘了最后一行：反转之后 head 和 tail 要互换。</p>
+
+<h2>动手玩</h2>
+<p>建议依次试试：<b>reverse</b>（用“上一步 / 下一步”慢慢看三个指针怎么走）；把值设成 4 再点 <b>remove</b>，看删掉尾巴时 tail 怎么退回；连点 <b>pop_front</b> 直到链表变空。</p>
+<div class="demo" id="llist"></div>
 
 <h2>最容易错的三个地方</h2>
 <ul>
@@ -65,17 +93,21 @@ while cur:
 <p>测试会专门检查这三种情况。</p>
 
 <h2>练习</h2>
-<p>补全 <code>dsa/linked_list.py</code>。建议顺序：<code>push_front</code> → <code>__iter__</code>（用 <code>yield</code>）→ <code>push_back</code> → <code>pop_front</code> → <code>find</code> → <code>remove</code> → <code>reverse</code>。</p>
-<pre>uv run pytest tests/test_linked_list.py</pre>
+<p>补全 <code>dsa/linked_list.py</code> 里的 <code>LinkedList</code>。方法名和 <code>deque</code> 一样，写完就能直接替换着用：<code>append</code>、<code>appendleft</code>、<code>popleft</code>、<code>remove</code>、<code>reverse</code>，再加上 <code>len()</code>、<code>for</code>、<code>in</code>。动画里的 <code>push_front</code> / <code>push_back</code> / <code>pop_front</code> 分别对应 <code>appendleft</code> / <code>append</code> / <code>popleft</code>。异常和标准库一致：空链表 <code>popleft</code> 抛 <code>IndexError</code>，<code>remove</code> 找不到抛 <code>ValueError</code>。</p>
+<p>建议顺序：<code>appendleft</code> → <code>__iter__</code>（用 <code>yield</code>）→ <code>append</code> → <code>popleft</code> → <code>__contains__</code> → <code>remove</code> → <code>reverse</code>。</p>
+<pre>uv run dsa/linked_list.py               # 客服工单队列的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_linked_list.py</pre>
 
 <h2>自测</h2>
 <details><summary>1. 为什么链表取第 i 个是 O(n)？</summary>
 节点不连续，没法算地址，只能从 head 开始沿着 next 走 i 步。</details>
-<details><summary>2. 有 tail 指针，为什么 pop_back（删尾巴）还是 O(n)？</summary>
+<details><summary>2. 有 tail 指针，为什么删尾巴（deque 的 pop）在单链表上还是 O(n)？</summary>
 删掉尾巴以后，tail 要指向倒数第二个节点，可单链表没法往回走，只能从头找。双向链表就能做到 O(1)。</details>
 <details><summary>3. Python 里什么东西是用链表实现的？</summary>
 <code>collections.deque</code> 底层是一串定长块组成的双向链表，所以它的两端增删都是 O(1)。</details>
 
-<div class="nav"><a href="01-dynamic-array.html">← 上一课：动态数组</a><a href="index.html">目录 →</a></div>
+<div class="nav"><a href="01-dynamic-array.html">← 上一课：动态数组</a><a href="03-stack-queue.html">下一课：栈与队列 →</a></div>
+<script src="anim.js"></script>
+<script src="js/02-linked-list.js"></script>
 </body>
 </html>

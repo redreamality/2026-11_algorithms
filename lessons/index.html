@@ -22,9 +22,68 @@
   <li><a href="00-complexity.html">第 0 课 · 复杂度：怎么判断代码快不快</a></li>
   <li><a href="01-dynamic-array.html">第 1 课 · 动态数组：list 是怎么变长的</a></li>
   <li><a href="02-linked-list.html">第 2 课 · 链表：用指针串起来的数据</a></li>
+  <li><a href="03-stack-queue.html">第 3 课 · 栈与队列：后进先出、先进先出，环形队列靠取模回绕</a></li>
+  <li><a href="04-hash-table.html">第 4 课 · 哈希表：数组 + 链表，算下标直接跳到桶里</a></li>
 </ul>
 
-<h2>后面的阶段</h2>
-<p>完整路线见项目 README。学完一课，agent 再写下一课，每次只写你马上要学的内容。</p>
+<h2>第二阶段：递归、排序与查找</h2>
+<ul>
+  <li><a href="05-recursion.html">第 5 课 · 递归与分治：基线条件 + 缩小问题</a></li>
+  <li><a href="06-binary-search.html">第 6 课 · 二分查找：每次砍掉一半</a></li>
+  <li><a href="07-simple-sorts.html">第 7 课 · 简单排序：选择、插入与稳定性</a></li>
+  <li><a href="08-merge-sort.html">第 8 课 · 归并排序：拆成两半，像拉拉链一样合并</a></li>
+  <li><a href="09-quick-sort.html">第 9 课 · 快速排序：分区、随机基准与 quickselect</a></li>
+</ul>
+
+<h2>第三阶段：树</h2>
+<ul>
+  <li><a href="10-binary-tree.html">第 10 课 · 二叉树：前序、中序、后序、层序</a></li>
+  <li><a href="11-bst.html">第 11 课 · 二叉搜索树：左小右大</a></li>
+  <li><a href="12-heap.html">第 12 课 · 堆与优先队列：数组里的完全二叉树</a></li>
+</ul>
+
+<h2>第四阶段：图</h2>
+<ul>
+  <li><a href="13-graph-traversal.html">第 13 课 · 图：邻接表、BFS、DFS</a></li>
+  <li><a href="14-topological-sort.html">第 14 课 · 拓扑排序：入度为 0 的先走</a></li>
+  <li><a href="15-union-find.html">第 15 课 · 并查集：找根、合并、路径压缩</a></li>
+  <li><a href="16-dijkstra.html">第 16 课 · 最短路径：Dijkstra</a></li>
+  <li><a href="17-kruskal.html">第 17 课 · 最小生成树：Kruskal</a></li>
+</ul>
+
+<h2>第五阶段：算法设计</h2>
+<ul>
+  <li><a href="18-greedy.html">第 18 课 · 贪心：每步拿眼下最好的</a></li>
+  <li><a href="19-dp-memo.html">第 19 课 · 动态规划（一）：从递归到记忆化</a></li>
+  <li><a href="20-dp-knapsack.html">第 20 课 · 动态规划（二）：背包与序列</a></li>
+  <li><a href="21-backtracking.html">第 21 课 · 回溯：选择、递归、撤销</a></li>
+</ul>
+
+<h2>选修</h2>
+<ul>
+  <li><a href="22-trie.html">第 22 课 · Trie（字典树）：前缀相同的词共用一段路</a></li>
+  <li><a href="23-kmp.html">第 23 课 · KMP：失配时文本指针不回头</a></li>
+  <li><a href="24-balanced-tree.html">第 24 课 · 平衡树思路：AVL 旋转</a></li>
+</ul>
+
+<h2>第六阶段：高频面试题型</h2>
+<p>把前面学过的结构和方法，套到面试里最常见的题型上。每课都有「怎么认出这类题」和 LeetCode 题号表。这一阶段没有单元测试，写完后运行对应的骨架文件（例如 <code>uv run dsa/two_pointers.py</code>），看每个例子的期望和实际是否一致。</p>
+<ul>
+  <li><a href="25-two-pointers.html">第 25 课 · 双指针：对撞指针与快慢指针（两数之和 II、盛最多水、三数之和、移动零）</a></li>
+  <li><a href="26-sliding-window.html">第 26 课 · 滑动窗口：用两个同向下标框住连续区间（无重复最长子串、最小覆盖子串、长度最小的子数组）</a></li>
+  <li><a href="27-prefix-sum.html">第 27 课 · 前缀和与哈希计数：区间和一次减法，和为 K 的子数组一遍数完</a></li>
+  <li><a href="28-monotonic-stack.html">第 28 课 · 单调栈：下一个更大元素、最大矩形、接雨水，O(n) 一遍扫完</a></li>
+  <li><a href="29-linked-list-patterns.html">第 29 课 · 链表高频技巧：反转、合并、快慢指针、倒数第 N 个与哑节点</a></li>
+  <li><a href="30-lru-cache.html">第 30 课 · LRU 缓存：哈希表 + 双向链表，get/put 都是 O(1)</a></li>
+  <li><a href="31-tree-patterns.html">第 31 课 · 二叉树高频题：递归函数返回什么，在后序位置汇总左右子树</a></li>
+  <li><a href="32-binary-search-advanced.html">第 32 课 · 二分进阶：左右边界、旋转数组、峰值与二分答案</a></li>
+  <li><a href="33-top-k.html">第 33 课 · 堆与 Top K：大小为 K 的堆、合并 K 个链表、双堆求中位数</a></li>
+  <li><a href="34-intervals.html">第 34 课 · 区间问题：先排序再扫描，按起点拼区间、按终点挑区间</a></li>
+  <li><a href="35-grid-search.html">第 35 课 · 网格搜索：网格就是隐式的图，方向数组 + 原地标记做 DFS 和多源 BFS</a></li>
+  <li><a href="36-backtracking-patterns.html">第 36 课 · 回溯高频题：同层去重与切分</a></li>
+  <li><a href="37-dp-1d.html">第 37 课 · 一维 DP 高频题：用“四步法”拆打家劫舍、零钱兑换 II、最长递增子序列等</a></li>
+  <li><a href="38-dp-2d.html">第 38 课 · 二维 DP 高频题：看懂表里每一格从哪来（最小路径和、编辑距离、最长回文子串）</a></li>
+  <li><a href="39-bit-manipulation.html">第 39 课 · 位运算技巧：异或抵消、n &amp; (n - 1) 去掉最低位的 1、位掩码枚举子集</a></li>
+</ul>
 </body>
 </html>

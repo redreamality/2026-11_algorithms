@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 5 课 · 递归与分治</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.stack { display: flex; flex-direction: column; gap: 4px; }
+.stack .row { margin: 0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 5 课 · 递归与分治</h1>
+<p class="one-line">递归就是函数调用自己。只要两样东西：<b>一个能直接回答的最小问题</b>，和<b>把大问题缩小一点再交给自己</b>。</p>
+
+<h2>实战里怎么写：递归用在“递归形状”的数据上</h2>
+<p>业务代码里没人手写阶乘和幂，<code>math.factorial</code>、<code>pow</code> 都现成。真正要自己写递归的，是<b>数据本身一层套一层</b>的时候：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>遍历目录树</td><td>标准库 <code>Path.rglob</code> / <code>os.walk</code>，不用自己递归</td><td>O(文件数)</td></tr>
+  <tr><td>嵌套 JSON、组织架构、评论楼中楼</td><td>自己写一个几行的递归函数</td><td>O(节点数)，栈深 = 嵌套层数</td></tr>
+  <tr><td>同一个子问题被反复算</td><td><code>@functools.cache</code> 记忆化</td><td>指数级降到“子问题个数”</td></tr>
+  <tr><td>数据可能极深（用户上传的 JSON）</td><td>改用显式栈 <code>stack = [...]</code> + <code>while</code></td><td>不受约 1000 层的递归上限限制</td></tr>
+</table>
+<pre>from functools import cache
+from pathlib import Path
+
+def find_values(document, wanted_key):
+    """在任意嵌套的 JSON 里收集某个键的所有值，例如所有 "email"。"""
+    found = []
+    if isinstance(document, dict):
+        for key, child in document.items():
+            if key == wanted_key:
+                found.append(child)
+            found.extend(find_values(child, wanted_key))   # 往深处交给自己
+    elif isinstance(document, list):
+        for child in document:
+            found.extend(find_values(child, wanted_key))
+    return found                                            # 基线：其他值什么都不找
+
+total_bytes = sum(path.stat().st_size for path in Path("logs").rglob("*") if path.is_file())
+
+@cache
+def ways_to_climb(steps):            # 每次走 1 或 2 级，有几种走法
+    if steps &lt;= 1:
+        return 1
+    return ways_to_climb(steps - 1) + ways_to_climb(steps - 2)</pre>
+<p>完整可运行的版本在 <code>examples/recursion_in_practice.py</code>（<code>uv run examples/recursion_in_practice.py</code>）。下面看递归本身是怎么工作的。</p>
+
+<h2>两个要素</h2>
+<pre>def factorial(number):
+    if number &lt; 0:
+        raise ValueError("number must be &gt;= 0")   # 和 math.factorial(-1) 一样
+    if number &lt;= 1:                             # ① 基线条件：小到能直接回答
+        return 1
+    return number * factorial(number - 1)       # ② 缩小问题：相信 factorial(number-1) 能算对</pre>
+<p>类比：排队时想知道自己排第几，问前面的人“你排第几？”，他再问他前面的……问到第一个人（基线），答案再一路传回来。</p>
+<p>写递归时<b>不要在脑子里展开每一层</b>。只要确认：基线对，而且“假设小一号的问题已经算对，我这一层能拼出答案”，整个函数就是对的。</p>
+
+<h2>调用栈：每一层都在等</h2>
+<p>每调用一次函数，就往<b>调用栈</b>上压一层，记住它的参数和“算到哪了”。算 <code>factorial(3)</code> 时最深的那一刻：</p>
+<div class="stack">
+  <div class="row"><span class="box hot">factorial(1)</span><span class="label">← 栈顶：基线，返回 1</span></div>
+  <div class="row"><span class="box">factorial(2)</span><span class="label">等 factorial(1)</span></div>
+  <div class="row"><span class="box">factorial(3)</span><span class="label">等 factorial(2)</span></div>
+</div>
+<p>然后从栈顶开始一层层返回、弹出。栈有多深，就占多少内存：<code>factorial(n)</code> 的空间是 O(n)。Python 默认只允许约 1000 层，再深就抛 <code>RecursionError</code>。</p>
+
+<h2>动手玩</h2>
+<p>先用 n = 4 点 <b>factorial(n)</b>，看栈怎么先长高再变矮；再点 <b>fib(n)</b>，看 <code>fib(2)</code>、<code>fib(1)</code> 被反复算了好几遍，调用次数远多于栈的深度。</p>
+<div class="demo" id="callstack"></div>
+
+<h2>分治：一刀切成两半</h2>
+<p>分治 = 把问题<b>分</b>成几个同样的小问题，分别<b>治</b>好，再<b>合</b>起来。它是递归最常见的用法，后面的二分查找、归并排序、快速排序都是这个套路。</p>
+<p><b>快速幂</b>：算 x<sup>8</sup> 不用乘 7 次，先算一半再平方：</p>
+<div class="row">
+  <span class="box">x⁸</span><span>←平方</span><span class="box">x⁴</span><span>←平方</span><span class="box">x²</span><span>←平方</span><span class="box">x¹</span>
+  <span class="label">n 是奇数时再多乘一个 x</span>
+</div>
+<p><b>汉诺塔</b>：要把 n 个盘子从 A 搬到 C，就先把上面 n-1 个搬到 B，再把最大的搬到 C，最后把 n-1 个从 B 搬到 C。中间那两步“搬 n-1 个”交给递归，不用自己想。</p>
+
+<h2>复杂度</h2>
+<table>
+  <tr><th>函数</th><th>时间</th><th>栈深度</th></tr>
+  <tr><td>factorial(n)</td><td>O(n)</td><td>O(n)</td></tr>
+  <tr><td>power(base, exponent) 快速幂</td><td>O(log n)</td><td>O(log n)</td></tr>
+  <tr><td>flatten、flatten_json、directory_size</td><td>O(节点总数)</td><td>O(嵌套层数)</td></tr>
+  <tr><td>朴素 fib(n)</td><td>约 O(2<sup>n</sup>)</td><td>O(n)</td></tr>
+  <tr><td>hanoi(n)</td><td>O(2<sup>n</sup>)，共 2<sup>n</sup>-1 步</td><td>O(n)</td></tr>
+</table>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li><b>忘了基线</b>，或者问题没有真的变小：无限递归，最后 <code>RecursionError</code>。</li>
+  <li>快速幂里写成 <code>power(base, exponent // 2) * power(base, exponent // 2)</code>：同一半算了两次，又退回 O(n)。先存进变量再平方。</li>
+  <li>递归里改了传进来的数据（比如对 JSON 做 <code>pop</code>）：调用者的数据被你弄坏了。要返回新结果，不要改输入。</li>
+  <li>生成器递归时写成 <code>flatten(child)</code> 而不是 <code>yield from flatten(child)</code>：只是建了一个生成器对象，里面的值一个都没产出。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/recursion.py</code>：“往深处走”一律用递归，同一层的兄弟可以用 for 挨个处理。建议顺序：<code>factorial</code> → <code>power</code> → <code>flatten</code>（用 <code>yield from</code>）→ <code>flatten_json</code>（把嵌套订单摊平成表格的一行）→ <code>directory_size</code>（用 <code>Path.iterdir()</code>，不许用 <code>rglob</code>）。</p>
+<pre>uv run dsa/recursion.py               # 订单 JSON、项目目录的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_recursion.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 列表求和写成 items[0] + total(items[1:])，有什么代价？</summary>
+每次切片都复制一份列表，总共 O(n²)，而且 1000 个元素就撞上递归上限。这种“线性”的数据直接用 <code>sum(items)</code> 或循环；递归留给树形、嵌套的数据。</details>
+<details><summary>2. 朴素 fib(n) 为什么这么慢？怎么救？</summary>
+同一个 fib(k) 被重复算了指数多次。把算过的结果存起来（记忆化），每个 k 只算一次，就变成 O(n)。实战里在函数上加一行 <code>@functools.cache</code> 就行，第 19 课细讲。</details>
+<details><summary>3. 递归一定比循环慢吗？</summary>
+复杂度一样时，递归多了函数调用的开销，常数大一点，还受栈深度限制。但树、分治这类问题用递归写清楚得多。</details>
+
+<div class="nav"><a href="04-hash-table.html">← 上一课：哈希表</a><a href="06-binary-search.html">下一课：二分查找 →</a></div>
+<script src="anim.js"></script>
+<script src="js/05-recursion.js"></script>
+</body>
+</html>

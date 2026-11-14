@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 25 课 · 双指针</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.cells { display: flex; gap: 6px; align-items: flex-end; margin: 8px 0; flex-wrap: wrap; }
+.cell-column { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.cell-column .index { font-size: 12px; color: #aaa; }
+.cell-column .pointer { font-size: 13px; color: #e65100; font-weight: bold; height: 20px; white-space: nowrap; }
+.box.out { opacity: .35; }
+.box.done { background: #c8e6c9; border-color: #2e7d32; }
+.bar-area { position: relative; align-self: stretch; }
+.bar-area .water { position: absolute; left: -3px; right: -3px; bottom: 0; background: #bbdefb; }
+.bar-area .pillar { position: absolute; left: calc(50% - 7px); width: 14px; bottom: 0; background: #90a4ae; border-radius: 2px 2px 0 0; }
+.bar-area .pillar.hot { background: #ff9800; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 25 课 · 双指针</h1>
+<p class="one-line">双指针 = <b>用两个下标同时在数组上走，每一步都根据当前情况排除掉一批不可能的答案</b>。原本要两层循环 O(n²) 才能枚举完的“一对位置”，变成两个下标各走一遍，O(n)。</p>
+
+<h2>实战里怎么写：先看真实代码里的双指针</h2>
+<p>业务代码里很少有人写“对撞指针找两数之和”，但双指针的想法天天在用，只是常常藏在标准库里：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>合并两份已经排好序的数据（两台服务器的日志、两页排好序的结果）</td><td>标准库 <code>heapq.merge(a, b)</code>，内部就是每份数据一个指针</td><td>O(n + m)，边读边合并，不用全部读进内存</td></tr>
+  <tr><td>两份排好序的数据要<b>对齐</b>：对账，找两边都有的、只有一边有的</td><td>手写同向双指针</td><td>O(n + m)，额外空间 O(1)</td></tr>
+  <tr><td>按条件删元素、保持顺序</td><td>列表推导式 <code>[x for x in items if keep(x)]</code></td><td>O(n)，多一份列表的内存</td></tr>
+  <tr><td>保持顺序地去重</td><td><code>list(dict.fromkeys(items))</code></td><td>O(n)</td></tr>
+  <tr><td>数据大到不能复制一份，必须原地删</td><td>快慢指针，最后 <code>del items[slow:]</code></td><td>O(n)，额外空间 O(1)</td></tr>
+</table>
+<pre>import heapq
+
+merged_logs = list(heapq.merge(server_a_logs, server_b_logs))   # 两份各自按时间排好序的 (时间戳, 内容)
+
+def reconcile(ledger_ids: list[int], bank_ids: list[int]):
+    """对账：两份流水号都从小到大排好序。哪边小，说明它在另一边找不到，记下来往前走。"""
+    matched, ledger_only, bank_only = [], [], []
+    ledger_index = bank_index = 0
+    while ledger_index &lt; len(ledger_ids) and bank_index &lt; len(bank_ids):
+        ledger_id, bank_id = ledger_ids[ledger_index], bank_ids[bank_index]
+        if ledger_id == bank_id:
+            matched.append(ledger_id)
+            ledger_index += 1
+            bank_index += 1
+        elif ledger_id &lt; bank_id:
+            ledger_only.append(ledger_id)
+            ledger_index += 1
+        else:
+            bank_only.append(bank_id)
+            bank_index += 1
+    ledger_only.extend(ledger_ids[ledger_index:])   # 一边走完了，另一边剩下的都对不上
+    bank_only.extend(bank_ids[bank_index:])
+    return matched, ledger_only, bank_only</pre>
+<p>完整可运行的版本在 <code>examples/two_pointers_in_practice.py</code>（<code>uv run examples/two_pointers_in_practice.py</code>），里面还有用快慢指针原地删掉丢包读数的例子。面试题考的是同一套“每一步排除一批不可能的答案”的推理，下面一道道拆开讲。</p>
+
+<h2>两种走法</h2>
+<p>双指针不是一种具体算法，而是一类写法。按两个下标怎么走，分成两种：</p>
+<table>
+  <tr><th>名字</th><th>怎么走</th><th>典型用途</th></tr>
+  <tr><td>对撞指针</td><td><code>left</code> 从最左边出发往右走，<code>right</code> 从最右边出发往左走，两者相遇就结束</td><td>在<b>有序数组</b>里找一对满足条件的数；从两头往中间比较（回文、盛水）</td></tr>
+  <tr><td>快慢指针</td><td><code>slow</code> 和 <code>fast</code> 从同一头出发、同方向走，<code>fast</code> 每步都走，<code>slow</code> 满足条件才走</td><td><b>原地</b>整理数组（删元素、移零、去重）；链表找中点、判断有没有环</td></tr>
+</table>
+<p>两种走法的共同点是：<b>每个下标只往一个方向走，从不回头</b>。两个下标加起来最多走 n 步，所以总时间是 O(n)。难点不在写代码，而在于说清楚“为什么这一步可以放心地移动这个指针，不会错过答案”。下面每道题都会把这个理由讲出来。</p>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li>题目说数组<b>已经有序</b>（或者你可以先排序），要找<b>两个数 / 三个数</b>满足某个和、差、积。→ 对撞指针。</li>
+  <li>要从<b>两端往中间</b>比较：回文串、反转数组、两根柱子之间的面积。→ 对撞指针。</li>
+  <li>要求<b>原地修改</b>数组、<b>O(1) 额外空间</b>，比如“删除某些元素”“把某类元素挪到末尾”“去掉重复项”。→ 快慢指针。</li>
+  <li>链表题里要找<b>中间节点、倒数第 k 个节点、判断有没有环</b>。→ 快慢指针（fast 每次走两步或先走 k 步）。</li>
+  <li>暴力解法是“两层循环枚举所有的 (i, j) 对”，而你觉得很多对其实不用看。→ 先想想能不能用双指针砍掉一层循环。</li>
+</ul>
+<p>LeetCode 上可以练的题：</p>
+<table>
+  <tr><th>题号</th><th>题名</th><th>用到的走法</th></tr>
+  <tr><td>167</td><td>两数之和 II - 输入有序数组</td><td>对撞（本课第 1 题）</td></tr>
+  <tr><td>11</td><td>盛最多水的容器</td><td>对撞（本课第 2 题）</td></tr>
+  <tr><td>15</td><td>三数之和</td><td>排序 + 对撞（本课第 3 题）</td></tr>
+  <tr><td>283</td><td>移动零</td><td>快慢（本课第 4 题）</td></tr>
+  <tr><td>26</td><td>删除有序数组中的重复项</td><td>快慢</td></tr>
+  <tr><td>27</td><td>移除元素</td><td>快慢</td></tr>
+  <tr><td>125</td><td>验证回文串</td><td>对撞</td></tr>
+  <tr><td>977</td><td>有序数组的平方</td><td>对撞</td></tr>
+  <tr><td>16</td><td>最接近的三数之和</td><td>排序 + 对撞</td></tr>
+  <tr><td>876</td><td>链表的中间结点</td><td>快慢（链表）</td></tr>
+  <tr><td>141</td><td>环形链表</td><td>快慢（链表）</td></tr>
+  <tr><td>42</td><td>接雨水（困难，学完再挑战）</td><td>对撞</td></tr>
+</table>
+
+<h2>第 1 题：两数之和 II（对撞指针）</h2>
+<p><b>题意</b>：数组 <code>numbers</code> 已经从小到大排好序，找两个不同位置的数，使它们的和等于 <code>target</code>，返回这两个下标。题目保证恰好有一个答案。</p>
+<p><b>例子</b>：<code>numbers = [2, 7, 11, 15]</code>，<code>target = 9</code>。2 + 7 = 9，所以返回 <code>[0, 1]</code>。</p>
+<p><b>暴力做法为什么慢</b>：两层循环，外层选第一个数，内层选第二个数，把所有的对都试一遍。n 个数有 n(n-1)/2 对，时间 O(n²)。它完全没利用“数组有序”这个条件。</p>
+<p><b>关键观察</b>：拿最小的数和最大的数相加，看看和 target 比是大了还是小了。</p>
+<ul>
+  <li>如果 <code>numbers[left] + numbers[right] &lt; target</code>：<code>numbers[right]</code> 已经是剩下的数里最大的了，<code>numbers[left]</code> 和它相加都不够，和剩下的任何一个数相加只会更小。所以 <code>numbers[left]</code> 不可能出现在答案里，可以扔掉，<code>left</code> 右移一格。</li>
+  <li>如果和大于 target：反过来，<code>numbers[right]</code> 和剩下最小的数相加都太大，它也不可能出现在答案里，<code>right</code> 左移一格。</li>
+  <li>如果正好等于：找到了。</li>
+</ul>
+<p>每比较一次，就有一个数被确定“不可能是答案”，从候选范围里删掉。候选范围始终是 <code>left</code> 到 <code>right</code> 这一段。</p>
+<div class="row"><span class="label">target = 9：</span>
+  <span class="box hot">2</span><span class="box">7</span><span class="box">11</span><span class="box hot">15</span>
+  <span class="label">2 + 15 = 17 &gt; 9，15 和谁配都太大，right 左移</span></div>
+<div class="row"><span class="label">　　　　　　</span>
+  <span class="box hot">2</span><span class="box">7</span><span class="box hot">11</span><span class="box out">15</span>
+  <span class="label">2 + 11 = 13 &gt; 9，right 左移</span></div>
+<div class="row"><span class="label">　　　　　　</span>
+  <span class="box done">2</span><span class="box done">7</span><span class="box out">11</span><span class="box out">15</span>
+  <span class="label">2 + 7 = 9，找到 [0, 1]</span></div>
+<pre>left, right = 0, len(numbers) - 1
+while left &lt; right:
+    pair_sum = numbers[left] + numbers[right]
+    if pair_sum == target:
+        return [left, right]
+    if pair_sum &lt; target:
+        left += 1      # numbers[left] 和剩下最大的数相加都不够，扔掉它
+    else:
+        right -= 1     # numbers[right] 和剩下最小的数相加都太大，扔掉它</pre>
+<p><b>为什么是对的</b>：上面每次扔掉的数，都已经证明了它和候选范围里的任何数都凑不出 target。答案那两个数永远不会被扔掉，而候选范围每步缩小一格，最后一定会让 <code>left</code> 和 <code>right</code> 正好停在答案上。</p>
+<p><b>复杂度</b>：<code>left</code> 和 <code>right</code> 加起来最多走 n 步，时间 O(n)；只用了两个变量，额外空间 O(1)。</p>
+
+<h2>第 2 题：盛最多水的容器（对撞指针）</h2>
+<p><b>题意</b>：<code>heights[i]</code> 是第 i 根竖线的高度，相邻竖线间距为 1。选两根竖线，和 x 轴一起组成一个容器。水面不能高过较矮的那一根，所以容器能装的水 = <code>min(heights[left], heights[right]) × (right - left)</code>。求最多能装多少水。</p>
+<p><b>例子</b>：<code>heights = [1, 8, 6, 2, 5, 4, 8, 3, 7]</code>。选下标 1（高 8）和下标 8（高 7）：高度取较矮的 7，宽度 8 - 1 = 7，面积 49，这是最大值。</p>
+<p><b>暴力做法为什么慢</b>：枚举所有的两根竖线组合，每对算一次面积，O(n²)。</p>
+<p><b>关键观察</b>：先拿最左和最右两根算面积，此时宽度最大。接下来要移动其中一根，宽度一定会减 1。问题是移动哪一根。</p>
+<ul>
+  <li>假设左边那根更矮。它现在的搭档是最右边那根，两者距离已经是它能拥有的最大距离。</li>
+  <li>如果它换一个更靠里的搭档：宽度变小；高度取两者中较矮的，最多也就是它自己的高度，不可能变大。宽度变小、高度不变大，面积一定不会超过刚才算过的那个。</li>
+  <li>所以这根矮竖线“这辈子最好的成绩已经算过了”，可以放心扔掉，<code>left</code> 右移。</li>
+  <li>反过来，如果扔掉高的那一根，矮的那根留下来，以后的面积仍然被它限制，而且可能错过答案。所以<b>永远移动较矮的那一根</b>。两根一样高时移动哪一根都可以。</li>
+</ul>
+<pre>left, right = 0, len(heights) - 1
+best_area = 0
+while left &lt; right:
+    water_height = min(heights[left], heights[right])
+    best_area = max(best_area, water_height * (right - left))
+    if heights[left] &lt; heights[right]:
+        left += 1      # 左边矮：它和最远的搭档已经算过了，扔掉
+    else:
+        right -= 1     # 右边矮（或一样高）：扔掉右边</pre>
+<p><b>为什么是对的</b>：每扔掉一根竖线，都已经证明它和还没算过的任何一根组合都不可能比已经算过的面积更大。所以最大面积那一对在被扔掉之前，一定已经被算过一次。</p>
+<p><b>复杂度</b>：时间 O(n)，额外空间 O(1)。下面的动画里可以一步步看这个过程。</p>
+
+<h2>第 3 题：三数之和（排序 + 对撞指针）</h2>
+<p><b>题意</b>：给一个整数数组（没有排序），找出所有和为 0 的三元组，三个数要来自三个不同位置。每个三元组从小到大写，结果里不能有重复的三元组。</p>
+<p><b>例子</b>：<code>[-1, 0, 1, 2, -1, -4]</code> 返回 <code>[[-1, -1, 2], [-1, 0, 1]]</code>。注意数组里有两个 -1，[-1, 0, 1] 可以用第一个 -1 也可以用第二个，但结果里只能出现一次。</p>
+<p><b>暴力做法为什么慢</b>：三层循环 O(n³)，而且还要另外处理重复的三元组（比如把每个结果排序后放进集合）。</p>
+<p><b>关键观察</b>：如果先固定第一个数 <code>numbers[first_index]</code>，剩下的问题就是“在它右边找两个数，和等于 <code>-numbers[first_index]</code>”，这正是第 1 题。第 1 题要求有序，所以一开始先把整个数组排序，排序只花 O(n log n)，比后面的 O(n²) 小。</p>
+<p><b>怎么用上双指针</b>：</p>
+<ol>
+  <li>排序：<code>[-4, -1, -1, 0, 1, 2]</code>。</li>
+  <li><code>first_index</code> 从左往右走。每个位置上，<code>left = first_index + 1</code>，<code>right = 最后一个下标</code>，用第 1 题的方法找所有和为 <code>-numbers[first_index]</code> 的对。和第 1 题不同的是，找到一对之后不能停，要两边都往里收一格，继续找下一对。</li>
+  <li><b>去重</b>（这是最容易错的地方）：
+    <ul>
+      <li>固定的第一个数如果和上一轮固定的一样（例如第二个 -1），它能找到的三元组上一轮都找过了，直接跳过。</li>
+      <li>找到一组答案后，<code>left</code> 要一直右移，跳过所有和刚才相同的值；<code>right</code> 同理一直左移。否则同一组值会被记录两次。</li>
+    </ul></li>
+</ol>
+<pre>numbers.sort()
+triplets = []
+for first_index in range(len(numbers) - 2):
+    if first_index &gt; 0 and numbers[first_index] == numbers[first_index - 1]:
+        continue                                   # 第一个数和上一轮相同，跳过
+    left, right = first_index + 1, len(numbers) - 1
+    while left &lt; right:
+        total = numbers[first_index] + numbers[left] + numbers[right]
+        if total &lt; 0:
+            left += 1
+        elif total &gt; 0:
+            right -= 1
+        else:
+            triplets.append([numbers[first_index], numbers[left], numbers[right]])
+            while left &lt; right and numbers[left] == numbers[left + 1]:
+                left += 1                          # 跳过相同的第二个数
+            while left &lt; right and numbers[right] == numbers[right - 1]:
+                right -= 1                         # 跳过相同的第三个数
+            left += 1
+            right -= 1</pre>
+<p><b>为什么是对的</b>：任何一个答案三元组，排序后它的最小数一定出现在某个 <code>first_index</code> 上（重复值只取第一次出现的位置），剩下两个数在它右边，会被第 1 题的对撞指针找到。去重规则保证同一组值只在“第一次遇到”时记录一次。</p>
+<p><b>复杂度</b>：外层 n 次，每次对撞指针 O(n)，时间 O(n²)；除了结果列表和排序，额外空间 O(1)。</p>
+
+<h2>第 4 题：移动零（快慢指针）</h2>
+<p><b>题意</b>：原地修改数组，把所有 0 挪到末尾，非零数保持原来的先后顺序。不能复制出一个新数组。</p>
+<p><b>例子</b>：<code>[0, 1, 0, 3, 12]</code> 变成 <code>[1, 3, 12, 0, 0]</code>。</p>
+<p><b>暴力做法为什么慢</b>：每遇到一个 0，就把它后面所有元素往前挪一格、把 0 放到最后。挪一次 O(n)，最多挪 n 次，O(n²)。</p>
+<p><b>关键观察</b>：其实只需要知道“下一个非零数应该放在哪儿”。用 <code>slow</code> 记住这个位置，用 <code>fast</code> 从头到尾扫描。</p>
+<ul>
+  <li><code>fast</code> 遇到 0：什么也不做，<code>fast</code> 继续走。</li>
+  <li><code>fast</code> 遇到非零数：把它和 <code>slow</code> 位置的数交换，然后 <code>slow</code> 右移一格。</li>
+</ul>
+<p>整个过程中始终保持一个<b>不变量</b>：下标 <code>[0, slow)</code> 里都是非零数，并且保持原来的顺序；下标 <code>[slow, fast)</code> 里都是 0。<code>fast</code> 走到末尾时，非零数全在前面、0 全在后面，就做完了。</p>
+<pre>slow = 0
+for fast in range(len(numbers)):
+    if numbers[fast] != 0:
+        numbers[slow], numbers[fast] = numbers[fast], numbers[slow]
+        slow += 1</pre>
+<p><b>为什么是对的</b>：交换时，<code>slow</code> 位置要么就是 <code>fast</code> 自己（前面还没出现过 0），要么是一个 0（根据不变量）。所以交换只是把一个非零数挪到前面、把一个 0 挪到后面，不会打乱非零数的先后顺序。</p>
+<p><b>复杂度</b>：<code>fast</code> 走一遍，时间 O(n)，额外空间 O(1)。同样的模板改一下判断条件，就能做“移除元素”“删除有序数组中的重复项”。</p>
+
+<h2>动手玩</h2>
+<p>三个按钮各演示一道题。建议先看 <b>盛最多水</b>：橙色的竖线是 <code>left</code> 和 <code>right</code>，蓝色是当前这对竖线能装的水，注意每一步被扔掉的都是较矮的那根。然后看 <b>两数之和 II</b> 和 <b>移动零</b>，用“上一步 / 下一步”慢慢对照下面的说明。灰掉的格子表示已经被排除。</p>
+<div class="demo" id="pointers"></div>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li>对撞指针的循环条件写成 <code>left &lt;= right</code>：两个指针指到同一个位置时，会把同一个数用两次。找“两个不同位置”时要写 <code>left &lt; right</code>。</li>
+  <li>盛水题移动了较高的那一根。这样可能把答案扔掉，前面已经解释过为什么只能移动较矮的。</li>
+  <li>三数之和只在固定第一个数时去重，找到答案后忘了让 <code>left</code>、<code>right</code> 跳过相同的值，结果里出现重复三元组。</li>
+  <li>三数之和忘了先排序。对撞指针依赖“左边小、右边大”，数组无序时整个推理都不成立。</li>
+  <li>移动零写成“遇到 0 就 <code>remove</code> 再 <code>append</code>”：<code>list.remove</code> 本身是 O(n)，总共变成 O(n²)。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/two_pointers.py</code>。建议顺序：<code>two_sum_sorted</code> → <code>max_water_area</code> → <code>move_zeroes</code> → <code>three_sum</code>。每写完一个函数，运行下面的命令，看每个例子的“期望”和“实际”是否一致：</p>
+<pre>uv run dsa/two_pointers.py</pre>
+<p>都通过之后，再去 LeetCode 上把上面表格里的题做一遍，感受一下这几种题目的“长相”。</p>
+
+<h2>自测</h2>
+<details><summary>1. 两数之和 II 为什么要求数组有序？无序时用什么？</summary>
+对撞指针的每一步推理都依赖有序：和太小就说明要更大的数，而更大的数一定在右边。无序时这个推理不成立，要用第 27 课的哈希表做法：一边走一边把见过的数存进 dict，O(n) 时间、O(n) 空间。</details>
+<details><summary>2. 盛水题里两根竖线一样高，移动哪一根？会不会错过答案？</summary>
+移动哪一根都可以。设两根都高 h，它们的面积是 h × 宽度。只留下其中任何一根、换一个更靠里的搭档，高度最多还是 h，宽度变小，面积不会更大。所以两根都已经“用完了”，扔掉哪一根都不会错过答案。</details>
+<details><summary>3. 快慢指针在链表上怎么找中间节点？</summary>
+slow 每次走一步，fast 每次走两步。fast 走到末尾时，slow 正好走了一半，停在中间节点。判断有没有环也用这一对：有环的话，fast 迟早会从后面追上 slow。</details>
+
+<div class="nav"><a href="24-balanced-tree.html">← 上一课：平衡树</a><a href="26-sliding-window.html">下一课：滑动窗口 →</a></div>
+<script src="anim.js"></script>
+<script src="js/25-two-pointers.js"></script>
+</body>
+</html>

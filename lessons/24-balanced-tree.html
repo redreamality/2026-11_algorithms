@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 24 课 · 选修 · 平衡树思路（AVL 旋转）</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.tree { position: relative; width: 480px; max-width: 100%; margin: 6px 0; }
+.tree svg { position: absolute; left: 0; top: 0; }
+.tree .box { position: absolute; transform: translate(-50%, -50%); background: #fff; }
+.tree .box.hot { background: #ffe0b2; }
+.tree .box.path { background: #fff3e0; border-color: #e65100; }
+.tree .box.found { background: #ffcdd2; border-color: #c62828; }
+.tree .box.done { background: #c8e6c9; border-color: #2e7d32; }
+.tree .bf { position: absolute; transform: translate(-50%, -50%); font-size: 12px; color: #0b62c4; }
+.tree .bf.bad { color: #c62828; font-weight: bold; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 24 课 · 选修 · 平衡树思路（AVL 旋转）</h1>
+<p class="one-line">AVL 树就是一棵<b>会自己扶正</b>的二叉搜索树：每插入一个值，沿路往回看，哪里歪了就<b>转一下</b>，树高始终是 O(log n)。</p>
+
+<h2>实战里怎么写：sortedcontainers</h2>
+<p>Python 标准库没有平衡树，业务代码里也没人手写 AVL。需要“边改边保持有序”时：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>只是偶尔要有序结果</td><td><code>dict</code> / <code>list</code>，用时 <code>sorted()</code></td><td>每次 O(n log n)</td></tr>
+  <tr><td>数据基本不变，只查询</td><td>排好序的 <code>list</code> + <code>bisect</code></td><td>查 O(log n)，插入 O(n)</td></tr>
+  <tr><td>边改边要有序、按排名或范围取</td><td><code>sortedcontainers</code> 的 <code>SortedList</code> / <code>SortedDict</code></td><td>增删查约 O(log n)</td></tr>
+</table>
+<pre>from sortedcontainers import SortedList
+
+ranking = SortedList()                      # 存 (-分数, 玩家)：分高的在前，同分按名字
+ranking.add((-90, "alice"))
+ranking.add((-75, "bob"))
+ranking.remove((-75, "bob"))                # 改分 = 删旧的 + 加新的，都是 O(log n)
+ranking.add((-95, "bob"))
+ranking.index((-95, "bob")) + 1             # bob 第几名：1
+ranking[:3]                                 # 前三名</pre>
+<p>完整可运行的版本在 <code>examples/avl_in_practice.py</code>（<code>uv run examples/avl_in_practice.py</code>）。下面讲的 AVL 是这类“有序容器”最经典的实现思路：它解决的正是第 11 课 BST 最大的毛病。</p>
+
+<h2>问题：BST 会退化成链表</h2>
+<div class="row"><span class="box">1</span><span>↘</span><span class="box">2</span><span>↘</span><span class="box">3</span><span>↘</span><span class="box">4</span><span class="label">按顺序插入，树高 = n，查找 O(n)</span></div>
+<p>第 11 课见过：有序插入时 BST 只往一边长。平衡树的目标就是：<b>不管按什么顺序插入，h 都保持在 O(log n)</b>。</p>
+
+<h2>平衡因子：左高 − 右高</h2>
+<pre>bf = height(node.left) - height(node.right)</pre>
+<p>AVL 只要求每个节点的 bf 是 <b>-1、0、1</b> 之一。插入后从新节点往根走，遇到第一个 bf 变成 <b>+2 或 -2</b> 的节点，就在那里旋转。每个节点记着自己的 <code>height</code>，算 bf 是 O(1)。</p>
+
+<h2>旋转：换个节点当根，中序不变</h2>
+<p>右旋（左边太高）：左孩子 x 升上来当根，原来的根 y 降到 x 的右边，x 原来的右子树 B 挂到 y 的左边。</p>
+<div class="row">
+  <span class="box">y</span><span class="label">左 x(A, B)，右 C</span>
+  <span>⟹ 右旋 ⟹</span>
+  <span class="box hot">x</span><span class="label">左 A，右 y(B, C)</span>
+</div>
+<pre>def update_height(node):
+    node.height = 1 + max(height(node.left), height(node.right))
+
+def rotate_right(top):                  # 图里的 y
+    new_top = top.left                  # 图里的 x
+    top.left = new_top.right            # B 换个爹
+    new_top.right = top
+    update_height(top)                  # 先更新 y（它现在在下面）
+    update_height(new_top)              # 再更新 x
+    return new_top                      # 新的子树根</pre>
+<p>左旋完全对称。旋转只改了几根指针，<b>O(1)</b>，而且 A &lt; x &lt; B &lt; y &lt; C 的大小关系没变。</p>
+
+<h2>四种情况</h2>
+<table>
+  <tr><th>失衡节点</th><th>新值插在</th><th>怎么转</th></tr>
+  <tr><td>bf = +2</td><td>左孩子的左边（LL）</td><td>对它右旋一次</td></tr>
+  <tr><td>bf = -2</td><td>右孩子的右边（RR）</td><td>对它左旋一次</td></tr>
+  <tr><td>bf = +2</td><td>左孩子的右边（LR）</td><td>先对左孩子左旋，变成 LL，再右旋</td></tr>
+  <tr><td>bf = -2</td><td>右孩子的左边（RL）</td><td>先对右孩子右旋，变成 RR，再左旋</td></tr>
+</table>
+<p>判断方法：看失衡节点“偏重那一侧的孩子”的 bf。和自己同号是一条直线（一次旋转），异号是拐了个弯（两次旋转）。写成代码就是一个 <code>rebalance</code>，插入时回来的路上每个节点都调用一次：</p>
+<pre>def rebalance(node):
+    update_height(node)
+    balance_factor = height(node.left) - height(node.right)
+    if balance_factor &gt; 1:                               # 左边太高
+        if height(node.left.left) &lt; height(node.left.right):
+            node.left = rotate_left(node.left)           # LR：先把弯拉直
+        return rotate_right(node)
+    if balance_factor &lt; -1:                              # 右边太高
+        if height(node.right.right) &lt; height(node.right.left):
+            node.right = rotate_right(node.right)        # RL
+        return rotate_left(node)
+    return node
+
+def _insert(self, node, key, value):
+    if node is None:
+        self._size += 1
+        return AVLNode(key, value)
+    if key == node.key:
+        node.value = value                               # 已有的键只改值
+        return node
+    if key &lt; node.key:
+        node.left = self._insert(node.left, key, value)  # 父亲的指针在这里改过去
+    else:
+        node.right = self._insert(node.right, key, value)
+    return rebalance(node)</pre>
+
+<h2>动手玩</h2>
+<p>先点 <b>插入 1, 2, 3</b>，看 1 的 bf 变成 -2 后怎么左旋；再点 <b>插入 3, 1, 2</b>，看 LR 情况的两次旋转。最后点 <b>插入 1～7</b>，和第 11 课退化成链表的样子比一比。每个节点上方的小数字是它的 bf。</p>
+<div class="demo" id="avl"></div>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li>旋转后<b>先更新下面那个节点的高度，再更新上面的</b>，顺序反了高度就错。</li>
+  <li>旋转返回新的子树根，<b>父亲的指针要改过去</b>（用递归 <code>node.left = self._insert(node.left, v)</code> 最省事）。</li>
+  <li>LR / RL 只转一次是不够的：转完还是歪的，只是歪到了另一边。</li>
+</ul>
+
+<h2>其它平衡树（了解即可）</h2>
+<p><b>红黑树</b>用“红黑颜色”代替精确高度，平衡得松一些，但插入删除时旋转更少，Java 的 TreeMap、C++ 的 std::map 都用它。Python 标准库没有平衡树；第三方的 <code>sortedcontainers</code> 走另一条路：把数据切成很多段<b>有序的小 list</b>，靠二分查找定位，实践中往往比平衡树还快。</p>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/avl.py</code> 里的 <code>AVLTreeMap</code>：用法和第 11 课的 <code>TreeMap</code>、和 <code>dict</code> 一样（<code>tree[key] = value</code>、<code>in</code>、<code>for</code>、<code>len</code>），只是不管按什么顺序插入都不会退化。</p>
+<p>建议顺序：<code>rotate_right</code> → <code>rotate_left</code> → <code>rebalance</code> → <code>__setitem__</code>（递归，回来的路上 rebalance）→ <code>__getitem__</code> → <code>__iter__</code> → <code>height</code> → <code>is_balanced</code> → 选做 <code>__delitem__</code>（以 <code>_optional</code> 结尾的两个测试）。</p>
+<pre>uv run dsa/avl.py               # 1 万个自增订单号的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_avl.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 插入一个值，最多要旋转几次？</summary>
+一次（单旋或双旋）。路上可能有好几个祖先同时失衡，但只要在最低的那个失衡节点转一次，那棵子树的高度就回到插入前，再往上自然都平衡了。</details>
+<details><summary>2. 为什么旋转后中序遍历不变？</summary>
+旋转前后都满足 A &lt; x &lt; B &lt; y &lt; C，只是谁当根变了，从左到右的顺序一样。</details>
+<details><summary>3. 依次插入 1～7，AVL 树长什么样？</summary>
+一棵满二叉树：根 4，第二层 2、6，第三层 1、3、5、7，高度 3。</details>
+
+<div class="nav"><a href="23-kmp.html">← 上一课：KMP 字符串匹配</a><a href="25-two-pointers.html">下一课：双指针 →</a></div>
+<script src="anim.js"></script>
+<script src="js/24-balanced-tree.js"></script>
+</body>
+</html>

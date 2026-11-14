@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 4 课 · 哈希表</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .bucket { margin: 3px 0; }
+  .cols { display: flex; gap: 40px; flex-wrap: wrap; }
+  .pair.moved { opacity: .3; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 4 课 · 哈希表（拉链法）</h1>
+<p class="one-line">哈希表 = <b>数组</b> + <b>链表</b>：用哈希函数把 key 算成一个下标，直接跳到那一格；同一格装不下的，就挂成一串。</p>
+
+<h2>实战里怎么写：dict、set 和它们的亲戚</h2>
+<p><code>dict</code> 和 <code>set</code> 就是哈希表，业务代码里没人另造一个。要会的是按场景挑对工具：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>按 key 查 / 改</td><td><code>dict</code></td><td>平均 O(1)</td></tr>
+  <tr><td>计数、取前几名</td><td><code>collections.Counter</code> 的 <code>most_common(k)</code></td><td>计数 O(n)</td></tr>
+  <tr><td>分组</td><td><code>collections.defaultdict(list)</code></td><td>每条 O(1)，不用先判断 key 在不在</td></tr>
+  <tr><td>去重、判断“见没见过”、交并差</td><td><code>set</code></td><td>平均 O(1)</td></tr>
+  <tr><td>缓存函数结果</td><td><code>functools.cache</code> / <code>lru_cache</code></td><td>底层就是 dict</td></tr>
+  <tr><td>自定义对象当 key</td><td><code>@dataclass(frozen=True)</code></td><td>自动生成 <code>__hash__</code> 和 <code>__eq__</code></td></tr>
+</table>
+<pre>from collections import Counter, defaultdict
+
+access_log = [("alice", "/home"), ("bob", "/cart"), ("alice", "/cart"), ("alice", "/home")]
+
+Counter(path for _, path in access_log).most_common(1)   # [('/home', 2)]
+
+pages_by_user = defaultdict(list)
+for user, path in access_log:
+    pages_by_user[user].append(path)                     # 第一次出现自动建空列表
+
+visitors = {user for user, _ in access_log}              # 去重：{'alice', 'bob'}</pre>
+<p>完整可运行的版本在 <code>examples/hash_table_in_practice.py</code>（<code>uv run examples/hash_table_in_practice.py</code>），还有用 <code>functools.cache</code> 缓存运费查询的例子。下面看 dict 为什么查找平均是 O(1)。</p>
+
+<h2>类比：按姓氏分的储物柜</h2>
+<p>一排柜子，按名字首字母放东西。找“张三”不用一个个翻，直接去 Z 柜。Z 柜里有好几个人（冲突）？没关系，柜子里挨个看就行，人不多，很快。</p>
+
+<h2>长什么样</h2>
+<div class="row"><span class="box small hot">[0]</span><span>→</span><span class="box">8: a</span><span>→</span><span class="box">4: c</span></div>
+<div class="row"><span class="box small">[1]</span><span>→</span><span class="box">5: b</span></div>
+<div class="row"><span class="box small">[2]</span><span>→</span><span class="label">空</span></div>
+<div class="row"><span class="box small">[3]</span><span>→</span><span class="label">空</span></div>
+<p>4 个桶。<code>下标 = hash(key) % 桶数</code>：8 和 4 除以 4 都余 0，<b>冲突</b>了，于是挂在 0 号桶的同一条链上。</p>
+
+<h2>三步走：读、写、删都一样</h2>
+<p>手写版做成一个和 <code>dict</code> 用法一样的 <code>HashMap</code>。<code>table[key]</code> 的实现：</p>
+<pre>def __getitem__(self, key):
+    bucket_index = hash(key) % len(self._buckets)   # ① 算下标，O(1)
+    for stored_key, value in self._buckets[bucket_index]:   # ② 在这个桶的链上挨个比 key
+        if stored_key == key:
+            return value                             # ③ 找到了就返回
+    raise KeyError(key)                              # 和 dict 一样，找不到抛 KeyError</pre>
+<p><code>table[key] = value</code>（动画里的 put）和 <code>del table[key]</code>（remove）也是这三步，只是第 ③ 步换成改值或删掉这一对。</p>
+<p>只要每条链都很短，第 ② 步就是常数时间，整体平均 O(1)。</p>
+
+<h2>链怎么保持很短：负载因子 + 扩容</h2>
+<p><b>负载因子 = 元素个数 / 桶数</b>。超过 0.75 就把桶数<b>翻倍</b>，然后每个 key 重新算下标、搬进新桶，这叫 <b>rehash</b>。
+桶数变了，<code>% 桶数</code> 的结果也变了，所以不能整条链原样搬过去。和动态数组一样，搬家 O(n)，但翻倍让它均摊下来还是 O(1)。</p>
+
+<table>
+  <tr><th>操作</th><th>平均</th><th>最坏（所有 key 撞进同一个桶）</th></tr>
+  <tr><td>读 / 写 / 删（put / get / remove）</td><td>O(1)</td><td>O(n)</td></tr>
+  <tr><td>扩容 rehash</td><td colspan="2">O(n)，但很少发生，均摊 O(1)</td></tr>
+</table>
+
+<h2>动手玩</h2>
+<p>建议依次试试：<b>put(9)</b>，9 % 4 = 1，看它和 5 撞在一个桶；再把 key 改成 6 点 <b>put</b>，第 4 个元素让负载因子变成 1.00，看扩容和 rehash 一个个搬；最后 <b>get</b> 一个不存在的 key。</p>
+<div class="demo" id="hmap"></div>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li>给<b>已存在</b>的 key 赋值，要覆盖 value，不能再挂一个，size 也不变。</li>
+  <li>rehash 时要<b>按新桶数重新算下标</b>，不能直接把旧链复制过去。</li>
+  <li>key 不存在时，<code>table[key]</code> 和 <code>del table[key]</code> 都要抛 <code>KeyError</code>，和 dict 一样。<code>in</code> 和 <code>get</code> 是靠接住这个 KeyError 实现的，抛错了别的异常它们就坏了。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/hash_table.py</code> 里的 <code>HashMap</code>。它继承 <code>collections.abc.MutableMapping</code>：你只写 <code>__setitem__</code>、<code>__getitem__</code>、<code>__delitem__</code>、<code>__iter__</code>，<code>get</code>、<code>pop</code>、<code>setdefault</code>、<code>in</code>、<code>items()</code>、<code>==</code> 都是 Python 自动送的，写完就能像 dict 一样直接用。</p>
+<p>建议顺序：<code>_index</code> → <code>__setitem__</code>（先不管扩容）→ <code>__getitem__</code> → <code>__delitem__</code> → <code>__iter__</code> → <code>_resize</code>，最后在 <code>__setitem__</code> 里接上扩容。</p>
+<pre>uv run dsa/hash_table.py               # 访问计数和用户查询的端到端例子
+uv run pytest tests/test_hash_table.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 为什么 dict 的 key 必须是不可变的（比如不能用 list）？</summary>
+key 放进去时按当时的 hash 选了桶。如果之后 key 变了，hash 也变了，再查就会去错的桶，永远找不到它。</details>
+<details><summary>2. 负载因子阈值设成 0.1 或 10 会怎样？</summary>
+0.1：链极短，但九成的桶空着，浪费内存。10：省内存，但每条链平均 10 个，查找变慢。0.75 是两者的折中。</details>
+<details><summary>3. 哈希表能按 key 从小到大遍历吗？</summary>
+不能高效做到。key 被打散到各个桶里，顺序和大小无关。（Python 的 dict 遍历是按<b>插入顺序</b>，不是按大小。）要按大小有序，得用后面的二叉搜索树，或 <code>sortedcontainers.SortedDict</code>。</details>
+
+<div class="nav"><a href="03-stack-queue.html">← 上一课：栈与队列</a><a href="05-recursion.html">下一课：递归与分治 →</a></div>
+<script src="anim.js"></script>
+<script src="js/04-hash-table.js"></script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 17 课 · 最小生成树（Kruskal）</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .graph { display: block; max-width: 100%; }
+  .graph circle { fill: #fff; stroke: #555; stroke-width: 2; }
+  .graph text { font: bold 15px Consolas, monospace; text-anchor: middle; dominant-baseline: central; }
+  .graph .edge line { stroke: #bbb; stroke-width: 2; }
+  .graph .edge .w { fill: #555; font-size: 13px; }
+  .graph .edge rect { fill: #fcfcfc; }
+  .graph .edge.cur line { stroke: #e65100; stroke-width: 4; }
+  .graph .edge.pick line { stroke: #2e7d32; stroke-width: 5; }
+  .graph .edge.skip line { stroke: #ccc; stroke-dasharray: 5 4; }
+  .box.pick { background: #c8e6c9; border-color: #2e7d32; }
+  .box.skip { color: #aaa; border-color: #ccc; text-decoration: line-through; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 17 课 · 最小生成树（Kruskal）</h1>
+<p class="one-line">给几座村子修路，要让<b>所有村子都连通</b>，又要<b>总花费最少</b>。Kruskal 的办法很朴素：<b>从最便宜的路开始修，会绕成圈的就不修</b>。</p>
+
+<h2>实战里怎么写：sorted + 小并查集</h2>
+<p>布网线、铺管道、修路这类“全连上、总成本最低”的问题，以及把相近的东西分组（门店划片区、相似文档归类），用的都是最小生成树。标准库没有现成的 MST，不过 Kruskal 就是 <b><code>sorted</code> 加上第 15 课的小并查集</b>，十几行就能写完。</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>布线 / 管道总成本最低</td><td>Kruskal：按成本排序 + 并查集判环</td><td>O(E log E)</td></tr>
+  <tr><td>把点分成 k 组，组间尽量远</td><td>Kruskal 跑到剩 k 块就停（单链接聚类）</td><td>O(E log E)</td></tr>
+  <tr><td>稠密图（几乎两两有边）</td><td>Prim（堆，像 Dijkstra）</td><td>O(E log V)</td></tr>
+  <tr><td>大规模、要很多种图算法</td><td>networkx / scipy（本课不依赖）</td><td>—</td></tr>
+</table>
+<pre>from operator import itemgetter
+
+def cheapest_cabling(rooms, routes):          # routes: [(房间, 房间, 米数), ...]
+    parent = {room: room for room in rooms}
+
+    def find(room):
+        while parent[room] != room:
+            parent[room] = parent[parent[room]]   # 顺手把路径缩短一半
+            room = parent[room]
+        return room
+
+    plan = []
+    for start, end, meters in sorted(routes, key=itemgetter(2)):   # 只按成本排
+        root_start, root_end = find(start), find(end)
+        if root_start != root_end:            # 两头还没连通：这根线有用
+            parent[root_end] = root_start
+            plan.append((start, end, meters))
+    if len(plan) != len(rooms) - 1:
+        raise ValueError("有房间无论如何都连不上")
+    return plan
+
+rooms = ["机房", "前台", "会议室", "研发区"]
+routes = [("机房", "前台", 30), ("机房", "研发区", 12), ("前台", "会议室", 8), ("会议室", "研发区", 15)]
+cheapest_cabling(rooms, routes)
+# [('前台', '会议室', 8), ('机房', '研发区', 12), ('会议室', '研发区', 15)]，共 35 米</pre>
+<p>注意排序要写 <code>key=itemgetter(2)</code>：直接 <code>sorted(routes)</code> 会先按房间名排序，排出来的顺序就不是按成本了。完整可运行的版本（布线方案，以及把门店分成两个配送片区）在 <code>examples/kruskal_in_practice.py</code>，运行 <code>uv run examples/kruskal_in_practice.py</code>。下面讲为什么“先挑最便宜的”不会出错。</p>
+
+<h2>什么是最小生成树</h2>
+<p>无向带权图，n 个点。挑出一些边，让所有点连通、<b>没有环</b>，这就是一棵<b>生成树</b>，它恰好有 <b>n − 1</b> 条边。总权最小的那棵叫<b>最小生成树（MST）</b>。</p>
+<div class="row">
+  <span class="box">A</span><span>—2—</span><span class="box">D</span>
+  <span class="label">　</span>
+  <span class="box">A</span><span>—4—</span><span class="box">B</span><span>—3—</span><span class="box">E</span><span>—1—</span><span class="box">C</span><span>—8—</span><span class="box">F</span>
+</div>
+<p class="label">上面 5 条边就是动画里那张图的 MST，总权 2+4+3+1+8 = 18。</p>
+
+<h2>Kruskal：贪心 + 判环</h2>
+<pre>chosen = []
+for start, end, weight in sorted(edges, key=lambda edge: edge[2]):   # ① 按权从小到大
+    if find(start) != find(end):          # ② 两头不在同一块：连上不会成环
+        union(start, end)
+        chosen.append((start, end, weight))
+        if len(chosen) == node_count - 1: # 选够了，提前收工
+            break
+    # 否则两头早就连通了，再加这条边就成环，跳过
+if len(chosen) &lt; node_count - 1:
+    raise ValueError("图不连通")</pre>
+<p>“会不会成环”就是问 <b>u 和 v 是不是已经连通</b>，这正是上一课<b>并查集</b>最擅长的：<code>find</code> 看是不是同一个老大，<code>union</code> 把两块合并。</p>
+<div class="row">
+  <span class="label">已连通的一块：</span><span class="box">{A, B, C, D, E}</span><span class="label">考察 B–D：两头都在里面 → 跳过</span><span class="box skip">B–D 5</span>
+</div>
+
+<h2>复杂度</h2>
+<table>
+  <tr><th>步骤</th><th>代价</th></tr>
+  <tr><td>边排序</td><td>O(E log E)</td></tr>
+  <tr><td>每条边一次 find / union</td><td>几乎 O(1)，合计约 O(E)</td></tr>
+  <tr><th>合计</th><th>O(E log E)，E 是边数</th></tr>
+</table>
+<p>瓶颈在排序。选够 n − 1 条边就可以提前收工。</p>
+
+<h2>动手玩</h2>
+<p>点<b>开始 Kruskal</b>，看下面的边列表按权排好后一条条被考察：<b>绿色</b>是选中，<b>划线</b>是因为成环跳过。再点<b>不连通的图</b>：F 没有路，边看完了也凑不够 n − 1 条。</p>
+<div class="demo" id="kruskal"></div>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li>判环只看“<b>两头是不是同一块</b>”，不用真的去图里找环。</li>
+  <li>不连通时边全看完也不够 <b>n − 1</b> 条，要报错，不能悄悄返回一片森林。</li>
+  <li>自环 <code>(u, u, 权)</code> 两头天然同一块，会被自动跳过；重边只会选便宜的那条。</li>
+  <li>直接 <code>sorted(edges)</code>：元组先比第一项，排出来是按节点名而不是按权；就算把权放第一项，同权时也会去比较节点，节点没法比大小就抛 <code>TypeError</code>。要写 <code>key=</code>。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/kruskal.py</code>。节点可以是任何名字，边是 <code>(u, v, 权)</code>。并查集在文件里自己写一个小的就行（dict 版，十来行），不依赖第 15 课的代码。建议顺序：先写 <code>minimum_spanning_tree</code>，再写 <code>cluster</code>（同一个循环，剩 k 块时就停，然后按根分组）。</p>
+<pre>uv run dsa/kruskal.py               # 办公室布线的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_kruskal.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 为什么“先挑最便宜的边”不会吃亏？</summary>
+把点分成任意两半，横跨两半的边里最便宜的那条，一定能出现在某棵 MST 里（换掉别的横跨边只会更贵或一样）。Kruskal 每次选的边恰好都是这种边。</details>
+<details><summary>2. 边权有相同的，MST 唯一吗？</summary>
+不一定。比如三角形三条边都是 1，选哪两条都行，但<b>总权</b>一定相同。</details>
+<details><summary>3. 还有别的 MST 算法吗？</summary>
+Prim：从一个点出发，每次用堆挑“连到树外最便宜的边”，有点像 Dijkstra。稠密图上 Prim 常常更快。</details>
+
+<div class="nav"><a href="16-dijkstra.html">← 上一课：最短路（Dijkstra）</a><a href="18-greedy.html">下一课：贪心 →</a></div>
+<script src="anim.js"></script>
+<script src="js/17-kruskal.js"></script>
+</body>
+</html>

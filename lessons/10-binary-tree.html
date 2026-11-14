@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 10 课 · 二叉树与递归遍历</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.tree { position: relative; width: 480px; max-width: 100%; margin: 6px 0; }
+.tree svg { position: absolute; left: 0; top: 0; }
+.tree .box { position: absolute; transform: translate(-50%, -50%); background: #fff; }
+.tree .box.hot { background: #ffe0b2; }
+.box.done { background: #c8e6c9; border-color: #2e7d32; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 10 课 · 二叉树与递归遍历</h1>
+<p class="one-line">二叉树就是每个节点最多有<b>两个孩子</b>的链表。处理一棵树 = 处理根 + 处理左子树 + 处理右子树，所以几乎所有树的代码都是<b>递归</b>。</p>
+
+<h2>长什么样</h2>
+<div class="row" style="justify-content:center;max-width:300px"><span class="box">1</span></div>
+<div class="row" style="justify-content:center;gap:90px;max-width:300px"><span class="box">2</span><span class="box">3</span></div>
+<div class="row" style="justify-content:center;gap:22px;max-width:300px"><span class="box">4</span><span class="box">5</span><span class="box empty">·</span><span class="box">6</span></div>
+<pre>class TreeNode:
+    def __init__(self, val, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right</pre>
+<p>虚线格表示 3 没有左孩子。没有孩子的节点叫<b>叶子</b>（4、5、6）。空树就是 <code>None</code>。</p>
+
+<h2>实战里怎么写：树形数据到处都是</h2>
+<p>业务代码里几乎没人自己定义 <code>TreeNode</code>，但<b>树形数据</b>天天碰到，处理它们用的正是本课的递归遍历：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>JSON / 配置的嵌套结构</td><td>自己写递归生成器（dict、list 是有孩子的节点）</td><td>O(n)，递归深度 = 嵌套层数</td></tr>
+  <tr><td>分析源代码</td><td>标准库 <code>ast</code>：<code>ast.walk</code> 是层序，<code>ast.NodeVisitor</code> 是前序</td><td>O(n)</td></tr>
+  <tr><td>目录树</td><td><code>os.walk</code>、<code>pathlib.Path.rglob</code></td><td>O(文件数)</td></tr>
+</table>
+<pre>def flatten(config, prefix=""):
+    """把嵌套配置拍平成 ("database.port", 5432) 这样的路径。前序遍历。"""
+    if isinstance(config, dict):
+        children = config.items()
+    elif isinstance(config, list):
+        children = enumerate(config)
+    else:
+        yield prefix, config            # 叶子
+        return
+    for key, child in children:
+        yield from flatten(child, f"{prefix}.{key}" if prefix else str(key))
+
+dict(flatten({"database": {"host": "localhost", "port": 5432}, "debug": False}))
+# {'database.host': 'localhost', 'database.port': 5432, 'debug': False}</pre>
+<p>完整可运行的版本在 <code>examples/binary_tree_in_practice.py</code>（<code>uv run examples/binary_tree_in_practice.py</code>），还演示了用 <code>ast</code> 列出“每个函数调用了谁”。注意它用的是 <b>yield</b>：遍历写成生成器，调用方可以 <code>list()</code> 全拿，也可以找到想要的就 <code>break</code>。</p>
+
+<h2>四种遍历</h2>
+<p>前、中、后说的是<b>根</b>排在第几个，左永远在右前面：</p>
+<table>
+  <tr><th>遍历</th><th>顺序</th><th>上面这棵树</th></tr>
+  <tr><td>前序</td><td>根 → 左 → 右</td><td>1 2 4 5 3 6</td></tr>
+  <tr><td>中序</td><td>左 → 根 → 右</td><td>4 2 5 1 3 6</td></tr>
+  <tr><td>后序</td><td>左 → 右 → 根</td><td>4 5 2 6 3 1</td></tr>
+  <tr><td>层序</td><td>一层一层，从左到右</td><td>1 2 3 4 5 6</td></tr>
+</table>
+<pre>def preorder(root):
+    if root is None:          # 空树：什么都不产出
+        return
+    yield root.val            # 根
+    yield from preorder(root.left)
+    yield from preorder(root.right)
+
+list(preorder(root))          # [1, 2, 4, 5, 3, 6]</pre>
+<p>中序、后序只是把 <code>yield root.val</code> 挪个位置。<code>yield from</code> 的意思是“把子树产出的值原样转交出去”，比 <code>[root.val] + preorder(...) + ...</code> 每层都新建 list 省得多。</p>
+<p>层序不用递归，用第 3 课的<b>队列</b>：出队一个，就把它的孩子入队。实际中常常要<b>按层分组</b>（比如“每一级有谁”），技巧是每轮先记下队列长度，只出队这么多个：</p>
+<pre>from collections import deque
+
+def level_order(root):
+    if root is None:
+        return
+    queue = deque([root])
+    while queue:
+        level = []
+        for _ in range(len(queue)):        # 这一轮只处理当前这一层
+            node = queue.popleft()
+            level.append(node.val)
+            if node.left is not None:
+                queue.append(node.left)
+            if node.right is not None:
+                queue.append(node.right)
+        yield level
+
+list(level_order(root))       # [[1], [2, 3], [4, 5, 6]]</pre>
+
+<h2>高度和节点数：同一个套路</h2>
+<pre>def height(root):
+    if root is None:
+        return 0
+    return 1 + max(height(root.left), height(root.right))</pre>
+<p>先写“空树返回什么”，再假设左右子树已经算好，想想怎么拼出答案。节点数就是 <code>1 + 左 + 右</code>。</p>
+<table>
+  <tr><th>操作</th><th>时间</th><th>额外空间</th></tr>
+  <tr><td>前 / 中 / 后序、高度、节点数</td><td>O(n)</td><td>O(h)，调用栈深度 = 树高</td></tr>
+  <tr><td>层序</td><td>O(n)</td><td>O(w)，w 是最宽一层的节点数</td></tr>
+</table>
+
+<h2>动手玩</h2>
+<p>依次点四种遍历，用“上一步 / 下一步”看访问顺序。橙色是正在访问的节点，绿色是已经输出的；递归遍历下面会显示调用栈，层序显示队列。</p>
+<div class="demo" id="btree"></div>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li>忘了写<b>空树</b>的出口，递归一路走到 <code>None.left</code> 就报错。</li>
+  <li>高度的定义：本课约定空树是 0、只有根是 1（有的书从 -1 数起）。</li>
+  <li><code>build_from_list</code> 里，<b>None 位置不会有孩子</b>，后面的值要跳过它分给下一个真实节点。</li>
+  <li>递归生成器里调用子树要写 <code>yield from preorder(root.left)</code>。只写 <code>preorder(root.left)</code> 会创建一个生成器然后丢掉，子树一个值都不会产出。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/binary_tree.py</code>。<code>TreeNode</code> 是 dataclass，两棵树结构和值都一样时 <code>==</code> 为 True，测试靠它比较。除了遍历，还要写两种<b>序列化</b>：层序列表（LeetCode 的写法，<code>build_from_list</code> / <code>to_list</code>）和可以直接 <code>json.dumps</code> 的嵌套 dict（<code>to_dict</code> / <code>from_dict</code>），都要能来回转换。</p>
+<p>建议顺序：<code>preorder</code> → <code>inorder</code> → <code>postorder</code> → <code>count_nodes</code> → <code>height</code> → <code>level_order</code> → <code>to_dict</code> / <code>from_dict</code> → <code>build_from_list</code> → <code>to_list</code>。</p>
+<pre>uv run dsa/binary_tree.py       # 公司汇报关系的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_binary_tree.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 递归遍历额外占用多少空间？</summary>
+调用栈最深等于树高 h。平衡的树是 O(log n)，退化成一条链时是 O(n)。</details>
+<details><summary>2. 只给前序遍历的结果，能还原出树吗？</summary>
+不能，比如 [1, 2] 可能是 2 在左，也可能在右。给前序 + 中序（且值不重复）就可以。</details>
+<details><summary>3. 删除一棵树时（比如释放内存），该用哪种遍历？</summary>
+后序：先处理完两个孩子，再处理自己，不会出现“先删了父亲，孩子找不到”的问题。</details>
+
+<div class="nav"><a href="09-quick-sort.html">← 上一课：快速排序</a><a href="11-bst.html">下一课：二叉搜索树 →</a></div>
+<script src="anim.js"></script>
+<script src="js/10-binary-tree.js"></script>
+</body>
+</html>

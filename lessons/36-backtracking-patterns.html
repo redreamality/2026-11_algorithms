@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 36 课 · 回溯高频题</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .tree { margin: 8px 0; }
+  .tree-node { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+  .tree-node .label { width: 64px; text-align: right; }
+  .tree-node.current .box { background: #ffe0b2; }
+  .tree-node.pruned .box { background: #ffcdd2; border-color: #c62828; text-decoration: line-through; }
+  .tree-node.duplicate .box { background: #ffcdd2; border-color: #c62828; }
+  .note { color: #c62828; font-size: 14px; }
+  .nums .node .label { font-size: 12px; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 36 课 · 回溯高频题</h1>
+<p class="one-line">第 21 课的模板“选择 → 递归 → 撤销”能解决一大类题。面试里换花样，主要换的是三件事：<b>每一层在选什么</b>、<b>什么时候算走到底</b>、<b>哪些分支可以提前剪掉</b>。这一课用六道高频题把这三件事练熟，重点是“有重复元素时怎么去重”。</p>
+
+<h2>实战里怎么写：先看 itertools 够不够</h2>
+<p>业务代码里“列出所有方案”很常见：CI 测试矩阵、商品规格组合、挑评审人、排班排课。前三种直接用标准库 <code>itertools</code>，一行就够；只有约束多、组合数爆炸时才手写回溯。</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>每一项各选一个、全部搭配（Python 版本 × 系统 × 数据库）</td><td><code>itertools.product</code></td><td>结果个数 = 各项个数相乘，全部生成</td></tr>
+  <tr><td>从 n 个里挑 k 个，不计顺序（挑两位评审）</td><td><code>itertools.combinations</code></td><td>C(n, k) 个</td></tr>
+  <tr><td>排先后顺序</td><td><code>itertools.permutations</code></td><td>n! 个；有重复元素时会产出重复结果，要 <code>set()</code> 去重</td></tr>
+  <tr><td>约束很多（排班：没空不排、每天只上一个班、每人有上限）</td><td>手写回溯 + 剪枝</td><td>违反约束的那一步就回头，不生成整棵树</td></tr>
+</table>
+<pre>from itertools import combinations, product
+
+# CI 测试矩阵：全搭配，再去掉不支持的组合
+matrix = [
+    (version, system, database)
+    for version, system, database in product(["3.11", "3.12"], ["linux", "windows"], ["postgres", "sqlite"])
+    if (system, database) != ("windows", "postgres")
+]
+
+# 从团队里挑两人评审，作者自己除外
+reviewer_pairs = list(combinations([member for member in team if member != author], 2))</pre>
+<p><code>itertools</code> 的做法是“先全部生成，再过滤”。排班时，3 个人排 6 个班就有 3<sup>6</sup> = 729 种完整排法，绝大多数在第一两步就已经违反约束；手写回溯在违反约束的那一步就回头，示例里只试了 8 次分配。<code>permutations</code> 遇到重复元素也是一样：先生成 n! 个再去重，正是本课“同层去重”要解决的浪费。</p>
+<p>完整可运行的版本（测试矩阵、评审人、带重复的排列、排班回溯）在 <code>examples/backtracking_patterns_in_practice.py</code>（<code>uv run examples/backtracking_patterns_in_practice.py</code>）。下面的六道面试题，就是在练这种手写回溯的基本功。</p>
+
+<h2>先回顾模板</h2>
+<pre>def backtrack(path, 还能做的选择):
+    if 走到底了:
+        answers.append(path[:])          # 存副本
+        return
+    for choice in 还能做的选择:
+        if 这个选择注定不行:
+            continue                     # 剪枝
+        path.append(choice)              # ① 选择
+        backtrack(path, 剩下的选择)        # ② 递归
+        path.pop()                       # ③ 撤销</pre>
+<p>做每道题时，先回答三个问题：<b>树的每一层对应什么决定？</b>（第几个数要不要、第几个位置放谁、第几个数字用哪个字母……）<b>叶子在哪里？</b>（path 长度够了、下标走到末尾……）<b>什么情况下可以不往下走？</b>回答完，代码基本就出来了。第 21 课已经讲过全排列、子集、组合总和、N 皇后，没印象的话先回去看一眼。</p>
+
+<h2>怎么认出这类题</h2>
+<p>回溯题的信号很明显：题目要的是<b>所有</b>方案本身，而不只是方案的个数或最优值。</p>
+<ul>
+  <li>“返回所有可能的……”“列出全部……”“所有组合 / 排列 / 子集 / 分割方案”：回溯。</li>
+  <li>“数组里<b>可能包含重复元素</b>，但结果<b>不能包含重复的</b>组合 / 子集 / 排列”：回溯 + 先排序 + 同层去重。</li>
+  <li>“每一位有几种选择，求所有拼法”（电话号码、括号）：每一层对应一位，往后一位一位地填。</li>
+  <li>“在网格里找一条路径，格子不能重复使用”：网格上的回溯，走进去时标记，退出来时还原。</li>
+  <li>“把字符串切成若干段，每段满足某个条件”：每一层决定“这一段切到哪里”。</li>
+</ul>
+<p>如果题目只问“有多少种”或“最少 / 最多是多少”，通常能用动态规划做得更快，回溯可能会超时。</p>
+<table>
+  <tr><th>LeetCode 题号</th><th>中文题名</th><th>本课对应</th></tr>
+  <tr><td>90</td><td>子集 II</td><td><code>subsets_with_duplicates</code></td></tr>
+  <tr><td>47</td><td>全排列 II</td><td><code>unique_permutations</code></td></tr>
+  <tr><td>17</td><td>电话号码的字母组合</td><td><code>letter_combinations</code></td></tr>
+  <tr><td>22</td><td>括号生成</td><td><code>generate_parentheses</code></td></tr>
+  <tr><td>79</td><td>单词搜索</td><td><code>word_exists</code></td></tr>
+  <tr><td>131</td><td>分割回文串</td><td><code>palindrome_partitions</code></td></tr>
+  <tr><td>40</td><td>组合总和 II</td><td>课后练习：和子集 II 一样的同层去重，加上“和等于 target”的结束条件</td></tr>
+  <tr><td>93</td><td>复原 IP 地址</td><td>课后练习：和分割回文串一样“决定这一段切到哪里”</td></tr>
+</table>
+
+<h2>题 1：子集 II（LeetCode 90）</h2>
+<p><b>题意。</b>给一个可能有重复数字的数组，返回所有<b>不重复</b>的子集。例如 <code>[1, 2, 2]</code>，答案是 <code>[], [1], [1, 2], [1, 2, 2], [2], [2, 2]</code>，共 6 个。</p>
+<p><b>直接套第 21 课的子集为什么不行。</b>第 21 课的子集默认数字互不相同。把两个 2 当成不同的数（记作 2<sub>a</sub> 和 2<sub>b</sub>），会得到 8 个子集，其中 <code>[1, 2a]</code> 和 <code>[1, 2b]</code> 内容一样，<code>[2a]</code> 和 <code>[2b]</code> 也一样，重复了两组。最笨的去重办法是把每个结果转成元组放进集合，但这样仍然要先把所有重复的分支都走一遍。重复元素一多，比如 <code>[2, 2, 2, 2, 2]</code>，只有 6 个不同的子集，却要生成 32 个再去重，浪费很大。</p>
+<p><b>关键观察：重复是在“同一层选了相同的数”时产生的。</b>用第 21 课“从 start 往后挑一个数”的写法：每次递归调用里的 for 循环是一层，它决定“下一个放进 path 的数是谁”。先排序，让相同的数挨在一起。在同一层里，如果已经试过“下一个放 2（下标 1）”，那么再试“下一个放 2（下标 2）”，后面能生成的子集和刚才完全一样，因为剩下可选的数只会更少。所以：<b>同一层里，和前一个数相同的，直接跳过</b>。</p>
+<pre>sorted_nums = sorted(nums)
+answers = []
+path = []
+
+def backtrack(start):
+    answers.append(path[:])                        # 子集的每个节点都是答案
+    for i in range(start, len(sorted_nums)):
+        if i &gt; start and sorted_nums[i] == sorted_nums[i - 1]:
+            continue                               # 同一层里相同的数只试第一个
+        path.append(sorted_nums[i])
+        backtrack(i + 1)
+        path.pop()
+
+backtrack(0)</pre>
+<p><b>为什么条件是 <code>i &gt; start</code>，而不是 <code>i &gt; 0</code>？</b>这是最容易写错的地方。<code>i == start</code> 表示这一层的第一个选择，它和前一个数相同也没关系，因为前一个数（下标 start - 1）是在<b>上一层</b>被选进 path 的，不是这一层的兄弟。比如 path 已经是 <code>[2]</code>（选了下标 1），这一层从下标 2 开始，下标 2 的 2 和下标 1 的 2 相同，但它是这一层的第一个，要试，这样才能得到 <code>[2, 2]</code>。如果写成 <code>i &gt; 0</code>，<code>[2, 2]</code> 和 <code>[1, 2, 2]</code> 都会丢掉。一句话：<b>同一层（兄弟之间）去重，同一枝（父子之间）不去重</b>。</p>
+<p><b>为什么是对的。</b>排序后，两个子集内容相同，等价于它们从每一组相同数字里选的个数都一样（比如都选了一个 1、两个 2），区别只在于选的是这组里的哪几个下标。我们的规则保证：从一组相同数字里选 k 个时，选的总是这一组最前面的 k 个下标。于是每个不同的子集恰好对应一种选法，既不重复，也不遗漏。</p>
+<p><b>复杂度。</b>最多 2<sup>n</sup> 个子集，每个复制进答案要 O(n)，时间 O(n · 2<sup>n</sup>)；递归深度 O(n)。</p>
+
+<h2>动手玩</h2>
+<p>先选 <code>1, 2, 2</code>，点<b>不去重（对照）</b>：决策树长完后，红色的是重复的子集。再点<b>去重（同层跳过）</b>：红色划线的是被剪掉的分支，注意它和它的哥哥（上一行同一缩进、同一个数）处在同一层。上方数组里，橙色是这一步选的下标，红框是被跳过的下标，“start”标记这一层从哪个下标开始挑。最后试试 <code>2, 1, 2</code>（会先排序）和 <code>1, 2, 2, 2</code>，看剪掉的枝有多少。</p>
+<div class="demo" id="subsets"></div>
+
+<h2>题 2：全排列 II（LeetCode 47）</h2>
+<p><b>题意。</b>给一个可能有重复数字的数组，返回所有<b>不重复</b>的全排列。例如 <code>[1, 1, 2]</code>，答案是 <code>[1, 1, 2], [1, 2, 1], [2, 1, 1]</code>，共 3 个。</p>
+<p><b>直接套第 21 课的全排列为什么不行。</b>把两个 1 当成不同的数 1<sub>a</sub>、1<sub>b</sub>，会得到 3! = 6 个排列：<code>[1a, 1b, 2]</code> 和 <code>[1b, 1a, 2]</code> 内容一样，每个答案都出现了两次。</p>
+<p><b>关键观察。</b>重复来自“相同的几个数之间交换了先后顺序”。如果规定<b>相同的数必须按下标从小到大的顺序被用掉</b>（先用 1<sub>a</sub>，才能用 1<sub>b</sub>），那么 <code>[1b, 1a, 2]</code> 这种顺序就永远不会被生成，每个排列只剩一种生成方式。</p>
+<p><b>具体做法。</b>全排列每一层是“下一个位置放谁”，要从所有没用过的下标里挑，所以用 used 列表记录哪些下标已经在 path 里。去重规则写成：</p>
+<pre>sorted_nums = sorted(nums)
+used = [False] * len(sorted_nums)
+
+def backtrack():
+    if len(path) == len(sorted_nums):
+        answers.append(path[:])
+        return
+    for i in range(len(sorted_nums)):
+        if used[i]:
+            continue
+        if i &gt; 0 and sorted_nums[i] == sorted_nums[i - 1] and not used[i - 1]:
+            continue          # 前一个相同的数还没用，不许先用这个
+        used[i] = True
+        path.append(sorted_nums[i])
+        backtrack()
+        path.pop()
+        used[i] = False</pre>
+<p><b>怎么理解 <code>not used[i - 1]</code>。</b>在当前这一层，如果下标 i - 1 的数和下标 i 相同，而且 i - 1 <b>没在 path 里</b>，说明 i - 1 是这一层的兄弟，刚才已经试过“这个位置放这个数”了，再用 i 放一次就重复了，跳过。如果 i - 1 <b>已经在 path 里</b>，说明它是在更早的位置被用掉的，现在用 i 正好符合“按下标顺序用掉相同的数”，可以放。这和子集 II 是同一个道理：<b>同一层的兄弟之间去重，同一枝上的祖先和后代之间不去重</b>。</p>
+<p><b>为什么是对的。</b>这条规则保证每组相同数字在 path 里出现的顺序，一定是它们下标从小到大的顺序。对每一个内容不同的排列，满足这个顺序的生成方式恰好只有一种，所以不重不漏。</p>
+<p><b>复杂度。</b>最多 n! 个排列，每个复制要 O(n)，时间 O(n · n!)；递归深度 O(n)，used 占 O(n)。</p>
+
+<h2>题 3：电话号码的字母组合（LeetCode 17）</h2>
+<p><b>题意。</b>手机九宫格键盘上，2 对应 abc，3 对应 def，……，7 对应 pqrs，9 对应 wxyz。给一串由 2～9 组成的数字，返回它能拼出的所有字母组合。例如 <code>"23"</code>：第一个字母从 a、b、c 里选，第二个从 d、e、f 里选，共 3 × 3 = 9 种：<code>ad, ae, af, bd, be, bf, cd, ce, cf</code>。输入是空字符串时返回空列表。</p>
+<p><b>为什么要用回溯，不能写几层 for 循环。</b>如果知道 digits 一定是两位，写两层 for 就行。但 digits 的长度不固定，循环的层数没法提前写死。回溯用递归的深度代替循环的层数：第 index 层递归负责第 index 个数字。</p>
+<p><b>具体做法。</b></p>
+<pre>def backtrack(index):
+    if index == len(digits):                        # 每个数字都选好了字母
+        answers.append("".join(path))
+        return
+    for letter in DIGIT_TO_LETTERS[digits[index]]:
+        path.append(letter)
+        backtrack(index + 1)
+        path.pop()</pre>
+<p>这道题没有剪枝，每个数字的每个字母都能用，决策树是满的。它的意义在于练习“每一层对应输入的第几位”这种建树方式。</p>
+<p><b>复杂度。</b>设 digits 长度为 k，每位最多 4 个字母，答案最多 4<sup>k</sup> 个，每个长度 k，时间 O(k · 4<sup>k</sup>)；递归深度 O(k)。</p>
+
+<h2>题 4：括号生成（LeetCode 22）</h2>
+<p><b>题意。</b>给一个整数 n，生成所有由 n 对括号组成的<b>合法</b>括号串。合法的意思是每个右括号都能和它前面的某个左括号配对。例如 n = 3，答案是 <code>((())), (()()), (())(), ()(()), ()()()</code>，共 5 个。</p>
+<p><b>暴力做法为什么慢。</b>长度为 2n 的串每一位都是 <code>(</code> 或 <code>)</code>，一共 2<sup>2n</sup> 个，全部生成出来再逐个检查合法性。n = 3 时要生成 64 个，只有 5 个是合法的，绝大部分工作都白做了。</p>
+<p><b>关键观察。</b>从左往右写括号串时，什么时候已经注定不合法？只有两种情况：左括号用了超过 n 个；或者在某个位置，右括号比左括号多（多出来的那个右括号没有人能和它配对）。只要在放括号之前避开这两种情况，生成的每个串最后一定合法。</p>
+<p><b>具体做法。</b>用 open_count、close_count 记录已经放了几个左括号、几个右括号：</p>
+<pre>def backtrack(open_count, close_count):
+    if len(path) == 2 * pair_count:
+        answers.append("".join(path))
+        return
+    if open_count &lt; pair_count:            # 左括号还没用完
+        path.append("(")
+        backtrack(open_count + 1, close_count)
+        path.pop()
+    if close_count &lt; open_count:           # 前面有没配对的左括号，才能放右括号
+        path.append(")")
+        backtrack(open_count, close_count + 1)
+        path.pop()</pre>
+<p><b>为什么是对的。</b>走到底时串长 2n，左括号最多 n 个，所以正好 n 个左、n 个右。过程中每一个前缀都满足“右括号不多于左括号”，这正是括号串合法的充要条件。反过来，任何合法括号串的每个前缀都满足这两条规则，所以它一定会被生成，不会漏。</p>
+<p><b>复杂度。</b>合法括号串的个数是卡特兰数，约为 4<sup>n</sup> / (n<sup>1.5</sup>)。因为剪枝保证了每条走下去的路都能走到一个答案，所以总时间和“答案个数 × 长度”同阶；递归深度 O(n)。</p>
+
+<h2>题 5：单词搜索（LeetCode 79）</h2>
+<p><b>题意。</b>给一个字母网格和一个单词，判断单词能否由网格里上下左右相邻的格子依次连成，<b>同一个格子在一条路径里不能用两次</b>。例如：</p>
+<pre>A B C E
+S F C S
+A D E E</pre>
+<p><code>"ABCCED"</code> 能找到（A→B→C 往右，C 往下，E 往下，D 往左）；<code>"SEE"</code> 能找到；<code>"ABCB"</code> 找不到，因为 B 只有一个，回到 B 就要重复用格子。</p>
+<p><b>和上一课的网格搜索有什么不同。</b>第 35 课数岛屿时，一个格子被访问过就永远不用再访问，标记之后不用改回来。这里不一样：一个格子在<b>这条</b>路径上用过，不代表在<b>另一条</b>路径上不能用。所以走进一个格子时标记它，<b>从它退出来时要把标记撤销</b>。这就是回溯的“撤销”，只不过撤销的对象从 path 变成了网格上的标记。</p>
+<p><b>具体做法。</b></p>
+<pre>def backtrack(row, col, index):            # 从 (row, col) 开始，能否匹配 word[index:]
+    if not (0 &lt;= row &lt; row_count and 0 &lt;= col &lt; col_count):
+        return False
+    if board[row][col] != word[index]:
+        return False                       # 字母不对，剪枝
+    if index == len(word) - 1:
+        return True                        # 最后一个字母也匹配上了
+    original_letter = board[row][col]
+    board[row][col] = "#"                  # ① 标记：这条路径上用过了
+    for row_step, col_step in directions:
+        if backtrack(row + row_step, col + col_step, index + 1):   # ② 递归
+            board[row][col] = original_letter
+            return True
+    board[row][col] = original_letter      # ③ 撤销，让别的路径还能用它
+    return False</pre>
+<p>外面用两层循环，以每个格子为起点调用一次 <code>backtrack(row, col, 0)</code>，有一个返回 True 就是 True。改成 <code>"#"</code> 之后，它不等于任何字母，下一步走回来时会被“字母不对”挡住，所以不需要单独的 visited 集合。</p>
+<p><b>复杂度。</b>设网格有 row_count × col_count 个格子，单词长 L。每个起点出发，第一步最多 4 个方向，之后每步最多 3 个方向（不能走回来），时间 O(row_count × col_count × 3<sup>L</sup>)；递归深度 O(L)。字母不匹配会立刻剪枝，实际要快得多。</p>
+
+<h2>题 6：分割回文串（LeetCode 131）</h2>
+<p><b>题意。</b>把字符串切成若干段，每一段都必须是回文串（正着读、反着读都一样），返回所有切法。例如 <code>"aab"</code>：可以切成 <code>["a", "a", "b"]</code>，也可以切成 <code>["aa", "b"]</code>；<code>["a", "ab"]</code> 不行，因为 <code>"ab"</code> 不是回文。答案共 2 种。</p>
+<p><b>怎么建树。</b>长度为 n 的字符串有 n - 1 个缝隙，每个缝隙切或不切，一共 2<sup>n-1</sup> 种切法。换个角度看更好写：<b>每一层决定“从 start 开始的这一段切到哪里”</b>。第一层决定第一段是 <code>"a"</code>、<code>"aa"</code> 还是 <code>"aab"</code>；选定以后，剩下的部分是一个同样形状的子问题。</p>
+<pre>def backtrack(start):
+    if start == len(text):                     # 整个串都切完了
+        answers.append(path[:])
+        return
+    for end in range(start, len(text)):
+        piece = text[start:end + 1]
+        if not is_palindrome(piece):
+            continue                           # 这一段不是回文，剪枝
+        path.append(piece)
+        backtrack(end + 1)
+        path.pop()</pre>
+<p><b>剪枝为什么重要。</b>如果第一段就不是回文，后面无论怎么切都没用，所以在选择之前判断。对 <code>"aab"</code>，第一段是 <code>"aab"</code> 时直接剪掉；第一段是 <code>"a"</code> 时，剩下 <code>"ab"</code>，第二段 <code>"ab"</code> 也被剪掉。</p>
+<p><b>复杂度。</b>最坏情况是所有字母都相同（比如 <code>"aaaa"</code>），每种切法都合法，共 2<sup>n-1</sup> 种，每种复制 O(n)，再加上判断回文的开销，时间 O(n · 2<sup>n</sup>)；递归深度 O(n)。如果想更快，可以先用动态规划算出“text[i..j] 是不是回文”的表，判断就变成 O(1)。</p>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>题</th><th>每一层在决定什么</th><th>剪枝 / 去重</th><th>时间</th></tr>
+  <tr><td>子集 II</td><td>下一个放进 path 的数（从 start 往后挑）</td><td>先排序，同层相同的数只试第一个</td><td>O(n · 2<sup>n</sup>)</td></tr>
+  <tr><td>全排列 II</td><td>下一个位置放哪个没用过的下标</td><td>先排序，前一个相同的数没用就跳过</td><td>O(n · n!)</td></tr>
+  <tr><td>电话号码</td><td>第 index 个数字用哪个字母</td><td>无</td><td>O(k · 4<sup>k</sup>)</td></tr>
+  <tr><td>括号生成</td><td>下一个字符放左括号还是右括号</td><td>左括号不超过 n 个，右括号不超过左括号</td><td>约 O(4<sup>n</sup> / n<sup>0.5</sup>)</td></tr>
+  <tr><td>单词搜索</td><td>下一步往哪个方向走</td><td>字母不匹配立刻返回；走进时标记、退出时还原</td><td>O(格子数 × 3<sup>L</sup>)</td></tr>
+  <tr><td>分割回文串</td><td>从 start 开始的这一段切到哪里</td><td>这一段不是回文就跳过</td><td>O(n · 2<sup>n</sup>)</td></tr>
+</table>
+
+<h2>最容易错的四个地方</h2>
+<ul>
+  <li><b>去重前忘了排序。</b>“和前一个数相同就跳过”只有在相同的数挨在一起时才管用。<code>[2, 1, 2]</code> 不排序的话，两个 2 不相邻，规则不起作用。</li>
+  <li><b>子集 II 写成 <code>i &gt; 0</code>。</b>会把同一枝上的“再选一个相同的数”也剪掉，丢掉 <code>[2, 2]</code> 这种答案。要写 <code>i &gt; start</code>。</li>
+  <li><b>单词搜索忘了还原格子。</b>一条路径失败退回来时，格子还是 <code>"#"</code>，其他路径就再也用不了它，本来能找到的单词会返回 False。找到答案提前返回时也要先还原，否则调用者手里的网格被改坏了。</li>
+  <li><b>字符串 path 存答案。</b>如果用字符串拼接代替列表，<code>path + letter</code> 每次会新建字符串，不需要撤销；如果用列表 path，存答案时要 <code>"".join(path)</code>，不能直接存列表。两种写法别混在一起。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/backtracking_patterns.py</code>，建议顺序：<code>letter_combinations</code> → <code>generate_parentheses</code> → <code>subsets_with_duplicates</code> → <code>unique_permutations</code> → <code>palindrome_partitions</code> → <code>word_exists</code>。前两道最直接，先找回模板的手感；中间两道练去重；最后两道练“切分”和“网格上的撤销”。写完一个就运行一次：</p>
+<pre>uv run dsa/backtracking_patterns.py</pre>
+<p>它会对每个例子打印“输入、期望、实际”；返回列表的题，比较前会先排序，所以结果之间的顺序不影响判断。</p>
+
+<h2>自测</h2>
+<details><summary>1. 子集 II 能不能不排序，改用一个集合记录“这一层已经试过哪些数”？</summary>
+可以。在每次 for 循环开始前建一个空集合 tried，某个数已经在 tried 里就跳过，否则加进去再递归。这同样是“同一层去重”，不需要排序。但结果里每个子集的内部顺序会跟着原数组走，要求子集内部有序时还是得先排序。排序的写法不需要额外的集合，更常用。</details>
+<details><summary>2. 组合总和 II（LeetCode 40）：每个数只能用一次，数组里有重复，结果不能重复。和本课哪道题最像？</summary>
+和子集 II 一样：先排序，for 循环从 start 开始，<code>i &gt; start</code> 且和前一个相同就跳过，递归传 <code>i + 1</code>（每个数只能用一次）。再加上第 21 课组合总和的结束条件和剪枝：剩余 target 为 0 时收集，当前数大于剩余 target 时 break。</details>
+<details><summary>3. 括号生成里，为什么放右括号的条件是 close_count &lt; open_count，而不是 close_count &lt; pair_count？</summary>
+写成 close_count &lt; pair_count 会生成 <code>)(</code> 这种开头就是右括号的串：放第一个右括号时 close_count = 0 &lt; n，条件成立，但前面没有左括号和它配对。条件 close_count &lt; open_count 保证每个右括号前面都有一个还没配对的左括号；而 open_count 本身不超过 pair_count，所以右括号也不会超过 pair_count。</details>
+
+<div class="nav"><a href="35-grid-search.html">← 上一课：网格搜索</a><a href="37-dp-1d.html">下一课：一维 DP 高频题 →</a></div>
+<script src="anim.js"></script>
+<script src="js/36-backtracking-patterns.js"></script>
+</body>
+</html>

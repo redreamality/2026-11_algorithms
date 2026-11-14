@@ -3,10 +3,16 @@ name = "dsa-study"
 version = "0.1.0"
 description = "系统学习算法与数据结构：讲解 + 自己实现 + 测试"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "sortedcontainers>=2.4.0",
+]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "playwright>=1.64.1",
+    "pytest>=8",
+    "pytest-playwright>=0.10.0",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

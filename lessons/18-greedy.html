@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 18 课 · 贪心</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .act { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .act-name { width: 18px; font-family: Consolas, monospace; }
+  .track { position: relative; flex: 1; height: 24px; background: #f0f0f0; border-radius: 3px; }
+  .track .seg { position: absolute; top: 2px; bottom: 2px; border: 2px solid #555; border-radius: 4px; background: #fff;
+    font: 12px/16px Consolas, monospace; text-align: center; box-sizing: border-box; }
+  .act.cur .seg { background: #ffcdd2; border-color: #c62828; }
+  .act.picked .seg { background: #ffe0b2; }
+  .act.skipped { opacity: .3; }
+  .endline { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 2px solid #c62828; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 18 课 · 贪心</h1>
+<p class="one-line">贪心就是<b>每一步都拿眼下最好的</b>，拿了不反悔。写起来最短，但只有在“局部最好能推出全局最好”时才对。</p>
+
+<h2>实战里怎么写：sorted + 一次遍历</h2>
+<p>贪心在业务代码里不用调任何库，几乎都是“按某个关键字 <code>sorted</code>，再扫一遍，能要就要”。难的不是写，而是<b>选对排序关键字、确认贪心是对的</b>。</p>
+<table>
+  <tr><th>场景</th><th>怎么写</th><th>代价</th></tr>
+  <tr><td>一间会议室尽量多接预约</td><td>按<b>结束时间</b>排序，不冲突就接</td><td>O(n log n)</td></tr>
+  <tr><td>合并日历忙碌时段、算空闲</td><td>按<b>开始时间</b>排序，能接上就延长</td><td>O(n log n)</td></tr>
+  <tr><td>收银找零（标准币制）</td><td>面值从大到小，<code>divmod</code> 算张数</td><td>O(面值种数)</td></tr>
+  <tr><td>任意面值找零、预算内选东西</td><td><b>贪心不对</b>，改用 DP（第 19、20 课）</td><td>O(金额 × 种数)</td></tr>
+</table>
+<pre>from operator import attrgetter
+
+def schedule_one_room(bookings: list[Booking]) -&gt; list[Booking]:
+    accepted = []
+    for booking in sorted(bookings, key=attrgetter("end")):
+        if not accepted or accepted[-1].end &lt;= booking.start:
+            accepted.append(booking)
+    return accepted
+
+def make_change_in_cents(amount, denominations=(10000, 5000, 2000, 1000, 500, 100, 50, 10, 1)):
+    change, remaining = Counter(), amount
+    for value in sorted(denominations, reverse=True):
+        count, remaining = divmod(remaining, value)   # 一次算出这种面值拿几张
+        if count:
+            change[value] = count
+    if remaining:
+        raise ValueError(f"凑不出 {amount} 分")
+    return change</pre>
+<p>完整可运行的版本（会议室、空闲时段、找零）在 <code>examples/greedy_in_practice.py</code>（<code>uv run examples/greedy_in_practice.py</code>）。下面讲这些写法为什么对、什么时候会错。</p>
+
+<h2>一个类比</h2>
+<p>一天想多参加几个活动：先挑<b>最早结束</b>的那个，剩下的时间最多，后面能塞进去的也最多。然后在不冲突的里面再挑最早结束的……这就是贪心。</p>
+
+<h2>贪心会翻车：硬币 [1, 3, 4] 凑 6</h2>
+<div class="row">
+  <span class="label">贪心：</span><span class="box">4</span><span class="box">1</span><span class="box">1</span><span class="label">3 枚</span>
+  <span class="label">　最优：</span><span class="box hot">3</span><span class="box hot">3</span><span class="label">2 枚</span>
+</div>
+<p>先拿最大的 4，看着赚了，后面只能用 1 补。人民币、美元这种<b>标准币制</b>贪心才是对的；任意面值要用动态规划（第 19、20 课）。</p>
+<p>所以用贪心之前要问一句：<b>“先拿眼下最好的，会不会堵死更好的路？”</b>说不清楚就先找反例。</p>
+
+<h2>三个经典例子</h2>
+<table>
+  <tr><th>问题</th><th>贪心策略</th><th>复杂度</th></tr>
+  <tr><td>活动选择：最多几个不重叠</td><td>按<b>结束时间</b>排序，能选就选</td><td>O(n log n)</td></tr>
+  <tr><td>合并区间</td><td>按<b>起点</b>排序，能接上就延长最后一段</td><td>O(n log n)</td></tr>
+  <tr><td>跳跃游戏：能否跳到最后</td><td>从左往右扫，维护“最远能到哪”</td><td>O(n)</td></tr>
+</table>
+<pre>def select_activities(intervals: list[tuple[int, int]]) -&gt; list[tuple[int, int]]:
+    chosen = []
+    for start, end in sorted(intervals, key=lambda interval: interval[1]):
+        if not chosen or chosen[-1][1] &lt;= start:   # 不和上一个选中的重叠
+            chosen.append((start, end))
+    return chosen</pre>
+<p>为什么按结束时间是对的？任何一个最优解，把它的第一个活动换成“最早结束的那个”，不会和后面冲突，个数不变。换完再对剩下的部分重复这个论证。</p>
+
+<h2>动手玩</h2>
+<p>先点<b>按结束时间选</b>，看红线（上一个选中活动的结束时间）怎么往右推；再点<b>按开始时间选</b>，看最长的 C 怎么把后面挤掉。</p>
+<div class="demo" id="acts"></div>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li>排序的关键字选错：活动选择按<b>结束</b>时间，合并区间按<b>起点</b>。</li>
+  <li>端点相接算不算重叠：本课活动是 [s, e)，5 结束、5 开始<b>不冲突</b>；合并区间是闭区间，(1,3) 和 (3,5) <b>要合并</b>。</li>
+  <li>跳跃游戏里，走到一个下标前先检查它是不是已经超出“最远能到”。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/greedy.py</code>：<code>select_activities</code>（返回选中的活动，不只是个数）→ <code>make_change</code>（返回 <code>Counter({面值: 张数})</code>）→ <code>can_reach_end</code> → <code>merge_intervals</code>。</p>
+<pre>uv run dsa/greedy.py               # 会议室、找零、合并忙碌时段的端到端例子
+uv run pytest tests/test_greedy.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 活动选择按“最短的先选”行不行？</summary>
+不行。反例：(0,5)、(4,6)、(5,10)。最短的 (4,6) 和另外两个都冲突，只能选 1 个；按结束时间能选 (0,5)、(5,10) 两个。</details>
+<details><summary>2. 贪心和动态规划的区别？</summary>
+贪心每步只看一个选择，拿了不回头；DP 把每个选择都试一遍、记下子问题的答案。贪心对的时候更快，但要先证明它对。</details>
+<details><summary>3. 跳跃游戏 [3, 2, 1, 0, 4] 卡在哪？</summary>
+从 0、1、2、3 出发最远都只能到下标 3，而 nums[3] = 0，走到下标 4 时已经超出了最远能到的范围。</details>
+
+<div class="nav"><a href="17-kruskal.html">← 上一课：Kruskal 最小生成树</a><a href="19-dp-memo.html">下一课：动态规划（记忆化） →</a></div>
+<script src="anim.js"></script>
+<script src="js/18-greedy.js"></script>
+</body>
+</html>

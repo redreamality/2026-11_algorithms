@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 19 课 · 动态规划（一）：从递归到记忆化</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.tree { position: relative; max-width: 100%; margin: 6px 0; }
+.tree svg { position: absolute; left: 0; top: 0; }
+.tree .box { position: absolute; transform: translate(-50%, -50%); background: #fff; min-width: 26px; padding: 0 6px; }
+.tree .box.hot { background: #ffe0b2; }
+.tree .box.found { background: #ffcdd2; }
+.box.done { background: #c8e6c9; border-color: #2e7d32; }
+.box.hit { background: #bbdefb; border-color: #1565c0; }
+.tree .box.cut { opacity: .25; }
+.tree .box.cur { outline: 3px solid #e65100; outline-offset: 1px; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 19 课 · 动态规划（一）：从递归到记忆化</h1>
+<p class="one-line">动态规划 = <b>递归 + 不做重复的事</b>。同一个子问题只算一次，把答案记下来，下次直接查。</p>
+
+<h2>实战里怎么写：一行装饰器</h2>
+<p>Python 项目里几乎没人手写 memo 字典，标准库 <code>functools</code> 已经做好了：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价 / 注意</th></tr>
+  <tr><td>参数种类有限的纯函数（递归求解、切词、解析）</td><td><code>@functools.cache</code></td><td>不限条数，内存随参数种类增长</td></tr>
+  <tr><td>参数无穷多（查汇率、查用户资料）</td><td><code>@functools.lru_cache(maxsize=N)</code></td><td>最多存 N 条，满了淘汰最久没用的</td></tr>
+  <tr><td>状态很多、递归很深（n 上千）</td><td>改成<b>填表</b>，或先从小到大预热缓存</td><td>默认递归上限约 1000 层，超了 <code>RecursionError</code></td></tr>
+</table>
+<pre>from functools import cache, lru_cache
+
+@cache
+def fibonacci(n: int) -&gt; int:
+    return n if n &lt;= 1 else fibonacci(n - 1) + fibonacci(n - 2)
+
+fibonacci(80)              # 一眨眼：每个 n 只真正算一次
+fibonacci.cache_info()     # CacheInfo(hits=78, misses=81, maxsize=None, currsize=81)
+
+@lru_cache(maxsize=1024)
+def exchange_rate(currency: str) -&gt; float:
+    return remote_api.fetch(currency)   # 很慢的远程调用，重复的币种直接走缓存
+
+total = cache(sum)
+total((1, 2, 3))           # 6
+total([1, 2, 3])           # TypeError: unhashable type: 'list'：参数必须可哈希，list 先转 tuple</pre>
+<p>还有一条：<b>只缓存纯函数</b>。结果依赖当前时间、数据库这类外部状态时，缓存会一直返回旧值。完整可运行的例子（切词、带淘汰的汇率缓存、阶梯运费）在 <code>examples/dp_memo_in_practice.py</code>（<code>uv run examples/dp_memo_in_practice.py</code>）。下面拆开看这个装饰器到底省掉了什么。</p>
+
+<h2>问题出在哪：重复计算</h2>
+<pre>def fibonacci(n: int) -&gt; int:
+    if n &lt;= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)</pre>
+<p>算 fib(5) 时，fib(3) 被算了 2 次，fib(2) 被算了 3 次……调用次数大约按 1.6<sup>n</sup> 增长，fib(40) 要调一亿多次。</p>
+<div class="row"><span class="label">fib(5) 调到的 n：</span><span class="box">5</span><span class="box">4</span><span class="box">3</span><span class="box found">3</span><span class="box">2</span><span class="box found">2</span><span class="box found">2</span><span class="label">……红色是算过的又算一遍</span></div>
+
+<h2>办法一：记忆化（自顶向下）</h2>
+<p>类比：做题时把算过的答案写在草稿纸上，再遇到同一题就直接抄。</p>
+<pre>def fibonacci(n: int, memo: dict[int, int]) -&gt; int:
+    if n &lt;= 1:
+        return n
+    if n in memo:              # 查草稿纸
+        return memo[n]
+    memo[n] = fibonacci(n - 1, memo) + fibonacci(n - 2, memo)
+    return memo[n]
+
+fibonacci(80, {})</pre>
+<p>递归的写法几乎没变，只多了“先查、再存”两行。每个 n 只真正算一次：O(n)。<code>@cache</code> 做的就是这件事：把“先查、再存”包在一个装饰器里，键是参数，所以参数必须可哈希。练习里你会自己写一个同样用法的 <code>memoize</code>。</p>
+
+<h2>办法二：填表（自底向上）</h2>
+<p>反过来想：既然 fib(n) 只依赖更小的数，就从小往大，一格一格填满一张表。</p>
+<div class="row">
+  <span class="label">dp =</span><span class="box">0</span><span class="box">1</span><span class="box">1</span><span class="box">2</span><span class="box hot">3</span><span class="box hot">5</span><span class="box found">8</span>
+  <span class="label">dp[6] = dp[5] + dp[4]</span>
+</div>
+<pre>def fibonacci_table(n: int) -&gt; int:
+    if n == 0:
+        return 0
+    dp = [0] * (n + 1)
+    dp[1] = 1
+    for index in range(2, n + 1):
+        dp[index] = dp[index - 1] + dp[index - 2]
+    return dp[n]</pre>
+<p>没有递归，不怕栈溢出。</p>
+
+<table>
+  <tr><th>写法</th><th>时间</th><th>额外空间</th></tr>
+  <tr><td>朴素递归</td><td>O(1.6<sup>n</sup>)</td><td>O(n) 调用栈</td></tr>
+  <tr><td>记忆化</td><td>O(n)</td><td>O(n) memo + 调用栈</td></tr>
+  <tr><td>填表</td><td>O(n)</td><td>O(n)，只留两个变量可降到 O(1)</td></tr>
+</table>
+
+<h2>DP 三问</h2>
+<p>遇到新题，先回答这三个问题，代码基本就出来了：</p>
+<ol>
+  <li><b>状态</b>：<code>dp[i]</code> 代表什么？例：爬到第 i 级台阶有几种走法。</li>
+  <li><b>转移</b>：<code>dp[i]</code> 怎么由更小的状态算出来？例：最后一步走 1 级或 2 级，<code>dp[i] = dp[i-1] + dp[i-2]</code>。</li>
+  <li><b>初始值</b>：最小的几个状态是多少？例：<code>dp[0] = 1</code>（站着不动也算一种），<code>dp[1] = 1</code>。</li>
+</ol>
+
+<h2>动手玩</h2>
+<p>建议依次试试：n = 5 点 <b>朴素递归</b>，看红色的重复调用；再点 <b>记忆化</b>，同一棵树里蓝色是“查 memo 命中”，它下面整棵子树都被剪掉了；最后点 <b>填表</b>。方块里的数字是 n，代表一次 fib(n) 调用。</p>
+<div class="demo" id="dpmemo"></div>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li><b>初始值</b>写错：fib(0) = 0，但爬楼梯的 dp[0] = 1，凑零钱的 dp[0] = 0。每题都要重新想。</li>
+  <li>表开小了：要算到 <code>dp[n]</code>，表的长度是 <b>n + 1</b>。</li>
+  <li>凑零钱里“凑不出”要用一个不可能的值（比如 <code>inf</code>）表示，最后再换成 -1，别和 0 混了。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/dp_memo.py</code>。建议顺序：<code>memoize</code>（自己写一个带 <code>cache_info()</code> / <code>cache_clear()</code> 的装饰器，用法和 <code>@functools.cache</code> 一样）→ <code>fibonacci_memo</code>（用你的 <code>@memoize</code>）→ <code>fibonacci_table</code> → <code>climb_stairs</code> → <code>unique_paths</code>（网格里可以有堵住的格子）→ <code>min_coins</code>（返回用了哪些面值的 <code>Counter</code>，不只是张数）。每题先写下三问的答案再动手。</p>
+<pre>uv run dsa/dp_memo.py               # 汇率缓存、代币凑数、机器人走网格的端到端例子
+uv run pytest tests/test_dp_memo.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 什么样的问题能用 DP？</summary>
+两个条件：大问题的答案能由<b>同类型小问题的答案</b>拼出来（最优子结构），而且这些小问题会<b>反复出现</b>（重叠子问题）。归并排序也拆小问题，但不重叠，所以不叫 DP。</details>
+<details><summary>2. 凑零钱 coins = [1, 3, 4]、amount = 6，贪心为什么错？</summary>
+贪心先拿最大的 4，剩 2 只能用 1 + 1，共 3 枚；最优是 3 + 3，共 2 枚。DP 把每种“最后一枚是谁”都试一遍：<code>dp[a] = min(dp[a - c] + 1)</code>，所以不会漏。</details>
+<details><summary>3. 记忆化和填表，选哪个？</summary>
+复杂度一样。记忆化好写，直接从递归改过来，只算用得到的状态；填表没有递归深度限制，也方便压缩空间。先写记忆化把思路理顺，再改成填表，是很好的练习。</details>
+
+<div class="nav"><a href="18-greedy.html">← 上一课：贪心</a><a href="20-dp-knapsack.html">下一课：动态规划（二）→</a></div>
+<script src="anim.js"></script>
+<script src="js/19-dp-memo.js"></script>
+</body>
+</html>

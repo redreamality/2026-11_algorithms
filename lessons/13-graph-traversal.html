@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 13 课 · 图的表示、BFS、DFS</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .graph { display: block; margin: 4px 0; }
+  .graph line { stroke: #bbb; stroke-width: 2; }
+  .graph line.tree { stroke: #e65100; stroke-width: 4; }
+  .graph circle { fill: #fff; stroke: #555; stroke-width: 2; }
+  .graph .frontier circle { fill: #ffe0b2; }
+  .graph .cur circle { fill: #ffcdd2; stroke: #c62828; stroke-width: 3; }
+  .graph .done circle { fill: #c8e6c9; }
+  .graph text { font: 16px Consolas, monospace; text-anchor: middle; dominant-baseline: central; }
+  .graph text.dist { font-size: 13px; fill: #0b62c4; text-anchor: start; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 13 课 · 图的表示、BFS、DFS</h1>
+<p class="one-line">图就是<b>点</b>加<b>连线</b>。遍历有两种走法：BFS 像水波，一圈圈往外扩；DFS 像走迷宫，一条路走到底，走不通再回头。</p>
+
+<h2>实战里怎么写：一个 dict 就是图</h2>
+<p>Python 没有内置的图类型，日常也用不着：<b>dict 就是邻接表</b>，键是节点，值是邻居 list。节点直接用业务里的东西（用户名、URL、<code>(行, 列)</code> 坐标），不用编号成 0..n-1。</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>好友推荐、最短引荐链、爬虫限深</td><td><code>dict</code> + <code>collections.deque</code> 写 BFS</td><td>O(V + E)，十来行</td></tr>
+  <tr><td>网格地图、连通区域、迷宫</td><td>节点用 <code>(行, 列)</code>，邻居现算，不用先建图；<code>list</code> 当栈做 DFS</td><td>O(格子数)</td></tr>
+  <tr><td>大图、要跑很多种图算法</td><td>第三方库 networkx（本课不依赖）</td><td>好用，但比手写慢很多</td></tr>
+</table>
+<pre>from collections import defaultdict, deque
+
+follows = defaultdict(list)                       # 用户 -&gt; 好友列表
+for left, right in [("ann", "bob"), ("bob", "dan"), ("dan", "eve")]:
+    follows[left].append(right)
+    follows[right].append(left)
+
+def degrees_of_separation(follows, source, target):
+    """source 到 target 的最短引荐链；连不上返回 None。"""
+    came_from = {source: None}                    # 兼当 seen：也记下是从谁那里过来的
+    queue = deque([source])
+    while queue:
+        person = queue.popleft()
+        if person == target:
+            chain = []
+            while person is not None:             # 顺着 came_from 倒着走回起点
+                chain.append(person)
+                person = came_from[person]
+            return chain[::-1]
+        for friend in follows.get(person, ()):
+            if friend not in came_from:
+                came_from[friend] = person
+                queue.append(friend)
+    return None
+
+degrees_of_separation(follows, "ann", "eve")      # ['ann', 'bob', 'dan', 'eve']</pre>
+<p>完整可运行的版本（还有爬虫限深、数地图上的陆地块）在 <code>examples/graph_in_practice.py</code>（<code>uv run examples/graph_in_practice.py</code>）。下面看为什么这么写。</p>
+
+<h2>怎么存：邻接表 vs 邻接矩阵</h2>
+<p>同一张图 <code>0-1, 0-2, 1-2</code>，两种存法：</p>
+<div class="row">
+  <span class="label">邻接表：</span><code>{0: [1, 2], 1: [0, 2], 2: [0, 1]}</code>
+</div>
+<div class="row"><span class="label">邻接矩阵：第 0 行</span>
+  <span class="box small">0</span><span class="box small hot">1</span><span class="box small hot">1</span></div>
+<div class="row"><span class="label">　　　　　第 1 行</span>
+  <span class="box small hot">1</span><span class="box small">0</span><span class="box small hot">1</span></div>
+<div class="row"><span class="label">　　　　　第 2 行</span>
+  <span class="box small hot">1</span><span class="box small hot">1</span><span class="box small">0</span>
+  <span class="label">m[u][v] = 1 表示 u、v 相连</span></div>
+<table>
+  <tr><th></th><th>邻接表</th><th>邻接矩阵</th></tr>
+  <tr><td>占空间</td><td>O(V + E)</td><td>O(V²)</td></tr>
+  <tr><td>u、v 是否相连</td><td>O(u 的邻居数)</td><td>O(1)</td></tr>
+  <tr><td>列出 u 的所有邻居</td><td>O(u 的邻居数)</td><td>O(V)</td></tr>
+</table>
+<p>实际的图大多很<b>稀疏</b>（边远少于 V²），所以默认用邻接表。V 是点数，E 是边数。</p>
+
+<h2>BFS：用队列，一层层往外</h2>
+<pre>from collections import deque
+
+def bfs(graph, start):
+    seen = {start}
+    queue = deque([start])
+    while queue:
+        node = queue.popleft()
+        yield node                            # 生成器：调用方想停就停
+        for neighbor in graph.get(node, ()):  # 不在键里的节点当作没有邻居
+            if neighbor not in seen:
+                seen.add(neighbor)            # 入队时就标记，免得重复入队
+                queue.append(neighbor)
+
+list(bfs(graph, "ann"))                                        # 按远近列出所有人
+next(person for person in bfs(graph, "ann") if person.startswith("d"))  # 找到最近的一个就停</pre>
+<p>先出来的一定是离起点近的，所以第一次碰到某个点时走的边数，就是<b>无权图的最短路</b>。做成生成器的好处：只想找“最近的一个满足条件的点”时，找到就停，后面的图不用再走。</p>
+
+<h2>DFS：用递归（栈），走到底再回头</h2>
+<pre>def dfs_recursive(graph, node, seen=None):
+    seen = set() if seen is None else seen
+    seen.add(node)
+    yield node
+    for neighbor in graph.get(node, ()):
+        if neighbor not in seen:
+            yield from dfs_recursive(graph, neighbor, seen)  # 先钻进去，回来再看下一个邻居</pre>
+<p>递归本身就是一个栈。图里有一条几万个点的长链时，递归会超过 Python 的递归深度（默认约 1000 层），实际项目里要用显式栈：栈里放每个点的“邻居迭代器”，栈顶取下一个没见过的邻居就往下钻，取完了就出栈（回头）。练习要求写的就是这个版本。</p>
+<p>两种都是 <b>O(V + E)</b>：每个点进出一次，每条边看一到两次。</p>
+
+<h2>动手玩</h2>
+<p>先点 <b>BFS</b>，看橙色的点怎么排进队列、蓝色数字怎么一层层变大；再点 <b>DFS</b>，留意走到 2 之后栈怎么退回 3。也可以换个起点试试。</p>
+<div class="demo" id="graph"></div>
+<p class="label">白色：没见过；橙色：在队列 / 栈里等着；红框：正在处理；绿色：处理完了。粗橙线是“第一次发现它”走的边。</p>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li>BFS 在<b>出队时</b>才标记 seen：同一个点会被好几个邻居重复放进队列。</li>
+  <li>忘了图可能<b>不连通</b>：只从一个点出发走不到全部。数连通块要对每个没见过的点都发起一次遍历。</li>
+  <li>递归 DFS 在很长的链上会<b>超过递归深度</b>（Python 默认约 1000 层），所以要用显式栈。</li>
+  <li>节点不在 dict 的键里（只出现在别人的邻居里）时，<code>graph[node]</code> 会抛 KeyError，要用 <code>graph.get(node, ())</code>。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/graph.py</code>。节点可以是任何可哈希的东西，<code>bfs</code> / <code>dfs</code> 用 <code>yield</code> 写成生成器。建议顺序：<code>build_graph</code> → <code>bfs</code> → <code>dfs</code>（显式栈）→ <code>shortest_path</code>（BFS 时记 came_from，返回整条路径）→ <code>connected_components</code>（返回每块的 set）。</p>
+<pre>uv run dsa/graph.py               # 社交网络的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_graph.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 为什么 DFS 不能用来求无权最短路？</summary>
+DFS 先找到的路不一定最短，它可能绕了一大圈才碰到终点。BFS 按距离从近到远处理，第一次碰到就是最短。</details>
+<details><summary>2. 一张 1 万个点、每个点 5 条边的图，用邻接矩阵要多少格子？</summary>
+10⁴ × 10⁴ = 1 亿个格子，几乎全是 0。邻接表只要大约 5 万项。</details>
+<details><summary>3. 怎么判断一张无向图是否连通？</summary>
+从任意一个点做一次 BFS 或 DFS，看访问到的点数是否等于总点数。</details>
+
+<div class="nav"><a href="12-heap.html">← 上一课：堆</a><a href="14-topological-sort.html">下一课：拓扑排序 →</a></div>
+<script src="anim.js"></script>
+<script src="js/13-graph-traversal.js"></script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 22 课 · 选修 · Trie（字典树）</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.tree { position: relative; max-width: 100%; margin: 6px 0; overflow-x: auto; }
+.tree svg { position: absolute; left: 0; top: 0; }
+.tree .box { position: absolute; transform: translate(-50%, -50%); background: #fff; min-width: 26px; padding: 2px 6px; }
+.box.end { border-color: #2e7d32; background: #c8e6c9; }
+.tree .box.path { background: #fff3e0; border-color: #e65100; }
+.tree .box.hot { background: #ffe0b2; border-color: #e65100; }
+.box.new { border-style: dashed; }
+.demo input[type=text] { width: 90px; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 22 课 · 选修 · Trie（字典树）</h1>
+<p class="one-line">Trie 把单词<b>一个字母一个节点</b>地挂在树上，开头相同的词共用同一段路。查一个词只要顺着字母往下走，走几步只看<b>词有多长</b>，和存了多少词无关。</p>
+
+<h2>实战里怎么写：多数时候用不着 Trie</h2>
+<p>Python 标准库里没有 Trie。实际项目里按场景选：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>判断字符串是不是某几个前缀开头</td><td><code>str.startswith</code>（可以传 tuple）</td><td>O(前缀总长)</td></tr>
+  <tr><td>词表不大，列出某前缀下所有词</td><td>排好序的 <code>list</code> + <code>bisect</code></td><td>O(log n + 结果数)；插入新词 O(n)</td></tr>
+  <tr><td>按热度补全</td><td><code>collections.Counter</code> + 排序</td><td>O(n)，每次都要扫一遍</td></tr>
+  <tr><td>词表大、补全请求多、边改边查</td><td>手写 Trie（本课）</td><td>O(L + 子树大小)，但每个节点一个 dict，占内存</td></tr>
+</table>
+<pre>from bisect import bisect_left
+
+def words_with_prefix(sorted_words, prefix):
+    """以 prefix 开头的词在排好序的列表里是连续的一段。"""
+    start = bisect_left(sorted_words, prefix)
+    result = []
+    for word in sorted_words[start:]:
+        if not word.startswith(prefix):
+            break
+        result.append(word)
+    return result
+
+path.startswith(("/admin", "/internal"))       # 一次查多个前缀
+words_with_prefix(sorted(commands), "co")      # ['commit', 'config']</pre>
+<p>完整可运行的版本在 <code>examples/trie_in_practice.py</code>（<code>uv run examples/trie_in_practice.py</code>）。Trie 的优势是：查前缀只看前缀多长，和词表多大无关，而且天然按字母序组织好了。</p>
+
+<h2>长什么样</h2>
+<p>存了 car、cat、dog 三个词（<span class="box small end">绿</span> = 有单词在这里结束）：</p>
+<pre>        (根)
+       /    \
+      c      d
+      |      |
+      a      o
+     / \     |
+    r✓  t✓   g✓</pre>
+<pre>class TrieNode:
+    def __init__(self):
+        self.children = {}    # 字符 → 下一个节点
+        self.count = 0        # 有几次单词在这里结束；0 表示不是单词结尾</pre>
+<p>car 和 cat 共用 <code>c → a</code>。结束标记很关键：走得到 <code>ca</code>，不代表 ca 是一个词。这里用 <code>count</code>（被搜索了几次）代替 True / False，自动补全时正好拿它排热度。</p>
+
+<h2>所有操作都是“顺着字母走”</h2>
+<pre>def _walk(self, text):
+    """沿着 text 的字母往下走，走不通返回 None。"""
+    node = self.root
+    for character in text:
+        node = node.children.get(character)
+        if node is None:
+            return None
+    return node
+
+def add(self, word, times=1):
+    node = self.root
+    for character in word:
+        node = node.children.setdefault(character, TrieNode())   # 没路就新建
+    if node.count == 0:
+        self._size += 1                                           # 第一次出现的新词
+    node.count += times
+
+def __contains__(self, word):                                     # word in trie
+    node = self._walk(word)
+    return node is not None and node.count &gt; 0</pre>
+<p>列出某前缀下的所有词：先 <code>_walk(prefix)</code> 走到前缀节点，再用生成器深度优先走它的子树，孩子按字母顺序走，产出的词自然是字典序。</p>
+
+<h2>复杂度（L = 单词长度）</h2>
+<table>
+  <tr><th>操作</th><th>Trie</th><th>对比：set 存所有词</th></tr>
+  <tr><td>插入 / 查整词</td><td>O(L)</td><td>O(L)（算哈希也要读完整个词）</td></tr>
+  <tr><td>有没有以 p 开头的词</td><td>O(L)</td><td>O(n·L)，只能一个个比</td></tr>
+  <tr><td>列出所有以 p 开头的词</td><td>O(L + 子树大小)</td><td>O(n·L)</td></tr>
+</table>
+<p>一句话：<b>和前缀有关的问题</b>（自动补全、拼写提示、敏感词过滤）就想 Trie。代价是每个节点一个 dict，比较占内存。</p>
+
+<h2>动手玩</h2>
+<p>建议依次试试：插入 <b>cart</b>，看它只新建了一个节点；用 <b>前缀列词</b> 查 <b>ca</b>，看先沿高亮的路走到前缀，再把下面的子树走一遍；最后 <b>search</b> 一下 <b>ca</b>，看为什么它是 False。</p>
+<div class="demo" id="trie"></div>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li><b>前缀不等于单词</b>：<code>in</code> 走完之后一定要看 <code>count &gt; 0</code>。</li>
+  <li>一个词是另一个词的前缀（ca 和 car）：两个节点都可能是结束点，结束点<b>不一定是叶子</b>。</li>
+  <li>列词时，前缀节点<b>自己</b>可能就是一个词，别漏了它。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/trie.py</code>，做出一个搜索框自动补全：<code>word in trie</code>、<code>len(trie)</code>、<code>for word in trie</code>、<code>del trie[word]</code> 都要能用，另外有 <code>starts_with</code>（生成器）和按热度排序的 <code>complete</code>。</p>
+<p>建议顺序：<code>add</code> → <code>__contains__</code> / <code>count</code> / <code>has_prefix</code>（共用一个“沿前缀走到底”的小函数）→ <code>starts_with</code>（走到前缀节点后递归 <code>yield</code>，孩子按字母排序）→ <code>complete</code> → <code>__delitem__</code>（要把不再通向任何单词的节点剪掉）。</p>
+<pre>uv run dsa/trie.py              # 搜索框补全的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_trie.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 存了 100 万个词，查 “apple” 要走几步？</summary>
+5 步，一个字母一步。和存了多少个词无关。</details>
+<details><summary>2. 为什么不能只靠“走到底没断路”判断单词存在？</summary>
+存了 car 之后，ca 也走得到，可它只是前缀。要看最后那个节点的 <code>count</code> 是否大于 0（动画里叫 search，就是本课的 <code>in</code>）。</details>
+<details><summary>3. <code>del trie[word]</code> 只把 count 改成 0，会有什么问题？</summary>
+<code>in</code> 没问题，但不再通向任何单词的节点还挂在树上：浪费内存，<code>has_prefix</code> 也会误报（删掉唯一的 car 后，<code>has_prefix("ca")</code> 仍是 True）。要修就从下往上，把“没孩子也不是结束点”的节点剪掉。</details>
+
+<div class="nav"><a href="21-backtracking.html">← 上一课：回溯</a><a href="23-kmp.html">下一课：KMP →</a></div>
+<script src="anim.js"></script>
+<script src="js/22-trie.js"></script>
+</body>
+</html>

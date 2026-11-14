@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 37 课 · 一维 DP 高频题</title>
+<link rel="stylesheet" href="style.css">
+<style>
+table.dp td { font-family: Consolas, monospace; text-align: center; min-width: 30px; }
+table.dp td.cur { background: #ffe0b2; font-weight: bold; }
+table.dp td.dep { background: #bbdefb; }
+table.dp td.pick { background: #c8e6c9; }
+table.dp td.best { background: #ffcdd2; font-weight: bold; }
+.box.pick { background: #c8e6c9; border-color: #2e7d32; }
+.box.dep { background: #bbdefb; border-color: #1565c0; }
+.steps li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 37 课 · 一维 DP 高频题</h1>
+<p class="one-line">一维 DP 的题，状态都是“走到第 i 个位置时的最好结果”。答案不是猜出来的，是按<b>四步法</b>一步步推出来的：定义状态 → 写转移 → 定初始值 → 定遍历顺序。</p>
+
+<p>第 19 课讲了记忆化和爬楼梯、凑零钱（最少枚数），第 20 课讲了 0/1 背包和最长递增子序列的 O(n²) 写法。这一课不重复它们，而是用五道面试里出现最多的题，把四步法练熟。</p>
+
+<h2>实战里怎么写：functools.cache + 倒推方案</h2>
+<p>业务里的一维 DP 很常见，只是不叫这个名字：买哪几张会员卡最省钱、不能相邻的广告位怎么排收入最高、没有空格的话题标签怎么切成词。和面试题比，有两点不同：</p>
+<ul>
+  <li><b>写法</b>：多数时候先用 <code>functools.cache</code> 把题意直接写成递归函数，cache 自动记住算过的结果，代码最像题意。状态很多、递归会超过 Python 默认的 1000 层时，再改成一个列表从前往后填。</li>
+  <li><b>要的东西</b>：业务要的不只是“最少多少钱”，还要“具体买哪几张”。所以算完最优值以后要<b>倒推</b>：每一步看哪个选择能让总值等于最优值，就选它。</li>
+</ul>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>状态不多，想写得像题意</td><td><code>@functools.cache</code> 装饰递归函数</td><td>每个状态算一次；递归深度有上限，缓存占内存</td></tr>
+  <tr><td>状态多、要省内存或避免递归太深</td><td>列表从前往后填（本课练的写法）</td><td>同样的时间；只用到前一两项时空间可降到 O(1)</td></tr>
+  <tr><td>要给出具体方案</td><td>最优值 + 倒推</td><td>多走一遍 O(n)</td></tr>
+</table>
+<pre>from functools import cache
+
+def cheapest_pass_plan(travel_days, prices):          # prices: {有效天数: 价格}
+    def first_uncovered(index, duration):             # 这张卡覆盖不到的第一个出行日
+        covered_until = travel_days[index] + duration
+        while index &lt; len(travel_days) and travel_days[index] &lt; covered_until:
+            index += 1
+        return index
+
+    @cache
+    def cost_from(index):                             # 覆盖第 index 个出行日及以后的最少花费
+        if index == len(travel_days):
+            return 0
+        return min(price + cost_from(first_uncovered(index, duration))
+                   for duration, price in prices.items())
+
+    plan, index = [], 0
+    while index &lt; len(travel_days):                   # 倒推：选让总花费等于最优值的那张卡
+        for duration, price in prices.items():
+            next_index = first_uncovered(index, duration)
+            if price + cost_from(next_index) == cost_from(index):
+                plan.append((travel_days[index], duration))
+                index = next_index
+                break
+    return cost_from(0), plan
+
+cheapest_pass_plan([1, 4, 6, 7, 8, 20], {1: 2, 7: 7, 30: 15})
+# (11, [(1, 1), (4, 7), (20, 1)])：第 1 天买日卡，第 4 天买周卡，第 20 天买日卡</pre>
+<p>完整可运行的版本（会员卡、不相邻广告位并给出选中位置、话题标签分词）在 <code>examples/dp_1d_in_practice.py</code>（<code>uv run examples/dp_1d_in_practice.py</code>）。下面的练习按面试要求用填表写，这样你能看清每个状态是怎么一格格算出来的。</p>
+
+<h2>四步法：每道 DP 题都这样拆</h2>
+<p>以爬楼梯（每次走 1 级或 2 级，爬到第 n 级有几种走法）为例，回顾一下四步各自在做什么：</p>
+<ol class="steps">
+  <li><b>定义状态</b>：用一句完整的话说清 <code>dp[i]</code> 是什么。爬楼梯里，<code>dp[i]</code> = 爬到第 i 级一共有几种走法。这一步最重要：状态定义对了，后面三步几乎是自然推出来的。</li>
+  <li><b>写转移</b>：想“最后一步”是什么。到第 i 级的最后一步，要么从第 i - 1 级走 1 级上来，要么从第 i - 2 级走 2 级上来，这两类走法不重叠，所以 <code>dp[i] = dp[i - 1] + dp[i - 2]</code>。</li>
+  <li><b>定初始值</b>：转移公式用不了的最小几个状态，手工填。<code>dp[0] = 1</code>（站在原地也算一种），<code>dp[1] = 1</code>。</li>
+  <li><b>定遍历顺序</b>：算 <code>dp[i]</code> 时，它用到的格子必须已经算好。这里用到的是更小的下标，所以 i 从小到大循环。</li>
+</ol>
+<p>下面每道题都按这个顺序讲：先讲题意，再讲暴力做法为什么慢，然后是关键观察，接着套四步法，最后说明为什么对、复杂度多少。</p>
+
+<h2>题 1：打家劫舍（LeetCode 198）</h2>
+<p><b>题意</b>：一排房子，每间里有一些钱。相邻的两间如果在同一晚都被偷，就会触发警报。问不触发警报的前提下，最多能偷多少钱。</p>
+<p><b>例子</b>：钱数是 <code>[2, 7, 9, 3, 1]</code>。偷第 0、2、4 间（绿色），得到 2 + 9 + 1 = 12，这是最多的。注意“偷 7 和 3”只有 10，“偷 7 和 1”只有 8：并不是挑最大的那间就对。</p>
+<div class="row"><span class="label">下标：</span><span class="box small">0</span><span class="box small">1</span><span class="box small">2</span><span class="box small">3</span><span class="box small">4</span></div>
+<div class="row"><span class="label">钱数：</span><span class="box pick">2</span><span class="box">7</span><span class="box pick">9</span><span class="box">3</span><span class="box pick">1</span><span class="label">← 偷绿色的三间，共 12</span></div>
+<p><b>暴力做法为什么慢</b>：每间房子都有“偷”和“不偷”两种选择，n 间就有 2<sup>n</sup> 种组合，再排除掉相邻都偷的。n = 40 时就是一万亿种，完全跑不动。</p>
+<p><b>关键观察</b>：只盯着最后一间房子（第 i 间）想。它只有两种命运：</p>
+<ul>
+  <li><b>不偷第 i 间</b>：那么前 i 间（下标 0 到 i - 1）随便怎么安排都不受影响，最多能偷的就是“只考虑前 i 间时的最好结果”。</li>
+  <li><b>偷第 i 间</b>：那么第 i - 1 间一定不能偷，剩下能自由安排的是下标 0 到 i - 2，最多能偷的是“只考虑到第 i - 2 间时的最好结果”再加上第 i 间的钱。</li>
+</ul>
+<p>两种命运取大的那个，就是答案。“只考虑到某一间时的最好结果”是同一个问题的更小版本，所以这是 DP。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>best_amount_up_to[i]</code> = 只考虑下标 0 到 i 这些房子时，最多能偷多少钱。</li>
+  <li>转移：<code>best_amount_up_to[i] = max(best_amount_up_to[i - 1], best_amount_up_to[i - 2] + house_values[i])</code>。前一项是“不偷第 i 间”，后一项是“偷第 i 间”。</li>
+  <li>初始值：<code>best_amount_up_to[0] = house_values[0]</code>（只有一间就偷它）；<code>best_amount_up_to[1] = max(house_values[0], house_values[1])</code>（两间只能偷一间）。</li>
+  <li>遍历顺序：用到 i - 1 和 i - 2，所以 i 从小到大。</li>
+</ol>
+<pre>def rob_houses(house_values):
+    if not house_values:
+        return 0
+    best_amount_up_to = [0] * len(house_values)
+    best_amount_up_to[0] = house_values[0]
+    for i in range(1, len(house_values)):
+        amount_if_skip = best_amount_up_to[i - 1]
+        amount_if_rob = (best_amount_up_to[i - 2] if i >= 2 else 0) + house_values[i]
+        best_amount_up_to[i] = max(amount_if_skip, amount_if_rob)
+    return best_amount_up_to[-1]</pre>
+<p><b>为什么是对的</b>：任何一种合法的偷法，对最后一间来说不是偷就是不偷，两种情况都被考虑到了；而每种情况下，前面那部分一定是用“那个更小问题的最好结果”最划算（换成更差的安排只会让总数变小）。所以取两者的最大值不会漏掉最优解。</p>
+<p><b>复杂度</b>：每间房子算一次，O(n) 时间。转移只看前两格，所以只留两个变量就够，额外空间可以降到 O(1)。</p>
+<p><b>变体：房子围成一圈（LeetCode 213）</b>。第一间和最后一间也相邻，不能同时偷。拆成两种情况：“不考虑最后一间”和“不考虑第一间”，各是一个普通的打家劫舍，取大的那个。</p>
+
+<h2>动手玩</h2>
+<p>三个按钮各演示一道题，用“上一步 / 下一步”慢慢看。<b>打家劫舍</b>：橙色是正在填的格子，蓝色是它要用的两格，最后绿色标出到底偷了哪几间。<b>最长递增子序列</b>：看 <code>smallest_tail</code> 怎么随每个新数变化，橙色是这一步被追加或替换的位置。<b>最大子数组和</b>：看“以当前数结尾的最大和”什么时候接着前面、什么时候重新开始。</p>
+<div class="demo" id="dp1d"></div>
+
+<h2>题 2：零钱兑换（LeetCode 322 回顾，518 重点）</h2>
+<p><b>回顾 322（第 19 课已经写过）</b>：面值 <code>coins</code> 每种不限个数，凑出 amount 最少要几枚。状态 <code>fewest_coins_for_amount[a]</code> = 凑出金额 a 最少要几枚；转移是枚举“最后一枚是哪种面值”：<code>fewest_coins_for_amount[a] = min(fewest_coins_for_amount[a - coin] + 1)</code>。</p>
+<p><b>这一课做 518：问有多少种组合。</b></p>
+<p><b>题意</b>：面值 <code>coins</code> 每种不限个数，凑出 amount 一共有几种组合。组合不看顺序：1 + 2 + 2 和 2 + 1 + 2 算同一种。</p>
+<p><b>例子</b>：coins = [1, 2, 5]，amount = 5，有 4 种：5；2 + 2 + 1；2 + 1 + 1 + 1；1 + 1 + 1 + 1 + 1。</p>
+<p><b>暴力做法为什么慢</b>：对每种面值枚举“用几枚”，是一个多层嵌套的搜索，面值多、金额大时组合数爆炸，而且同一个“剩余金额”会被反复搜索。</p>
+<p><b>关键观察</b>：把面值<b>排个队，一种一种地加进来</b>。先只允许用 1 元，算出每个金额有几种凑法；再允许加入 2 元，更新一遍；再加入 5 元……这样每种组合里硬币的“加入顺序”是固定的，1 + 2 + 2 和 2 + 1 + 2 不会被数两次。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>ways_to_make[a]</code> = 用“目前已经加入的这些面值”凑出金额 a 的组合数。</li>
+  <li>转移：新加入面值 coin 后，凑出 a 的组合分两类：一枚 coin 都不用（就是加入 coin 之前的旧值），或者至少用一枚 coin（去掉一枚后，剩下的是凑出 a - coin 的组合，而且剩下的部分仍然可以继续用 coin）。所以 <code>ways_to_make[a] += ways_to_make[a - coin]</code>。</li>
+  <li>初始值：<code>ways_to_make[0] = 1</code>（一枚都不拿也算一种凑法），其余为 0。</li>
+  <li>遍历顺序：<b>外层循环面值，内层循环金额，金额从小到大</b>。从小到大，是因为 <code>ways_to_make[a - coin]</code> 要用“已经允许使用 coin”的新值（同一种面值可以用多枚）。</li>
+</ol>
+<pre>def count_coin_combinations(coins, amount):
+    ways_to_make = [1] + [0] * amount               # ways_to_make[x]：凑出金额 x 的组合数
+    for coin in coins:                              # 外层：面值一种一种地加进来
+        for partial_amount in range(coin, amount + 1):   # 内层：金额从小到大
+            ways_to_make[partial_amount] += ways_to_make[partial_amount - coin]
+    return ways_to_make[amount]</pre>
+<p><b>如果把两层循环反过来会怎样？</b>外层循环金额、内层循环面值，意思就变成“凑出 a 时，最后一枚可以是任何面值”，于是 1 + 2 和 2 + 1 会被当成两种，数出来的是<b>排列数</b>（这正是 LeetCode 377「组合总和 Ⅳ」）。例如 coins = [1, 2]、amount = 3：组合是 {1 + 1 + 1, 1 + 2} 共 2 种，排列是 1 + 1 + 1、1 + 2、2 + 1 共 3 种。<b>遍历顺序决定了你数的是什么</b>，这就是四步法第 4 步的意义。</p>
+<p><b>复杂度</b>：O(len(coins) × amount) 时间，O(amount) 空间。</p>
+
+<h2>题 3：最长递增子序列（LeetCode 300），这一课做 O(n log n)</h2>
+<p><b>题意</b>：从数组里按原来的顺序挑出一些数（可以不连续），要求严格递增，问最长能挑几个。</p>
+<p><b>例子</b>：<code>[10, 9, 2, 5, 3, 7, 101, 18]</code>，最长的一个是 [2, 3, 7, 18]（也可以是 [2, 5, 7, 101]），长度 4。</p>
+<p><b>回顾 O(n²)（第 20 课）</b>：<code>dp[i]</code> = 以 numbers[i] 结尾的最长递增子序列长度，对每个 i 往前扫所有 j。n = 10<sup>5</sup> 时要做 10<sup>10</sup> 次比较，太慢。</p>
+<p><b>关键观察</b>：长度相同的两个递增子序列，<b>结尾越小越有前途</b>，因为后面能接上的数更多。比如 [2, 5] 和 [2, 3] 长度都是 2，后面来个 4，只能接在 [2, 3] 后面。所以对每个长度，只需要记住“这个长度下最小的结尾”。</p>
+<p><b>换一个状态</b>：<code>smallest_tail[k]</code> = 在目前见过的数里，所有长度为 k + 1 的递增子序列中，最小的结尾是多少。</p>
+<p>这个列表一定是<b>严格递增</b>的。原因：任何长度为 k + 2 的递增子序列，去掉最后一个数，就得到一个长度为 k + 1、结尾更小的递增子序列，所以长度 k + 1 的最小结尾一定比长度 k + 2 的最小结尾小。既然有序，就可以二分查找。</p>
+<p><b>每来一个新数 number，怎么更新</b>：</p>
+<ul>
+  <li>如果它比 <code>smallest_tail</code> 里所有数都大：它能接在当前最长的那个子序列后面，长度加一，<code>append</code> 到末尾。</li>
+  <li>否则：二分找到<b>第一个 ≥ number 的位置 k</b>，把那里换成 number。为什么可以换？位置 k - 1 上的数比 number 小，说明 number 能接在某个长度为 k 的子序列后面，得到一个长度为 k + 1、结尾是 number 的子序列；而 number ≤ 原来的 <code>smallest_tail[k]</code>，结尾变小了（或不变），更有前途。</li>
+</ul>
+<table>
+  <tr><th>新数</th><th>操作</th><th>smallest_tail 之后</th></tr>
+  <tr><td>10</td><td>空列表，追加</td><td>[10]</td></tr>
+  <tr><td>9</td><td>第一个 ≥ 9 的是 10，替换</td><td>[9]</td></tr>
+  <tr><td>2</td><td>替换 9</td><td>[2]</td></tr>
+  <tr><td>5</td><td>比所有数都大，追加</td><td>[2, 5]</td></tr>
+  <tr><td>3</td><td>第一个 ≥ 3 的是 5，替换</td><td>[2, 3]</td></tr>
+  <tr><td>7</td><td>追加</td><td>[2, 3, 7]</td></tr>
+  <tr><td>101</td><td>追加</td><td>[2, 3, 7, 101]</td></tr>
+  <tr><td>18</td><td>第一个 ≥ 18 的是 101，替换</td><td>[2, 3, 7, 18]</td></tr>
+</table>
+<p>最后 <code>smallest_tail</code> 的长度 4 就是答案。<b>注意</b>：<code>smallest_tail</code> 本身<b>不一定</b>是一个真实存在的递增子序列（数字可能来自不同的子序列），只有它的<b>长度</b>是可信的。</p>
+<pre>from bisect import bisect_left
+
+def longest_increasing_length_fast(numbers):
+    smallest_tail = []
+    for number in numbers:
+        position = bisect_left(smallest_tail, number)   # 第一个 ≥ number 的位置
+        if position == len(smallest_tail):
+            smallest_tail.append(number)
+        else:
+            smallest_tail[position] = number
+    return len(smallest_tail)</pre>
+<p>“严格递增”用 <code>bisect_left</code>：遇到相等的数会替换它，而不是追加，所以 [7, 7, 7] 的答案是 1。如果题目要求“非严格递增”（允许相等），就改用 <code>bisect_right</code>。</p>
+<p><b>复杂度</b>：每个数做一次二分，O(n log n) 时间，O(n) 空间。</p>
+
+<h2>题 4：单词拆分（LeetCode 139）</h2>
+<p><b>题意</b>：给一个字符串 text 和一个词典，问 text 能不能切成若干段，每一段都是词典里的词。词可以重复使用。</p>
+<p><b>例子</b>：text = "applepenapple"，词典 ["apple", "pen"]，可以切成 apple | pen | apple，返回 True。text = "catsandog"，词典 ["cats", "dog", "sand", "and", "cat"]：切成 cats | and | og 或 cat | sand | og 都剩下 "og" 不是词，返回 False。</p>
+<p><b>暴力做法为什么慢</b>：长度为 n 的串，每两个字符之间都可以切或不切，一共 2<sup>n-1</sup> 种切法。而且很多切法的“前半段”是相同的，被反复检查。</p>
+<p><b>关键观察</b>：前 i 个字符能不能切好，只取决于：有没有某个切点 j，使得前 j 个字符能切好，并且从 j 到 i 这一段正好是一个词。至于前 j 个字符具体是怎么切的，不重要。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>can_build_prefix[i]</code> = text 的前 i 个字符（<code>text[:i]</code>）能不能切成词典里的词。注意下标是“前缀长度”，所以表长 n + 1。</li>
+  <li>转移：<code>can_build_prefix[i] = any(can_build_prefix[j] and text[j:i] in word_set for j in range(i))</code>。</li>
+  <li>初始值：<code>can_build_prefix[0] = True</code>，空串不用切。没有这一格，第一个词就永远接不上。</li>
+  <li>遍历顺序：i 从 1 到 n，从小到大。答案是 <code>can_build_prefix[n]</code>。</li>
+</ol>
+<p>拿 "applepenapple" 走一遍：<code>can_build_prefix[0]</code> 为 True；i = 5 时 j = 0、<code>text[0:5]</code> = "apple" 是词，所以 <code>can_build_prefix[5]</code> 为 True；i = 8 时 j = 5、"pen" 是词，<code>can_build_prefix[8]</code> 为 True；i = 13 时 j = 8、"apple" 是词，<code>can_build_prefix[13]</code> 为 True。</p>
+<p><b>复杂度</b>：两层循环 O(n²) 个 (j, i)，每次切片和查集合是 O(n)，最坏 O(n³)。优化：只让 j 往回看“词典里最长单词的长度”那么远，就变成 O(n × L²)，L 是最长单词的长度。先把词典转成 <code>set</code>，查一个词是 O(1) 级别。</p>
+
+<h2>题 5：最大子数组和（LeetCode 53）</h2>
+<p><b>题意</b>：找一段<b>连续</b>的、非空的子数组，让它的和最大，返回这个和。</p>
+<p><b>例子</b>：<code>[-2, 1, -3, 4, -1, 2, 1, -5, 4]</code>，连续的一段 [4, -1, 2, 1] 和为 6，最大。全是负数时，答案是最大的那个负数，比如 [-3, -1, -2] 返回 -1（不能一个都不选）。</p>
+<p><b>暴力做法为什么慢</b>：枚举所有起点和终点有 n(n + 1) / 2 段，每段再求和是 O(n³)；用前缀和省掉求和也还是 O(n²)。</p>
+<p><b>关键观察</b>：所有“以 numbers[i] 结尾”的子数组，要么只有 numbers[i] 自己，要么是“某个以 numbers[i - 1] 结尾的子数组”再加上 numbers[i]。后一种里最好的，当然是接在“以 numbers[i - 1] 结尾的最大和”那一段后面。如果那一段的和是负数，接上它只会拖后腿，不如从 numbers[i] 自己重新开始。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>best_sum_ending_here[i]</code> = <b>必须以 numbers[i] 结尾</b>的子数组里，最大的和。为什么要“必须以它结尾”？因为这样才知道下一个数能不能“连着”接上去，这正是“连续”的要求。</li>
+  <li>转移：<code>best_sum_ending_here[i] = max(best_sum_ending_here[i - 1] + numbers[i], numbers[i])</code>。</li>
+  <li>初始值：<code>best_sum_ending_here[0] = numbers[0]</code>。</li>
+  <li>遍历顺序：i 从小到大。<b>答案是所有 <code>best_sum_ending_here[i]</code> 里最大的</b>，因为最优的那段可以在任何位置结尾。</li>
+</ol>
+<pre>def max_subarray_sum(numbers):
+    best_sum_ending_here = numbers[0]
+    best_sum_overall = numbers[0]
+    for number in numbers[1:]:
+        best_sum_ending_here = max(best_sum_ending_here + number, number)
+        best_sum_overall = max(best_sum_overall, best_sum_ending_here)
+    return best_sum_overall</pre>
+<p>这个算法也叫 <b>Kadane 算法</b>。<b>复杂度</b>：O(n) 时间，O(1) 额外空间。</p>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>题</th><th>状态</th><th>时间</th><th>空间</th></tr>
+  <tr><td>打家劫舍</td><td>best_amount_up_to[i]</td><td>O(n)</td><td>O(1)（只留两个变量）</td></tr>
+  <tr><td>零钱兑换 II</td><td>ways_to_make[a]</td><td>O(len(coins) × amount)</td><td>O(amount)</td></tr>
+  <tr><td>最长递增子序列</td><td>smallest_tail[k]</td><td>O(n log n)</td><td>O(n)</td></tr>
+  <tr><td>单词拆分</td><td>can_build_prefix[i]</td><td>O(n³)，限制回看长度后 O(n × L²)</td><td>O(n)</td></tr>
+  <tr><td>最大子数组和</td><td>best_sum_ending_here</td><td>O(n)</td><td>O(1)</td></tr>
+</table>
+
+<h2>怎么认出这类题</h2>
+<p>看到下面这些信号，就该想一维 DP：</p>
+<ul>
+  <li>输入是<b>一个数组或一个字符串</b>，问的是<b>最多 / 最少 / 最大和 / 有几种 / 能不能</b>，而不是“列出所有方案”（列出方案是回溯）。</li>
+  <li>每个位置要做<b>选或不选</b>的决定，而且决定之间有限制（“相邻不能同时选”“必须递增”）。</li>
+  <li>题目说“<b>子数组</b>”（必须连续）：状态通常定义成“<b>以 i 结尾</b>”，答案取所有位置的最大值。</li>
+  <li>题目说“<b>子序列</b>”（可以不连续）：状态也常是“以 i 结尾”，但要往前看更多位置。</li>
+  <li>题目说“<b>拆分 / 切成 / 解码</b>”：状态定义成“<b>前 i 个字符</b>能不能 / 有几种”，表长 n + 1。</li>
+  <li>“<b>凑出某个数</b>”，物品可重复用：完全背包，注意问的是组合还是排列，它决定循环顺序。</li>
+</ul>
+
+<h2>LeetCode 对应题目</h2>
+<table>
+  <tr><th>题号</th><th>中文题名</th><th>本课对应</th></tr>
+  <tr><td>70</td><td>爬楼梯</td><td>四步法的入门例子</td></tr>
+  <tr><td>746</td><td>使用最小花费爬楼梯</td><td>练手：把“几种”换成“最少”</td></tr>
+  <tr><td>198</td><td>打家劫舍</td><td>题 1</td></tr>
+  <tr><td>213</td><td>打家劫舍 II</td><td>题 1 的环形变体（选做）</td></tr>
+  <tr><td>322</td><td>零钱兑换</td><td>第 19 课已写，题 2 回顾</td></tr>
+  <tr><td>518</td><td>零钱兑换 II</td><td>题 2</td></tr>
+  <tr><td>377</td><td>组合总和 Ⅳ</td><td>题 2 里“循环反过来”的版本</td></tr>
+  <tr><td>300</td><td>最长递增子序列</td><td>题 3</td></tr>
+  <tr><td>139</td><td>单词拆分</td><td>题 4</td></tr>
+  <tr><td>91</td><td>解码方法</td><td>练手：和单词拆分一样用“前 i 个字符”做状态</td></tr>
+  <tr><td>53</td><td>最大子数组和</td><td>题 5</td></tr>
+  <tr><td>152</td><td>乘积最大子数组</td><td>练手：题 5 的升级，负负得正，要同时记最大和最小</td></tr>
+</table>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>零钱兑换 II 的循环写反</b>：外层金额、内层面值，数出来的是排列数，结果偏大。</li>
+  <li><b>把 smallest_tail 当成答案序列</b>：它的长度是对的，内容不一定是真实的子序列。</li>
+  <li>最长递增子序列用了 <code>bisect_right</code>：遇到相等的数会追加，[7, 7, 7] 会错答成 3。</li>
+  <li>最大子数组和把初始值写成 0：全是负数时会错答成 0。要用 <code>numbers[0]</code> 起步。</li>
+  <li>单词拆分忘了 <code>can_build_prefix[0] = True</code>，或者把下标 i 理解成“第 i 个字符”而不是“前 i 个字符”，切片就差一。</li>
+  <li>打家劫舍没处理只有 0 间或 1 间房子的情况，<code>best_amount_up_to[i - 2]</code> 越界。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/dp_1d.py</code>。建议顺序：<code>rob_houses</code> → <code>max_subarray_sum</code> → <code>count_coin_combinations</code> → <code>can_break_into_words</code> → <code>longest_increasing_length_fast</code> →（选做）<code>rob_houses_in_circle</code>。每题动手前，先在注释里写下四步法的四个答案。</p>
+<p>写完一个函数就跑一下，脚本会对每个函数跑几个例子，打印「输入、期望、实际」：</p>
+<pre>uv run dsa/dp_1d.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 打家劫舍里，为什么 best_amount_up_to[i] 要定义成“只考虑到第 i 间”，而不是“必须偷第 i 间”？</summary>
+两种都能做。定义成“必须偷第 i 间”时，转移要变成“前面最后一次偷的是第 i - 2 间或更早的任意一间”，要往前看很多格；答案也要取所有格子的最大值。定义成“只考虑到第 i 间”时，“偷还是不偷第 i 间”两种情况都包含在里面，转移只看前两格，答案就是最后一格，更简单。</details>
+<details><summary>2. 零钱兑换 II 里，内层金额为什么要从小到大？如果从大到小会怎样？</summary>
+从小到大时，算 ways_to_make[a] 用到的 ways_to_make[a - coin] 已经包含了“用过 coin”的组合，所以同一种面值可以用很多枚（完全背包）。从大到小时，ways_to_make[a - coin] 还是加入 coin 之前的旧值，每种面值最多只能用一枚，就变成了 0/1 背包的计数。</details>
+<details><summary>3. 最大子数组和与最长递增子序列都把状态定义成“以 i 结尾”，为什么？</summary>
+因为下一步要判断“能不能接上去”：子数组要求连续，必须知道前一段是不是正好在 i 结束；递增子序列要求比前一个数大，必须知道前一段的结尾是谁。状态里带上“结尾”这个信息，转移才写得出来。代价是答案要取所有位置里的最大值。</details>
+
+<div class="nav"><a href="36-backtracking-patterns.html">← 上一课：回溯高频题</a><a href="38-dp-2d.html">下一课：二维 DP 高频题 →</a></div>
+<script src="anim.js"></script>
+<script src="js/37-dp-1d.js"></script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 26 课 · 滑动窗口</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.cells { display: flex; gap: 4px; align-items: flex-end; margin: 8px 0; flex-wrap: wrap; }
+.cell-column { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.cell-column .index { font-size: 12px; color: #aaa; }
+.cell-column .pointer { font-size: 12px; color: #e65100; font-weight: bold; height: 20px; white-space: nowrap; }
+.box.window { background: #e3f2fd; border-color: #1565c0; }
+.box.window.hot { background: #ffe0b2; border-color: #e65100; }
+.box.done { background: #c8e6c9; border-color: #2e7d32; }
+.box.out { opacity: .35; }
+.cells .box { min-width: 26px; padding: 6px 4px; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 26 课 · 滑动窗口</h1>
+<p class="one-line">滑动窗口 = <b>用两个同方向走的下标框住一段连续区间，右边界负责把新元素放进来，左边界负责把旧元素请出去</b>。枚举所有子串或子数组要 O(n²)，滑动窗口只要 O(n)。</p>
+
+<h2>实战里怎么写：先看真实代码里的滑动窗口</h2>
+<p>真实项目里最常见的是“按时间滑动的窗口”：限流、移动平均、最近 N 条日志、近 7 天销售额。几乎都用标准库 <code>collections.deque</code>，它两端进出都是 O(1)（<code>list.pop(0)</code> 是 O(n)，不要用）。</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>限流：任意 60 秒内同一用户最多 N 次请求</td><td><code>deque</code> 存请求时间：右边 <code>append</code> 新请求，左边 <code>popleft</code> 过期的</td><td>每次请求均摊 O(1)，空间 O(N)</td></tr>
+  <tr><td>只保留最近 N 条（最近错误、最近读数）</td><td><code>deque(maxlen=N)</code>，满了自动从左边挤掉最旧的</td><td>O(1)</td></tr>
+  <tr><td>移动平均、近 k 天的滚动和</td><td>维护窗口和：进一个加、出一个减</td><td>总共 O(n)；每次重新 <code>sum</code> 窗口是 O(n·k)</td></tr>
+</table>
+<pre>from collections import deque
+
+class RateLimiter:
+    """滑动时间窗口限流：任意 window_seconds 秒内，同一个用户最多 max_requests 次。"""
+
+    def __init__(self, max_requests: int, window_seconds: float) -&gt; None:
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._request_times: dict[str, deque[float]] = {}
+
+    def allow(self, user_id: str, now: float) -&gt; bool:
+        request_times = self._request_times.setdefault(user_id, deque())
+        while request_times and request_times[0] &lt;= now - self.window_seconds:
+            request_times.popleft()        # 收缩：过期的请求移出窗口
+        if len(request_times) &gt;= self.max_requests:
+            return False
+        request_times.append(now)          # 扩张：新请求放进窗口
+        return True
+
+recent_errors = deque(maxlen=100)          # 固定大小的窗口：只留最近 100 条</pre>
+<p>完整可运行的版本在 <code>examples/sliding_window_in_practice.py</code>（<code>uv run examples/sliding_window_in_practice.py</code>），还有移动平均和滚动和的例子。限流器里“右边进、左边出、每个元素只进出一次”，正是下面面试题用的同一个模板。</p>
+
+<h2>窗口是什么</h2>
+<p>窗口就是数组（或字符串）里连续的一段，用 <code>window_start</code> 和 <code>window_end</code> 两个下标表示，两端都包含。窗口只会做两种动作：</p>
+<ul>
+  <li><b>扩张</b>：<code>window_end</code> 右移一格，把一个新元素放进窗口。</li>
+  <li><b>收缩</b>：<code>window_start</code> 右移一格，把最左边的元素移出窗口。</li>
+</ul>
+<div class="row"><span class="label">text = "abcabcbb"：</span>
+  <span class="box">a</span><span class="box hot">b</span><span class="box hot">c</span><span class="box hot">a</span><span class="box">b</span><span class="box">c</span><span class="box">b</span><span class="box">b</span>
+  <span class="label">window_start = 1，window_end = 3，窗口是 "bca"</span></div>
+<p>它是上一课“快慢指针”的近亲：两个下标同方向走，都不回头。不同的是，滑动窗口关心的是两个下标<b>之间的整段内容</b>，所以通常要额外维护一份“窗口里有什么”的统计，比如窗口里的字符集合、每个字符的个数、窗口里数字的和。每次扩张或收缩时，只更新进来或出去的那一个元素，统计就保持正确，不用重新扫一遍窗口。</p>
+
+<h2>通用模板</h2>
+<pre>window_start = 0
+for window_end in range(len(items)):
+    把 items[window_end] 加进窗口的统计
+    while 窗口需要收缩:
+        （如果求“最短”，在这里先记录答案）
+        把 items[window_start] 从窗口的统计里去掉
+        window_start += 1
+    （如果求“最长”，在这里记录答案）</pre>
+<p>求最长和求最短的写法刚好相反，这是本课最需要记住的一点：</p>
+<table>
+  <tr><th>要求</th><th>什么时候收缩</th><th>在哪里记录答案</th><th>本课例题</th></tr>
+  <tr><td>最长的合法窗口</td><td>窗口<b>不合法</b>了，收缩到重新合法为止</td><td>收缩完以后（这时窗口一定合法）</td><td>无重复字符的最长子串</td></tr>
+  <tr><td>最短的合法窗口</td><td>窗口<b>合法</b>的时候，尽量收缩，看还能不能更短</td><td>收缩循环里面，每次收缩之前</td><td>最小覆盖子串、长度最小的子数组</td></tr>
+</table>
+<p><b>为什么是 O(n)</b>：内层有一个 while，看起来像两层循环，但 <code>window_start</code> 从头到尾只往右走，整个过程中加起来最多走 n 步。所以每个元素最多进窗口一次、出窗口一次，总共 2n 次操作，时间 O(n)。</p>
+<p><b>什么时候不能用</b>：滑动窗口依赖一个前提，就是“窗口扩张时，状态只会往一个方向变”。比如数组全是正数时，窗口越长和越大；收缩一定让和变小。如果数组里有负数，加进一个数和可能反而变小，“该不该收缩”就判断不了，这时要换用下一课的前缀和。</p>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li>题目里出现<b>“连续子数组”“子串”</b>（注意不是“子序列”，子序列可以不连续，通常是动态规划）。</li>
+  <li>要找<b>最长 / 最短</b>的、满足某个条件的连续一段，或者要数满足条件的段有多少个。</li>
+  <li>条件是“不含重复”“包含某些字符”“和至少为某个数”“最多有 k 个某种元素”这类，并且<b>窗口变长时条件只会越来越难满足（或越来越容易满足）</b>。</li>
+  <li>题目给了固定长度 k，问“每个长度为 k 的连续段”怎么样。这是固定大小的窗口：右边进一个，左边就出一个。</li>
+</ul>
+<p>LeetCode 上可以练的题：</p>
+<table>
+  <tr><th>题号</th><th>题名</th><th>窗口类型</th></tr>
+  <tr><td>3</td><td>无重复字符的最长子串</td><td>求最长（本课第 1 题）</td></tr>
+  <tr><td>76</td><td>最小覆盖子串</td><td>求最短（本课第 2 题）</td></tr>
+  <tr><td>209</td><td>长度最小的子数组</td><td>求最短（本课第 3 题）</td></tr>
+  <tr><td>643</td><td>子数组最大平均数 I</td><td>固定大小</td></tr>
+  <tr><td>438</td><td>找到字符串中所有字母异位词</td><td>固定大小 + 字符计数</td></tr>
+  <tr><td>567</td><td>字符串的排列</td><td>固定大小 + 字符计数</td></tr>
+  <tr><td>1004</td><td>最大连续 1 的个数 III</td><td>求最长</td></tr>
+  <tr><td>904</td><td>水果成篮</td><td>求最长</td></tr>
+  <tr><td>424</td><td>替换后的最长重复字符</td><td>求最长（稍难）</td></tr>
+  <tr><td>239</td><td>滑动窗口最大值（困难，要配合单调队列）</td><td>固定大小</td></tr>
+</table>
+
+<h2>第 1 题：无重复字符的最长子串（求最长）</h2>
+<p><b>题意</b>：给一个字符串，找出其中不含重复字符的最长子串，返回它的长度。子串必须连续。</p>
+<p><b>例子</b>：<code>"abcabcbb"</code> 返回 3，最长的是 "abc"。<code>"pwwkew"</code> 返回 3，最长的是 "wke"；"pwke" 虽然也没有重复，但它在原串里不连续，是子序列不是子串。</p>
+<p><b>暴力做法为什么慢</b>：枚举每个起点，从起点往右一个个加字符，遇到重复就停。起点有 n 个，每个起点最多往右走 n 步，O(n²)。</p>
+<p><b>关键观察</b>：假设从起点 2 出发，一直走到下标 5 时遇到了重复。暴力做法接下来会从起点 3 重新出发，把 3、4 这些字符再检查一遍。但其实我们已经知道 3 到 4 这一段没有重复，没必要重查。只需要把左边界往右挪，挪到把那个重复的字符挤出窗口为止，然后继续往右扩张。</p>
+<p><b>怎么用上滑动窗口</b>：用一个集合 <code>characters_in_window</code> 记录窗口里有哪些字符。</p>
+<ol>
+  <li><code>window_end</code> 往右走一格，新字符是 <code>character</code>。</li>
+  <li>如果 <code>character</code> 已经在集合里，窗口就不合法了。不断把 <code>text[window_start]</code> 移出集合、<code>window_start</code> 右移，直到 <code>character</code> 不在集合里。</li>
+  <li>把 <code>character</code> 加进集合。此时窗口一定没有重复，用窗口长度 <code>window_end - window_start + 1</code> 更新答案。</li>
+</ol>
+<pre>characters_in_window = set()
+window_start = 0
+longest_length = 0
+for window_end, character in enumerate(text):
+    while character in characters_in_window:          # 有重复，收缩
+        characters_in_window.remove(text[window_start])
+        window_start += 1
+    characters_in_window.add(character)
+    longest_length = max(longest_length, window_end - window_start + 1)</pre>
+<p><b>为什么是对的</b>：对每一个 <code>window_end</code>，收缩完以后的窗口是“以 <code>window_end</code> 结尾的、最长的无重复子串”。为什么是最长：<code>window_start</code> 只在窗口里有重复时才右移，而且挪到刚好没有重复就停。答案子串一定以某个位置结尾，所以把每个 <code>window_end</code> 的最长值取最大，就是答案。</p>
+<p><b>复杂度</b>：<code>window_start</code> 和 <code>window_end</code> 各走一遍，时间 O(n)；集合最多装下所有不同的字符，空间 O(字符种类数)。</p>
+
+<h2>第 2 题：最小覆盖子串（求最短）</h2>
+<p><b>题意</b>：给字符串 <code>source</code> 和 <code>target</code>，在 <code>source</code> 里找最短的连续子串，使 <code>target</code> 里的每个字符都被包含，重复的字符要包含同样多次。找不到返回空字符串。</p>
+<p><b>例子</b>：<code>source = "ADOBECODEBANC"</code>，<code>target = "ABC"</code>，返回 <code>"BANC"</code>。"ADOBEC" 也包含 A、B、C，但它长 6，"BANC" 只长 4。再比如 <code>target = "AA"</code>，窗口里就必须有两个 A。</p>
+<p><b>暴力做法为什么慢</b>：枚举所有子串 O(n²) 个，每个再检查是否覆盖 <code>target</code>，更慢。</p>
+<p><b>关键观察</b>：如果窗口 [window_start, window_end] 已经覆盖了 <code>target</code>，那么往右再加字符一定还覆盖，但只会更长，没有意义。有意义的是试着把左边界往右挪，看看去掉左边的字符后是否还覆盖。一旦不覆盖了，就只能继续扩张右边界。</p>
+<p><b>怎么用上滑动窗口</b>：判断“窗口是否覆盖 target”如果每次都重新数一遍，就又变慢了。所以维护两样东西：</p>
+<ul>
+  <li><code>need_count</code>：一个 dict，<code>need_count[character]</code> 表示窗口里还差几个这个字符。一开始等于 <code>target</code> 里每个字符的个数。字符进窗口就减 1，出窗口就加 1。变成负数表示窗口里这个字符多了，多出来的不影响覆盖。</li>
+  <li><code>missing_count</code>：窗口里总共还差几个字符，一开始等于 <code>len(target)</code>。只有当进来的字符“正好是还缺的”（进来之前 <code>need_count[character] &gt; 0</code>）时才减 1。<code>missing_count == 0</code> 就表示窗口已经覆盖了 <code>target</code>，判断是 O(1)。</li>
+</ul>
+<pre>need_count = {}                                   # target 里每个字符需要几个
+for character in target:
+    need_count[character] = need_count.get(character, 0) + 1
+missing_count = len(target)
+window_start = 0
+best_start, best_length = 0, None
+for window_end, character in enumerate(source):
+    if need_count.get(character, 0) &gt; 0:         # 进来的是还缺的字符
+        missing_count -= 1
+    need_count[character] = need_count.get(character, 0) - 1
+    while missing_count == 0:                     # 已经覆盖，尽量收缩
+        window_length = window_end - window_start + 1
+        if best_length is None or window_length &lt; best_length:
+            best_start, best_length = window_start, window_length
+        removed_character = source[window_start]
+        need_count[removed_character] += 1
+        if need_count[removed_character] &gt; 0:     # 移出去以后又缺了
+            missing_count += 1
+        window_start += 1</pre>
+<p>用例子走一遍：右边界一路走到下标 5（"ADOBEC"）时第一次覆盖 A、B、C，记录长度 6。左边界移出 A 后又缺 A，停止收缩。右边界继续走，走到下标 10 的 A 才再次覆盖（"DOBECODEBA"），这时左边界可以一路收缩：D、O 是多余的字符，B 移出后窗口里还有下标 9 的 B，E、C 也移出……直到移出下标 5 的 C 又缺 C。最后右边界走到下标 12 的 C，再次覆盖并收缩，得到 "BANC"。下面的动画把每一步都画了出来。</p>
+<p><b>为什么是对的</b>：对每一个 <code>window_end</code>，收缩循环会把左边界推到“再推一格就不覆盖”的位置，所以在这个右边界下，记录到的就是最短的覆盖窗口。答案一定以某个位置结尾，因此也一定被记录过。</p>
+<p><b>复杂度</b>：两个下标各走一遍 <code>source</code>，加上统计 <code>target</code>，时间 O(len(source) + len(target))；dict 的大小是 O(字符种类数)。</p>
+
+<h2>第 3 题：长度最小的子数组（求最短）</h2>
+<p><b>题意</b>：数组 <code>numbers</code> 里都是<b>正整数</b>。找出和大于等于 <code>target</code> 的最短连续子数组，返回它的长度，不存在返回 0。</p>
+<p><b>例子</b>：<code>target = 7</code>，<code>numbers = [2, 3, 1, 2, 4, 3]</code>，返回 2，因为 [4, 3] 的和是 7。[2, 3, 1, 2] 的和是 8 也满足，但它长 4。</p>
+<p><b>暴力做法为什么慢</b>：枚举每个起点，往右累加直到和够了。O(n²)。</p>
+<p><b>关键观察</b>：所有数都是正数，所以窗口变长和一定变大，变短和一定变小。窗口的和已经够了，再往右扩张只会更长，没有意义；应该从左边收缩，看看更短的窗口是否也够。</p>
+<pre>window_start = 0
+window_sum = 0
+shortest_length = None
+for window_end, number in enumerate(numbers):
+    window_sum += number
+    while window_sum &gt;= target:                   # 和够了，记录答案并收缩
+        window_length = window_end - window_start + 1
+        if shortest_length is None or window_length &lt; shortest_length:
+            shortest_length = window_length
+        window_sum -= numbers[window_start]
+        window_start += 1
+return shortest_length or 0</pre>
+<p><b>为什么是对的</b>：和第 2 题相同，对每个右边界，收缩循环找到的是以它结尾、和够了的最短窗口。如果数组里有负数，这个推理就不成立了：收缩时去掉一个负数，和反而变大，可能错过更短的答案。</p>
+<p><b>复杂度</b>：时间 O(n)，额外空间 O(1)。</p>
+
+<h2>动手玩</h2>
+<p>三个按钮各演示一道题。蓝色格子是当前窗口，橙色是这一步刚进来或刚出去的元素，绿色是到目前为止找到的最好答案。建议先看 <b>无重复最长子串</b>，留意窗口什么时候收缩；再看 <b>最小覆盖子串</b>，对照下方“还差的字符”一栏，看 <code>missing_count</code> 是怎么变成 0、又是怎么变回 1 的。</p>
+<div class="demo" id="window"></div>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li>求最长时把记录答案写在收缩循环里面，或者求最短时写在外面。回到上面的表格：<b>最长在收缩之后记录，最短在收缩之前记录</b>。</li>
+  <li>收缩用 <code>if</code> 而不是 <code>while</code>：一次可能要移出好几个元素才能让窗口重新合法（例如 "abcb" 遇到第二个 b 时要移出 a 和 b）。</li>
+  <li>最小覆盖子串里，<code>missing_count</code> 不管三七二十一每进一个字符都减 1。只有进来的是“还缺的”字符才减，多出来的同种字符不算。</li>
+  <li>窗口长度写成 <code>window_end - window_start</code>，少了 1。两端都包含时长度是 <code>window_end - window_start + 1</code>。</li>
+  <li>在有负数的数组上用滑动窗口找“和为某值”的子数组。负数会破坏“窗口越长和越大”的前提，要换用第 27 课的前缀和。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/sliding_window.py</code>。建议顺序：<code>min_subarray_length</code>（最简单，只维护一个和）→ <code>longest_substring_without_repeat</code> → <code>min_window_substring</code>。每写完一个函数，运行下面的命令，看每个例子的“期望”和“实际”是否一致：</p>
+<pre>uv run dsa/sliding_window.py</pre>
+<p>都通过之后，再去 LeetCode 上做上面表格里的题，特别是 438 和 567，它们和最小覆盖子串几乎是同一个模板。</p>
+
+<h2>自测</h2>
+<details><summary>1. 内层有 while 循环，为什么总时间还是 O(n)？</summary>
+因为 window_start 只往右走、从不回头，整个过程中加起来最多走 n 步。内层 while 的执行次数不是“每次外层都可能跑 n 次”，而是“所有外层加起来一共最多 n 次”。外层 n 次加内层总共 n 次，是 O(n)。</details>
+<details><summary>2. 第 1 题能不能让 window_start 直接跳过去，而不是一格一格挪？</summary>
+可以。用 dict 记录每个字符最后一次出现的下标 last_index_by_character。遇到重复字符时，window_start 直接跳到 max(window_start, last_index_by_character[character] + 1)。要取 max，是因为那个下标可能已经在窗口左边了（例如 "abba" 遇到第二个 a 时）。复杂度仍然是 O(n)，只是常数小一些。</details>
+<details><summary>3. 如果 numbers 里有负数，长度最小的子数组还能用滑动窗口吗？</summary>
+不能。窗口和够了以后收缩，去掉的可能是负数，和反而变大，“收缩到不够为止”的推理不成立。这种情况要用前缀和加单调队列（LeetCode 862，和至少为 K 的最短子数组）。</details>
+
+<div class="nav"><a href="25-two-pointers.html">← 上一课：双指针</a><a href="27-prefix-sum.html">下一课：前缀和与哈希计数 →</a></div>
+<script src="anim.js"></script>
+<script src="js/26-sliding-window.js"></script>
+</body>
+</html>

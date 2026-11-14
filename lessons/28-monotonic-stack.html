@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 28 课 · 单调栈</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.bars { display: flex; align-items: flex-end; gap: 4px; margin: 8px 0; }
+.col { display: flex; flex-direction: column; align-items: center; width: 46px; }
+.col .num { font-family: Consolas, monospace; font-size: 14px; }
+.col .index-label { font-size: 12px; color: #888; white-space: nowrap; }
+.col .bar { width: 32px; background: #b0bec5; border: 1px solid #78909c; box-sizing: border-box; }
+.col .water { width: 32px; background: #90caf9; box-sizing: border-box; }
+.col.in-stack .bar { background: #bbdefb; border-color: #0b62c4; }
+.col.current .bar { background: #ffe0b2; border-color: #e65100; }
+.col.popped .bar { background: #ffcdd2; border-color: #c62828; }
+.col.span .bar { outline: 3px solid #2e7d32; outline-offset: -3px; }
+.col.wall .bar { background: #c8e6c9; border-color: #2e7d32; }
+.stack-row .box { background: #bbdefb; border-color: #0b62c4; }
+.answer-row .box.fresh { background: #c8e6c9; border-color: #2e7d32; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 28 课 · 单调栈</h1>
+<p class="one-line">单调栈就是一个普通的栈，只是我们规定：栈里的元素从栈底到栈顶<b>一直保持递增（或一直保持递减）</b>。它专门回答这样一类问题：<b>“每个元素右边（或左边）第一个比它大（或小）的元素是谁？”</b>暴力做法要 O(n²)，单调栈只要 O(n)。</p>
+
+<h2>实战里怎么写：先看真实代码里的单调栈</h2>
+<p>标准库里没有现成的单调栈，Python 的 <code>list</code> 用 <code>append</code> / <code>pop</code> 就是栈。它出现在“每一项都要回头（或往前）看第一个更大 / 更小的”这类报表和监控里：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>股票跨度：今天的价格连续高于（等于）前面多少天，价格一条条流进来</td><td>栈里存 (价格, 覆盖的天数)，价格递减</td><td>每条均摊 O(1)，可以流式处理</td></tr>
+  <tr><td>天气日报：每天还要等几天才升温</td><td>栈里存还没等到答案的日子（下标）</td><td>总共 O(n)</td></tr>
+  <tr><td>只要整体最大值、最小值</td><td><code>max</code> / <code>min</code>，用不着单调栈</td><td>O(n)</td></tr>
+  <tr><td>滑动窗口里的最大值（近 1 小时最高价）</td><td><code>collections.deque</code> 做单调队列</td><td>总共 O(n)</td></tr>
+</table>
+<pre>class StockSpanner:
+    """价格一条一条流进来，每来一条，回答“连续多少天价格 &lt;= 今天”（含今天）。"""
+
+    def __init__(self) -&gt; None:
+        self._stack: list[tuple[int, int]] = []   # (价格, 它覆盖的天数)，价格从栈底到栈顶递减
+
+    def next(self, price: int) -&gt; int:
+        span = 1
+        while self._stack and self._stack[-1][0] &lt;= price:
+            span += self._stack.pop()[1]          # 比今天低的那些天，连同它们覆盖的天数，都并进来
+        self._stack.append((price, span))
+        return span
+
+spanner = StockSpanner()
+[spanner.next(price) for price in [100, 80, 60, 70, 60, 75, 85]]   # [1, 1, 1, 2, 1, 4, 6]</pre>
+<p>完整可运行的版本在 <code>examples/monotonic_stack_in_practice.py</code>（<code>uv run examples/monotonic_stack_in_practice.py</code>），还有天气日报的例子。下面先用一个生活里的例子把“为什么栈里一定有序”讲清楚。</p>
+
+<h2>先看一个生活里的例子</h2>
+<p>一排人从左到右站着，每个人都想知道：<b>往右看，第一个比我高的人是谁？</b></p>
+<p>换个角度想：我们从左往右一个一个地“请人进场”。还没找到答案的人站在一边排队等着。每来一个新人，就问等着的人：“新来的这位比你高吗？”比他矮的那些人，答案就是这位新人，可以离场了；然后新人自己也加入等待的队伍。</p>
+<p>关键在于：<b>等着的人一定是从高到矮排好的</b>。原因是，如果某个等着的人后面站着一个比他高的人，那么那个更高的人进场时，他就已经找到答案离场了，不会还在等。所以新人进场时，只需要从队伍末尾（最矮的那头）开始比，比到第一个不比新人矮的人就可以停下，前面的人更高，肯定也不用离场。</p>
+<p>这支“从最近进来的那头开始处理”的队伍，就是一个栈；里面的人从栈底到栈顶身高递减，所以叫<b>单调栈</b>。</p>
+
+<h2>通用模板：求每个元素右边第一个更大的元素</h2>
+<pre>def next_greater_index(numbers):
+    answer = [-1] * len(numbers)        # 默认 -1：一直没等到答案
+    stack_of_indices = []               # 存下标；对应的值从栈底到栈顶递减
+    for i, value in enumerate(numbers):
+        # 新来的 value 比栈顶大：栈顶那个元素等到了答案
+        while stack_of_indices and numbers[stack_of_indices[-1]] &lt; value:
+            waiting_index = stack_of_indices.pop()
+            answer[waiting_index] = i
+        stack_of_indices.append(i)      # 自己也开始等
+    return answer</pre>
+<p>逐行解释一下：</p>
+<ul>
+  <li><b>栈里放的是“还没找到答案的元素”的下标。</b>遍历到第 i 个元素时，栈里的每一个下标都在等待一个比自己大的数。</li>
+  <li><b>while 循环</b>：只要当前值比栈顶对应的值大，栈顶就找到了答案（就是 i），把它弹出。弹完一个再看新的栈顶，可能也比当前值小，继续弹。</li>
+  <li><b>为什么可以停在第一个“不比当前值小”的栈顶</b>：栈是递减的，栈顶下面的元素只会更大，当前值更不可能比它们大，不用再比。</li>
+  <li><b>最后把 i 入栈</b>：它自己也要开始等它的答案。入栈后栈依然递减，因为比它小的都已经弹走了。</li>
+  <li><b>遍历结束后还在栈里的元素</b>：右边没有更大的数，答案保持默认值 -1。</li>
+</ul>
+
+<h3>为什么栈里存下标，不存值</h3>
+<p>很多题要的不是“那个更大的数是多少”，而是“隔了几个位置”（每日温度）或者“中间有多宽”（最大矩形、接雨水）。存了下标，距离和宽度都能直接算；需要值的时候，用 <code>numbers[index]</code> 取一下就行。存值的话，位置信息就丢了。</p>
+
+<h3>为什么是 O(n)，而不是 O(n²)</h3>
+<p>代码里有两层循环，看起来像 O(n²)。但换个角度数一数：<b>每个下标只会入栈一次，也最多出栈一次</b>。while 循环每执行一次就弹出一个下标，所以整个遍历过程中 while 循环加起来最多执行 n 次。for 循环 n 次，加上 while 循环一共 n 次，总共 O(n)。这种“把所有操作摊开来算总数”的方法叫均摊分析。</p>
+
+<h3>四种变体怎么选</h3>
+<table>
+  <tr><th>要找的东西</th><th>栈里的值（栈底 → 栈顶）</th><th>弹出条件</th></tr>
+  <tr><td>右边第一个<b>更大</b>的</td><td>递减</td><td><code>numbers[栈顶] &lt; 当前值</code></td></tr>
+  <tr><td>右边第一个<b>更小</b>的</td><td>递增</td><td><code>numbers[栈顶] &gt; 当前值</code></td></tr>
+  <tr><td>左边第一个更大 / 更小的</td><td>同上</td><td>当前元素入栈之前，栈顶就是答案（弹完以后看一眼栈顶）</td></tr>
+</table>
+<p>记忆方法：<b>找更大的，就让小的被弹走，所以栈里剩下的从底到顶是递减的；找更小的，反过来。</b>“左边第一个”不需要另写一遍：弹完之后、入栈之前，栈顶正好是当前元素左边第一个比它大（或小）的元素。最大矩形那道题就同时用到了左右两边。</p>
+
+<h2>题 1：每日温度（LeetCode 739）</h2>
+<p><b>题意</b>：给出每天的气温 <code>temperatures</code>，对每一天，求“还要再等几天才会遇到更高的气温”；之后再也没有更高的气温，就填 0。</p>
+<p><b>例子</b>：<code>[73, 74, 75, 71, 69, 72, 76, 73]</code> 的答案是 <code>[1, 1, 4, 2, 1, 1, 0, 0]</code>。比如第 2 天是 75 度，之后的 71、69、72 都不比它高，第 6 天的 76 度才更高，所以要等 6 − 2 = 4 天。</p>
+<p><b>暴力做法为什么慢</b>：对每一天，都从第二天开始往后一天天找，直到找到更热的一天。如果气温一直在下降（例如 <code>[90, 80, 70, 60, ...]</code>），每一天都要扫到数组末尾，总共要比较 n + (n−1) + … + 1 ≈ n²/2 次，是 O(n²)。n = 10 万时就是 50 亿次比较，会超时。</p>
+<p><b>关键观察</b>：暴力做法里，同一段气温被重复扫了很多遍。其实，当某一天终于变热时，它可以<b>一次性回答前面好几天的问题</b>：所有比它冷、而且还在等答案的日子，答案都是这一天。而这些“还在等答案的日子”，气温一定是从早到晚递减的（道理和前面排队看身高一样：如果后面一天比前面一天热，前面那天早就等到答案了）。</p>
+<p><b>怎么用上单调栈</b>：就是通用模板，只是把 <code>answer[waiting_index] = i</code> 改成 <code>answer[waiting_index] = i - waiting_index</code>，也就是“等了几天”。用这个例子走一遍：</p>
+<table>
+  <tr><th>第 i 天（气温）</th><th>弹出（并写下答案）</th><th>处理完后的栈（下标）</th></tr>
+  <tr><td>0（73）</td><td>无</td><td>[0]</td></tr>
+  <tr><td>1（74）</td><td>第 0 天：等了 1 − 0 = 1 天</td><td>[1]</td></tr>
+  <tr><td>2（75）</td><td>第 1 天：等了 1 天</td><td>[2]</td></tr>
+  <tr><td>3（71）</td><td>无，71 不比 75 热</td><td>[2, 3]</td></tr>
+  <tr><td>4（69）</td><td>无</td><td>[2, 3, 4]</td></tr>
+  <tr><td>5（72）</td><td>第 4 天（69）：等 1 天；第 3 天（71）：等 2 天；遇到 75 停下</td><td>[2, 5]</td></tr>
+  <tr><td>6（76）</td><td>第 5 天：等 1 天；第 2 天：等 4 天</td><td>[6]</td></tr>
+  <tr><td>7（73）</td><td>无</td><td>[6, 7]</td></tr>
+</table>
+<p>遍历结束，栈里还剩第 6、7 天，它们之后没有更热的日子，答案保持 0。</p>
+<p><b>为什么是对的</b>：第 j 天在第 i 天被弹出，我们要确认 i 确实是 j 之后<b>第一个</b>更热的日子。假设 j 和 i 之间有某一天 k 比 j 热，那么在处理第 k 天时，j 还在栈里（j 只会被比它热的日子弹出），k 比 j 热，就会把 j 弹出。这和“j 一直留到第 i 天才被弹出”矛盾。所以 j 和 i 之间没有比 j 热的日子。</p>
+<p><b>复杂度</b>：每个下标入栈、出栈各最多一次，时间 O(n)；栈和答案数组是 O(n) 的额外空间。</p>
+
+<h2>题 2：下一个更大元素（LeetCode 496 和 503）</h2>
+<p><b>496 题意</b>：<code>numbers</code> 里的数互不相同，<code>query_numbers</code> 是从 <code>numbers</code> 里挑出的一些数。对 <code>query_numbers</code> 里的每个数 x，在 <code>numbers</code> 里找到 x 的位置，往右看，第一个比 x 大的数是多少？没有就是 −1。</p>
+<p><b>例子</b>：<code>query_numbers = [4, 1, 2]</code>，<code>numbers = [1, 3, 4, 2]</code>，答案 <code>[-1, 3, -1]</code>。4 的右边只有 2，没有更大的；1 的右边第一个更大的是 3；2 在最右边，右边什么都没有。</p>
+<p><b>暴力做法为什么慢</b>：每个询问都先在 <code>numbers</code> 里找到 x，再往右扫，最坏要 O(len(query_numbers) × len(numbers))。</p>
+<p><b>关键观察</b>：询问的只是 <code>numbers</code> 里的一部分数，而 <code>numbers</code> 里每个数的“下一个更大”可以用单调栈一次全算出来。数字互不相同，所以可以直接用“数值”当字典的键。</p>
+<p><b>怎么用</b>：对 <code>numbers</code> 跑一遍模板，弹出时记 <code>value_to_next_greater[被弹出的值] = 当前值</code>；遍历完还在栈里的，记为 −1。然后对每个询问查字典，查一次 O(1)。</p>
+<p><b>503 题意（循环数组）</b>：数组首尾相连，最后一个元素的下一个是第一个元素。对每个位置沿着环往后找第一个更大的数，绕一圈都没有就是 −1。例子：<code>[1, 2, 1]</code> 的答案是 <code>[2, -1, 2]</code>：最后那个 1 往后会绕回开头，先遇到 1（不比它大），再遇到 2。</p>
+<p><b>处理“绕回开头”的办法</b>：把数组想象成接了两遍，<code>[1, 2, 1, 1, 2, 1]</code>。第二遍的元素正好可以给第一遍里还没等到答案的元素当“后面的数”。写代码时不需要真的复制数组，让 i 从 0 走到 2n − 1，用 <code>i % n</code> 取真正的位置即可。只在第一遍（<code>i &lt; n</code>）入栈，因为每个位置只需要一个答案；第二遍只负责弹出、写答案。</p>
+<p><b>为什么两遍就够</b>：从任何一个位置出发，往后绕一整圈最多经过 n − 1 个别的元素，它们全都在“第二遍”里出现过。</p>
+<p><b>复杂度</b>：496 是 O(len(numbers) + len(query_numbers))；503 遍历 2n 个位置，每个下标最多入栈出栈一次，仍是 O(n)。</p>
+
+<h2>题 3：柱状图中最大的矩形（LeetCode 84）</h2>
+<p><b>题意</b>：<code>heights[i]</code> 是第 i 根柱子的高度，每根宽 1，紧挨着排成一排。问在柱子范围内能画出的最大矩形面积。</p>
+<p><b>例子</b>：<code>heights = [2, 1, 5, 6, 2, 3]</code>，答案是 10：下标 2、3 两根柱子（高 5 和 6）合起来，高度只能取较矮的 5，宽 2，面积 10。</p>
+<p><b>暴力做法为什么慢</b>：枚举矩形的左边界和右边界，一共约 n²/2 种组合，每种组合的高度是这段区间里最矮的那根柱子。就算边扩右边界边更新最小值，也要 O(n²)。</p>
+<p><b>关键观察</b>：最大的矩形，高度一定等于<b>某一根柱子</b>的高度（否则矩形还能再往上长高）。所以换个枚举方式：<b>对每一根柱子 t，求“以 heights[t] 为高”的最宽矩形</b>。这个矩形从 t 出发，向左、向右一直延伸，直到碰到比 t 矮的柱子为止：</p>
+<ul>
+  <li>左边界 left = t 左边第一根比它矮的柱子的下标（没有就是 −1）；</li>
+  <li>右边界 right = t 右边第一根比它矮的柱子的下标（没有就是 n）；</li>
+  <li>宽度 = right − left − 1，面积 = heights[t] × 宽度。</li>
+</ul>
+<p>问题就变成了：对每根柱子，求左右两边“第一个更小的”。这正是单调栈的拿手活，而且<b>一个递增栈可以同时给出两边</b>。</p>
+<p><b>怎么用上单调栈</b>：栈里的柱子高度从栈底到栈顶递增。来了第 i 根柱子，只要它比栈顶矮，就弹出栈顶 <code>top_index</code> 并结算它：</p>
+<ul>
+  <li>i 就是 top_index 的右边界：它是 top_index 右边第一根比它矮的柱子（理由和每日温度一样）。</li>
+  <li>弹出后新的栈顶就是 top_index 的左边界。原因是：栈里相邻的两个下标之间原本还有一些柱子，但它们都已经被弹走了；一根柱子被弹走，说明右边来了比它更矮的柱子，顺着这个关系推下去，它们都比 top_index 高，不会挡住矩形向左延伸。而新栈顶本身不比 top_index 高，所以矩形向左就停在它的右侧。</li>
+  <li>栈弹空了，说明 top_index 左边没有比它矮的柱子，左边界取 −1。</li>
+</ul>
+<pre>def largest_rectangle_area(heights):
+    heights = heights + [0]             # 末尾补一根高 0 的柱子，逼所有柱子出栈结算
+    stack_of_indices = []
+    best_area = 0
+    for i, height in enumerate(heights):
+        while stack_of_indices and heights[stack_of_indices[-1]] &gt; height:
+            top_index = stack_of_indices.pop()
+            left_boundary = stack_of_indices[-1] if stack_of_indices else -1
+            width = i - left_boundary - 1
+            best_area = max(best_area, heights[top_index] * width)
+        stack_of_indices.append(i)
+    return best_area</pre>
+<p>用例子走一遍（末尾补的 0 下标是 6）：</p>
+<table>
+  <tr><th>第 i 根（高）</th><th>弹出并结算</th><th>处理完后的栈</th></tr>
+  <tr><td>0（2）</td><td>无</td><td>[0]</td></tr>
+  <tr><td>1（1）</td><td>下标 0：高 2，左边界 −1，宽 1 − (−1) − 1 = 1，面积 2</td><td>[1]</td></tr>
+  <tr><td>2（5）、3（6）</td><td>无</td><td>[1, 2, 3]</td></tr>
+  <tr><td>4（2）</td><td>下标 3：高 6，左边界 2，宽 1，面积 6；下标 2：高 5，左边界 1，宽 4 − 1 − 1 = 2，面积 <b>10</b></td><td>[1, 4]</td></tr>
+  <tr><td>5（3）</td><td>无</td><td>[1, 4, 5]</td></tr>
+  <tr><td>6（补的 0）</td><td>下标 5：面积 3；下标 4：高 2，左边界 1，宽 4，面积 8；下标 1：高 1，左边界 −1，宽 6，面积 6</td><td>[6]</td></tr>
+</table>
+<p><b>关于相等高度</b>：弹出条件用的是 <code>&gt;</code>，两根一样高的柱子都会留在栈里。这时靠左的那根算出来的宽度是完整的，靠右的那根会算少一点，但最大值不受影响，所以结果仍然正确。</p>
+<p><b>复杂度</b>：时间 O(n)，空间 O(n)。</p>
+
+<h2>题 4：接雨水（LeetCode 42）</h2>
+<p><b>题意</b>：<code>heights[i]</code> 是第 i 根柱子的高度，宽度都是 1。下雨后，柱子之间的凹槽能存多少格水？</p>
+<p><b>例子</b>：<code>[0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1]</code> 能存 6 格水。</p>
+<p><b>先想清楚一列能存多少水</b>：第 i 列头顶的水面高度，取决于它左边最高的柱子和右边最高的柱子中<b>较矮</b>的那一个（水会从矮的那边流走）。所以第 i 列的水量 = min(左边最高, 右边最高) − heights[i]，算出来是负数就当 0。</p>
+<p><b>暴力做法为什么慢</b>：对每一列，都往左扫一遍找最高、往右扫一遍找最高，每列 O(n)，总共 O(n²)。（先用两个数组预先算好“前缀最高”和“后缀最高”能降到 O(n)，这也是一种好方法；下面讲单调栈的思路，它换了一个角度来算。）</p>
+<p><b>关键观察</b>：竖着一列一列算需要知道两边的最高点；换成<b>横着一层一层算</b>，就只需要知道“左边最近的一堵墙”。一个凹槽由三部分组成：左墙、槽底、右墙。当我们从左往右扫，遇到一根比前一根高的柱子，说明出现了右墙，前面可能形成了一个凹槽。</p>
+<p><b>怎么用上单调栈</b>：栈里柱子高度从栈底到栈顶递减（还在往下走的“下坡”）。来了第 i 根柱子，只要它比栈顶高：</p>
+<ol>
+  <li>弹出栈顶，记作 <code>bottom_index</code>，它是槽底。</li>
+  <li>如果栈空了，左边没有墙，水会从左边流走，停止。</li>
+  <li>否则新的栈顶 <code>left_index</code> 是左墙，第 i 根是右墙。这一层水的高度 = min(左墙高, 右墙高) − 槽底高，宽度 = i − left_index − 1。把 高度 × 宽度 加进总水量。</li>
+</ol>
+<p>然后把 i 入栈。例子里，处理到下标 7（高 3）时，会依次弹出下标 6（槽底高 1，左墙下标 4 高 1，这一层高 0）、下标 4（槽底高 1，左墙下标 3 高 2，这一层高 1、宽 7 − 3 − 1 = 3，加 3 格水），再弹出下标 3 时栈空，停下。</p>
+<p><b>为什么是对的</b>：每次弹出槽底时，左墙和右墙之间的柱子都不比槽底高（比槽底高的早就作为右墙把它们“填平”过了），所以这一层水被两堵墙夹住，能完整存下；而槽底以下的部分在之前弹出更低的槽底时已经算过，不会重复。整个水体就被切成了一层层互不重叠的长方形。</p>
+<p><b>复杂度</b>：时间 O(n)，空间 O(n)。</p>
+
+<h2>怎么认出这类题</h2>
+<p>题目里出现下面这些说法，就该想到单调栈：</p>
+<ul>
+  <li>“<b>下一个更大 / 更小</b>的元素”“右边（左边）<b>第一个</b>比它大 / 小的”。</li>
+  <li>“还要等几天”“往后多少个位置才……”：本质是求下一个更大元素的<b>距离</b>。</li>
+  <li>“以每个元素为最小值（最大值）能延伸多远”：最大矩形、子数组最小值之和都是这一类。</li>
+  <li>“凹槽”“能存多少水”这类需要左右两堵墙的题。</li>
+  <li>“删掉 k 个数字让结果最小”“保持相对顺序、让字典序最小”：从左往右扫，遇到更优的就把栈顶不好的弹掉。</li>
+</ul>
+<p>反过来，如果题目要的是“一个区间里的最大值”并且区间在滑动，那是<b>单调队列</b>（两端都能弹出），不是单调栈。</p>
+
+<h2>LeetCode 练习题</h2>
+<table>
+  <tr><th>题号</th><th>题名</th><th>说明</th></tr>
+  <tr><td>739</td><td>每日温度</td><td>本课题 1，模板题</td></tr>
+  <tr><td>496</td><td>下一个更大元素 I</td><td>本课题 2，单调栈 + 字典</td></tr>
+  <tr><td>503</td><td>下一个更大元素 II</td><td>本课题 2，循环数组走两遍</td></tr>
+  <tr><td>84</td><td>柱状图中最大的矩形</td><td>本课题 3，递增栈同时求左右边界</td></tr>
+  <tr><td>42</td><td>接雨水</td><td>本课题 4，也可以用双指针做</td></tr>
+  <tr><td>901</td><td>股票价格跨度</td><td>求“左边第一个更大”的距离</td></tr>
+  <tr><td>85</td><td>最大矩形</td><td>每一行当底，转化成 84 题</td></tr>
+  <tr><td>907</td><td>子数组的最小值之和</td><td>每个数当最小值能管多远，注意相等元素</td></tr>
+  <tr><td>402</td><td>移掉 K 位数字</td><td>递增栈，贪心地删掉前面大的数字</td></tr>
+  <tr><td>316</td><td>去除重复字母</td><td>递增栈 + 记录剩余次数</td></tr>
+</table>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>题</th><th>暴力</th><th>单调栈</th><th>额外空间</th></tr>
+  <tr><td>每日温度 / 下一个更大元素</td><td>O(n²)</td><td>O(n)</td><td>O(n)</td></tr>
+  <tr><td>柱状图中最大的矩形</td><td>O(n²)</td><td>O(n)</td><td>O(n)</td></tr>
+  <tr><td>接雨水</td><td>O(n²)</td><td>O(n)</td><td>O(n)（双指针可以做到 O(1)）</td></tr>
+</table>
+
+<h2>动手玩</h2>
+<p>先选“每日温度”点 <b>开始</b>，用“上一步 / 下一步”慢慢看：橙色是正在处理的元素，蓝色是还在栈里等答案的元素，红色是这一步被弹出的元素。看一看栈为什么始终保持递减。再选“最大矩形”，留意被弹出的柱子绿框圈出的那一段宽度。最后选“接雨水”，看每次弹出槽底时，水是怎么一层一层加上去的。输入框里的数组可以自己改（用逗号隔开）。</p>
+<div class="demo" id="monotonic"></div>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>弹出条件的 &lt; 和 &lt;= 写反</b>。有相等元素时，“第一个更大”要用 <code>&lt;</code> 弹出（相等的不算更大，不能弹）；写成 <code>&lt;=</code> 就变成了“第一个大于或等于”。写之前先想清楚题目要的是哪一个。</li>
+  <li><b>栈里存了值，后面才发现需要下标</b>算距离或宽度。默认就存下标。</li>
+  <li><b>忘了处理遍历结束后栈里剩下的元素</b>。它们的答案是默认值（-1 或 0）；最大矩形则需要在末尾补一根高 0 的柱子，让它们全部出栈结算。</li>
+  <li>最大矩形里，栈弹空后<b>左边界是 −1</b>，不是 0。宽度公式是 <code>i - left_boundary - 1</code>。</li>
+  <li>接雨水里，弹出槽底后栈空了要<b>立刻停下</b>：没有左墙，存不住水。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/monotonic_stack.py</code>。建议顺序：<code>daily_temperatures</code> → <code>next_greater_element</code> → <code>next_greater_element_circular</code> → <code>largest_rectangle_area</code> → <code>trap_rain_water</code>。写完一个就运行一次，看打印出来的“期望”和“实际”是否一致：</p>
+<pre>uv run dsa/monotonic_stack.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 单调栈的代码里有 for 套 while，为什么还是 O(n)？</summary>
+每个下标只入栈一次，也最多出栈一次。while 每执行一次就弹出一个下标，所以整个过程中 while 总共最多执行 n 次，和 for 的 n 次加起来是 O(n)。</details>
+<details><summary>2. 要找“右边第一个更小的元素”，栈应该是递增还是递减？弹出条件是什么？</summary>
+栈从栈底到栈顶递增，弹出条件是 <code>numbers[栈顶] &gt; 当前值</code>：当前值比栈顶小，栈顶就找到了“右边第一个更小的”。</details>
+<details><summary>3. 最大矩形里，为什么弹出 top_index 后，新的栈顶就是它的左边界？</summary>
+栈是递增的，新栈顶不比 top_index 高，它挡住了矩形向左延伸。而原数组里夹在新栈顶和 top_index 之间的柱子，早已被比它们更矮的柱子弹出，它们都比 top_index 高，不会挡住矩形。所以矩形向左正好延伸到新栈顶的右边一格。</details>
+
+<div class="nav"><a href="27-prefix-sum.html">← 上一课：前缀和与哈希计数</a><a href="29-linked-list-patterns.html">下一课：链表高频技巧 →</a></div>
+<script src="anim.js"></script>
+<script src="js/28-monotonic-stack.js"></script>
+</body>
+</html>
+</body>
+</html>

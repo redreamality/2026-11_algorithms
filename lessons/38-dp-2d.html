@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 38 课 · 二维 DP 高频题</title>
+<link rel="stylesheet" href="style.css">
+<style>
+table.dp td { font-family: Consolas, monospace; text-align: center; min-width: 30px; }
+table.dp td.cur { background: #ffe0b2; font-weight: bold; }
+table.dp td.dep { background: #bbdefb; }
+table.dp td.path { background: #ffcdd2; }
+table.dp td.wall { background: #555; color: #fff; }
+table.dp td.off { background: #f0f0f0; }
+.box.dep { background: #bbdefb; border-color: #1565c0; }
+.steps li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 38 课 · 二维 DP 高频题</h1>
+<p class="one-line">二维 DP 就是填一张表。做题前先回答两个问题：<b>表里的每一格代表什么</b>，<b>它从哪几格推过来</b>。这两个问题答清楚了，代码只是把表填满。</p>
+
+<p>第 19 课写过“不同路径”，第 20 课写过最长公共子序列（LCS），编辑距离当时只是选做。这一课把它们串起来，补上带障碍的路径、最小路径和、完整的编辑距离和最长回文子串，并把<b>读一张二维表的方法</b>讲透。四步法（定义状态 → 写转移 → 定初始值 → 定遍历顺序）见第 37 课，这里照样用。</p>
+
+<h2>实战里怎么写：先用 difflib</h2>
+<p>二维 DP 在真实代码里最常见的身份是“比较两个字符串 / 两份文本”：命令拼错时提示“您是不是要找 install”、搜索纠错、显示配置文件改了哪几行。标准库 <code>difflib</code> 已经做好了这些事。</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>“您是不是要找……”</td><td><code>difflib.get_close_matches(typed, candidates)</code></td><td>每个候选算一次相似度，候选多时会慢</td></tr>
+  <tr><td>两个字符串有多像（0～1）</td><td><code>difflib.SequenceMatcher(None, a, b).ratio()</code></td><td>基于最长匹配块，不是严格的编辑距离</td></tr>
+  <tr><td>两份文本改了哪几行</td><td><code>difflib.unified_diff(old_lines, new_lines)</code></td><td>输出格式和 <code>git diff</code> 一样</td></tr>
+  <tr><td>严格的“最少改几个字”（只纠正 2 个字以内的错）</td><td>手写编辑距离（本课题 4）</td><td>O(m·n) 时间；按行滚动 O(n) 空间</td></tr>
+</table>
+<pre>from difflib import get_close_matches, unified_diff
+
+commands = ["install", "uninstall", "list", "freeze", "show"]
+get_close_matches("instal", commands, n=2)    # ['install', 'uninstall']
+
+old_config = ["port = 8000\n", "debug = true\n"]
+new_config = ["port = 8080\n", "debug = true\n"]
+print("".join(unified_diff(old_config, new_config, "config.old", "config.new")))
+# -port = 8000
+# +port = 8080
+
+def edit_distance(source, target):              # 只留上一行，空间 O(len(target))
+    previous_row = list(range(len(target) + 1))
+    for i in range(1, len(source) + 1):
+        current_row = [i] + [0] * len(target)
+        for j in range(1, len(target) + 1):
+            if source[i - 1] == target[j - 1]:
+                current_row[j] = previous_row[j - 1]
+            else:
+                current_row[j] = 1 + min(previous_row[j - 1], previous_row[j], current_row[j - 1])
+        previous_row = current_row
+    return previous_row[-1]
+
+[command for command in commands if edit_distance("shwo", command) &lt;= 2]    # ['show']</pre>
+<p>完整可运行的版本在 <code>examples/dp_2d_in_practice.py</code>（<code>uv run examples/dp_2d_in_practice.py</code>）。<code>difflib</code> 的相似度和编辑距离不完全一样：它看的是“最长的公共片段”，更符合人的直觉，但说不出“改了几个字”。下面几道题会讲清楚这张二维表是怎么填出来的。</p>
+
+<h2>二维表的三种常见含义</h2>
+<table>
+  <tr><th>类型</th><th>dp[i][j] 代表什么</th><th>从哪几格推过来</th><th>本课题目</th></tr>
+  <tr><td>网格走路</td><td>从起点走到格子 (i, j) 的结果（路数、最小花费）</td><td>上面 (i - 1, j) 和左边 (i, j - 1)</td><td>不同路径、最小路径和</td></tr>
+  <tr><td>两个字符串</td><td>第一个串的<b>前 i 个字符</b>和第二个串的<b>前 j 个字符</b>之间的结果</td><td>左上、上、左</td><td>LCS、编辑距离</td></tr>
+  <tr><td>一个字符串的区间</td><td>子串 text[i..j]（含两端）的结果</td><td>去掉两端后的 (i + 1, j - 1) 等更短的区间</td><td>最长回文子串</td></tr>
+</table>
+<p>“两个字符串”这一类，表要多开一行一列，留给“前 0 个字符”（空串）。所以第 i 行对应的字符是 <code>source[i - 1]</code>，不是 <code>source[i]</code>。这是二维 DP 里最常见的差一错误。</p>
+
+<h2>题 1：不同路径 II（LeetCode 63）</h2>
+<p><b>回顾 62（第 19 课已经写过）</b>：m 行 n 列的网格，从左上走到右下，每步只能向右或向下，有几条路。<code>dp[i][j]</code> = 走到 (i, j) 的路数 = 上面一格的路数 + 左边一格的路数。</p>
+<p><b>题意（63）</b>：同样的走法，但网格里有障碍（值为 1 的格子），障碍不能走。问有几条路。</p>
+<p><b>例子</b>：3 × 3 网格，正中间是障碍。原本有 6 条路，经过中间的都被堵死，只剩“沿上边再沿右边”和“沿左边再沿下边”两条。</p>
+<p><b>暴力做法为什么慢</b>：每一步有两种走法，一条路要走 m + n - 2 步，所以要枚举的路线数量随 m + n 指数增长。</p>
+<p><b>关键观察</b>：到达 (i, j) 的最后一步，要么是从上面下来，要么是从左边过来，这两类路线不会重叠。所以“到 (i, j) 的路数”等于“到上面那格的路数”加“到左边那格的路数”。障碍格没有路能到达，路数是 0，它自然不会贡献给右边和下面的格子。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>paths_to_cell[i][j]</code> = 从起点走到 (i, j) 有几条路。</li>
+  <li>转移：(i, j) 是障碍时为 0；否则 <code>paths_to_cell[i][j] = paths_to_cell[i - 1][j] + paths_to_cell[i][j - 1]</code>。</li>
+  <li>初始值：起点不是障碍时 <code>paths_to_cell[0][0] = 1</code>。第 0 行只能从左边一路走过来：遇到障碍之前都是 1，<b>障碍和它右边的格子全是 0</b>。第 0 列同理。</li>
+  <li>遍历顺序：一行一行从上往下，每行从左往右，保证上面和左边都已经算好。</li>
+</ol>
+<p><b>复杂度</b>：O(m × n) 时间。每格只用到上一行和本行左边，所以只留一行也可以，额外空间 O(n)。</p>
+
+<h2>题 2：最小路径和（LeetCode 64）</h2>
+<p><b>题意</b>：网格里每格有一个非负整数，从左上走到右下，每步只能向右或向下，问路过的数字（包括起点和终点）加起来最小是多少。</p>
+<p><b>例子</b>：</p>
+<div class="row"><span class="box dep">1</span><span class="box dep">3</span><span class="box dep">1</span></div>
+<div class="row"><span class="box">1</span><span class="box">5</span><span class="box dep">1</span></div>
+<div class="row"><span class="box">4</span><span class="box">2</span><span class="box dep">1</span><span class="label">← 蓝色路线 1 → 3 → 1 → 1 → 1，和为 7，最小</span></div>
+<p><b>暴力做法为什么慢</b>：和上一题一样，路线数量是指数级的。</p>
+<p><b>关键观察</b>：到达 (i, j) 的最便宜路线，最后一步不是从上面来就是从左边来。不管从哪边来，前面那一段一定也是“到那一格的最便宜路线”（如果前面那一段不是最便宜的，换成更便宜的那条，总和只会更小）。所以只要比较“到上面那格的最小和”与“到左边那格的最小和”，取小的再加上自己。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>cheapest_cost_to[i][j]</code> = 从起点走到 (i, j)（两端都算）的最小数字和。</li>
+  <li>转移：<code>cheapest_cost_to[i][j] = grid[i][j] + min(cheapest_cost_to[i - 1][j], cheapest_cost_to[i][j - 1])</code>。</li>
+  <li>初始值：<code>cheapest_cost_to[0][0] = grid[0][0]</code>。第 0 行只能从左边来，是这一行的前缀和；第 0 列只能从上面来，是这一列的前缀和。</li>
+  <li>遍历顺序：从上到下、从左到右。答案在右下角。</li>
+</ol>
+<pre>def min_path_sum(grid):
+    rows, columns = len(grid), len(grid[0])
+    cheapest_cost_to = [[0] * columns for _ in range(rows)]
+    for i in range(rows):
+        for j in range(columns):
+            if i == 0 and j == 0:
+                cheapest_cost_to[i][j] = grid[0][0]
+            elif i == 0:                      # 第 0 行：只能从左边来
+                cheapest_cost_to[i][j] = cheapest_cost_to[i][j - 1] + grid[i][j]
+            elif j == 0:                      # 第 0 列：只能从上面来
+                cheapest_cost_to[i][j] = cheapest_cost_to[i - 1][j] + grid[i][j]
+            else:
+                cheapest_cost_to[i][j] = grid[i][j] + min(cheapest_cost_to[i - 1][j],
+                                                           cheapest_cost_to[i][j - 1])
+    return cheapest_cost_to[rows - 1][columns - 1]</pre>
+<p><b>复杂度</b>：O(m × n) 时间；只留一行时额外空间 O(n)。</p>
+
+<h2>动手玩</h2>
+<p>三个按钮各演示一道题，用“上一步 / 下一步”慢慢看。<b>橙色</b>是正在填的格子，<b>蓝色</b>是它用到的格子，<b>红色</b>是最后倒推出来的路线。编辑距离那一段，注意每格的说明里写了“从左上、上、左三格各代表什么操作”。最长回文子串的表只填对角线和它右上方的一半（灰色格子不需要），按子串长度一圈圈往右上填。</p>
+<div class="demo" id="dp2d"></div>
+
+<h2>题 3：最长公共子序列（LeetCode 1143，第 20 课回顾）</h2>
+<p><b>题意</b>：两个字符串里，按顺序都能挑出来（可以不连续）的最长的那串有多长。"abcde" 和 "ace" 的最长公共子序列是 "ace"，长度 3。</p>
+<p>这里只把表格读一遍，作为编辑距离的热身：</p>
+<ul>
+  <li><b>每一格代表什么</b>：<code>dp[i][j]</code> = first_word 的前 i 个字符和 second_word 的前 j 个字符的最长公共子序列长度。</li>
+  <li><b>从哪几格推过来</b>：只看两个前缀的最后一个字符 <code>first_word[i - 1]</code> 和 <code>second_word[j - 1]</code>。相同，就让它们配成一对，剩下的是“两个前缀各去掉一个字符”，即左上 <code>dp[i - 1][j - 1]</code> + 1。不同，那至少有一个不在答案里：要么丢掉 first_word 的最后一个（上 <code>dp[i - 1][j]</code>），要么丢掉 second_word 的最后一个（左 <code>dp[i][j - 1]</code>），取大的。</li>
+  <li><b>第 0 行、第 0 列</b>：和空串比，公共子序列长度都是 0。</li>
+</ul>
+<p><b>用上它的变体：两个字符串的删除操作（LeetCode 583）</b>。每次可以从任意一个串里删一个字符，问最少删几次让两个串相同。最后留下来的，正好是两者的一个公共子序列；留得越长删得越少。所以答案 = 两串长度之和 − 2 × 最长公共子序列长度。"sea" 和 "eat" 的最长公共子序列是 "ea"，答案 3 + 3 − 2 × 2 = 2。</p>
+
+<h2>题 4：编辑距离（LeetCode 72）</h2>
+<p><b>题意</b>：把字符串 source 变成 target，每次操作可以插入一个字符、删除一个字符、或把一个字符替换成另一个。问最少要几次操作。</p>
+<p><b>例子</b>：source = "horse"，target = "ros"，答案是 3：horse → rorse（把 h 换成 r）→ rose（删掉第二个 r）→ ros（删掉 e）。</p>
+<p><b>暴力做法为什么慢</b>：每一步都有插入、删除、替换三种选择，而且能插什么、在哪里插都有很多种，搜索树是指数级的。</p>
+<p><b>关键观察</b>：只盯着两个串的<b>最后一个字符</b>想。设 source 的前 i 个字符要变成 target 的前 j 个字符，看 <code>source[i - 1]</code> 和 <code>target[j - 1]</code>：</p>
+<ul>
+  <li><b>两个字符相同</b>：它们直接对上，什么都不用做。问题缩小成“前 i - 1 个变成前 j - 1 个”。</li>
+  <li><b>两个字符不同</b>：最后总要用一次操作处理末尾，只有三种可能——
+    <ul>
+      <li><b>替换</b>：把 source 的末尾字符换成 target 的末尾字符，两个末尾就对上了，剩下“前 i - 1 个变成前 j - 1 个”。</li>
+      <li><b>删除</b>：把 source 的末尾字符删掉，剩下“source 的前 i - 1 个变成 target 的前 j 个”。</li>
+      <li><b>插入</b>：在 source 末尾插入 target 的末尾字符，target 的末尾就被满足了，剩下“source 的前 i 个变成 target 的前 j - 1 个”。</li>
+    </ul>
+    三种都花 1 次操作，挑剩下部分最便宜的那种。</li>
+</ul>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>edit_distance_table[i][j]</code> = 把 source 的前 i 个字符变成 target 的前 j 个字符，最少要几次操作。表有 len(source) + 1 行、len(target) + 1 列。</li>
+  <li>转移：
+<pre>if source[i - 1] == target[j - 1]:
+    edit_distance_table[i][j] = edit_distance_table[i - 1][j - 1]          # 左上，不花操作
+else:
+    edit_distance_table[i][j] = 1 + min(
+        edit_distance_table[i - 1][j - 1],   # 左上：替换
+        edit_distance_table[i - 1][j],       # 上：  删除 source 的末尾字符
+        edit_distance_table[i][j - 1],       # 左：  插入 target 的末尾字符
+    )</pre></li>
+  <li>初始值：第 0 行 <code>edit_distance_table[0][j] = j</code>（空串变成 j 个字符，只能插入 j 次）；第 0 列 <code>edit_distance_table[i][0] = i</code>（i 个字符变成空串，只能删除 i 次）。</li>
+  <li>遍历顺序：从上到下、从左到右，因为每格只用到左上、上、左三格。答案在右下角。</li>
+</ol>
+<div class="row"><span class="label">记方向：</span><span class="box dep">左上 = 替换（或相同时直接对上）</span><span class="box dep">上 = 删除</span></div>
+<div class="row"><span class="label">　　　　</span><span class="box dep">左 = 插入</span><span class="box hot">当前格 = 三者最小 + 1</span></div>
+<p><b>为什么是对的</b>：任何一种编辑方案，对“两个末尾字符”的处理只有上面列出的几种可能（直接对上、替换、删掉 source 的末尾、给 target 的末尾插一个），每种可能之后剩下的都是一个更小的同类问题，而那个更小的问题我们已经算出了最优值。把所有可能都比较一遍，不会漏掉最优解。</p>
+<p><b>复杂度</b>：表有 (m + 1) × (n + 1) 格，每格 O(1)，所以 O(m × n) 时间和空间。只需要答案（不需要倒推操作）时，只留两行，空间 O(n)。</p>
+
+<h2>题 5：最长回文子串（LeetCode 5）</h2>
+<p><b>题意</b>：在字符串里找最长的、<b>连续</b>的、正着读和反着读一样的一段。</p>
+<p><b>例子</b>："babad" 里 "bab" 和 "aba" 都是长度 3 的回文子串，返回任意一个都对（本课骨架约定返回最靠左的 "bab"）。"cbbd" 返回 "bb"。</p>
+<p><b>暴力做法为什么慢</b>：子串一共有 n(n + 1) / 2 个，每个再花 O(n) 判断是不是回文，总共 O(n³)。慢在<b>判断是不是回文</b>这一步做了很多重复工作：判断 "abcba" 时，其实已经判断过中间的 "bcb"。</p>
+<p><b>关键观察</b>：一段是回文，当且仅当<b>两端字符相同</b>，并且<b>去掉两端后中间那一段也是回文</b>。中间那段更短，如果按长度从短到长来判断，它的结果早就知道了，O(1) 查表即可。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>is_palindrome[i][j]</code> = 子串 <code>text[i..j]</code>（下标 i 到 j，两端都含）是不是回文。只有 i ≤ j 的格子有意义，也就是表的对角线和它右上方的一半。</li>
+  <li>转移：<code>is_palindrome[i][j] = text[i] == text[j] and (j - i &lt; 2 or is_palindrome[i + 1][j - 1])</code>。<code>j - i &lt; 2</code> 表示长度是 1 或 2，去掉两端后中间是空的，只要两端相同就是回文。</li>
+  <li>初始值：长度为 1 的子串（对角线）都是回文。上面的公式已经包含了这种情况。</li>
+  <li>遍历顺序：<b>这是本课最特别的地方</b>。<code>is_palindrome[i][j]</code> 要用 <code>is_palindrome[i + 1][j - 1]</code>，也就是表里<b>左下方</b>那一格，它在下面一行。所以不能简单地“从上到下”填。按<b>子串长度</b>从 1 到 n 填（长度 1 是对角线，长度 2 是对角线右边一条斜线……一圈圈往右上推），保证用到的更短区间都已经填好。另一种写法是 i 从大到小、j 从小到大，效果一样。</li>
+</ol>
+<pre>def longest_palindromic_substring(text):
+    is_palindrome = [[False] * len(text) for _ in range(len(text))]   # text[i..j] 是不是回文
+    best_start, best_length = 0, 0
+    for length in range(1, len(text) + 1):            # 按长度从短到长填，保证 [i+1][j-1] 已经算好
+        for i in range(len(text) - length + 1):
+            j = i + length - 1
+            is_palindrome[i][j] = text[i] == text[j] and (length &lt;= 2 or is_palindrome[i + 1][j - 1])
+            if is_palindrome[i][j] and length > best_length:
+                best_start, best_length = i, length
+    return text[best_start:best_start + best_length]</pre>
+<p><b>复杂度</b>：O(n²) 时间和空间。还有一种<b>中心扩展</b>写法：以每个字符（奇数长度）和每两个字符之间（偶数长度）为中心向两边扩，扩到两端不相等为止，也是 O(n²) 时间，但只要 O(1) 空间，面试里更常写。</p>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>题</th><th>每格代表</th><th>从哪几格来</th><th>时间</th><th>空间</th></tr>
+  <tr><td>不同路径 II</td><td>到 (i, j) 的路数</td><td>上、左</td><td>O(m × n)</td><td>O(n)（只留一行）</td></tr>
+  <tr><td>最小路径和</td><td>到 (i, j) 的最小和</td><td>上、左</td><td>O(m × n)</td><td>O(n)</td></tr>
+  <tr><td>最长公共子序列</td><td>两个前缀的 LCS 长度</td><td>左上，或上、左</td><td>O(m × n)</td><td>O(m × n)</td></tr>
+  <tr><td>编辑距离</td><td>前缀变前缀的最少操作</td><td>左上、上、左</td><td>O(m × n)</td><td>O(m × n)，只要答案时 O(n)</td></tr>
+  <tr><td>最长回文子串</td><td>text[i..j] 是否回文</td><td>左下 (i + 1, j - 1)</td><td>O(n²)</td><td>O(n²)，中心扩展 O(1)</td></tr>
+</table>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li><b>网格、棋盘、矩阵</b>，“只能向右或向下走”，问路数、最小和、最大和：网格类二维 DP，看上和左。</li>
+  <li>输入是<b>两个字符串（或两个数组）</b>，问“公共”“匹配”“相同”“转换”“最少操作”“最少删除”：双串类，<code>dp[i][j]</code> 定义成两个前缀，多开一行一列给空串。</li>
+  <li>输入是<b>一个字符串</b>，问“回文”“区间”“合并一段”：区间类，<code>dp[i][j]</code> 定义成子串 i..j，<b>按长度从短到长</b>填。</li>
+  <li>分清<b>子序列</b>（可以不连续，比如 LCS）和<b>子串</b>（必须连续，比如回文子串）：连续的要求通常体现在“两端必须相同才能继续”。</li>
+</ul>
+
+<h2>LeetCode 对应题目</h2>
+<table>
+  <tr><th>题号</th><th>中文题名</th><th>本课对应</th></tr>
+  <tr><td>62</td><td>不同路径</td><td>第 19 课已写，题 1 回顾</td></tr>
+  <tr><td>63</td><td>不同路径 II</td><td>题 1</td></tr>
+  <tr><td>64</td><td>最小路径和</td><td>题 2</td></tr>
+  <tr><td>120</td><td>三角形最小路径和</td><td>练手：题 2 换成三角形，从下往上填更简单</td></tr>
+  <tr><td>1143</td><td>最长公共子序列</td><td>第 20 课已写，题 3 回顾</td></tr>
+  <tr><td>583</td><td>两个字符串的删除操作</td><td>题 3 的变体（选做）</td></tr>
+  <tr><td>72</td><td>编辑距离</td><td>题 4</td></tr>
+  <tr><td>5</td><td>最长回文子串</td><td>题 5</td></tr>
+  <tr><td>647</td><td>回文子串</td><td>练手：同一张 is_palindrome 表，数一共有几个 True</td></tr>
+  <tr><td>516</td><td>最长回文子序列</td><td>练手：区间类，但“子序列”可以跳过字符，转移多了上、左两种</td></tr>
+  <tr><td>221</td><td>最大正方形</td><td>练手：网格类，看左上、上、左三格取最小 + 1</td></tr>
+</table>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>下标差一</b>：双串类的表多开了一行一列，第 i 行对应的字符是 <code>source[i - 1]</code>。</li>
+  <li><b>编辑距离第 0 行、第 0 列填成 0</b>：应该是 j 和 i，空串和非空串之间是有距离的。</li>
+  <li><b>编辑距离字符相同时还 + 1</b>：相同就直接抄左上，不花操作。</li>
+  <li><b>带障碍的路径，第 0 行遇到障碍后还填 1</b>：障碍右边的格子从左边过不来，全是 0。</li>
+  <li><b>回文表按行从上往下填</b>：用到的 <code>is_palindrome[i + 1][j - 1]</code> 在下一行，还没算，结果全错。要按长度填，或 i 倒着循环。</li>
+  <li>最小路径和忘了加起点或终点自己的数字。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/dp_2d.py</code>。建议顺序：<code>min_path_sum</code> → <code>unique_paths_with_obstacles</code> → <code>edit_distance_table</code> → <code>edit_distance</code> → <code>longest_palindromic_substring</code> →（选做）<code>min_deletions_to_make_equal</code>。动手前，先用一句话写下每一格代表什么、从哪几格推过来。</p>
+<pre>uv run dsa/dp_2d.py</pre>
+<p>脚本会对每个函数跑几个例子，打印「输入、期望、实际」。<code>edit_distance_table</code> 会比对整张表，方便你找出是哪一格算错了。</p>
+
+<h2>自测</h2>
+<details><summary>1. 编辑距离里，为什么“上面那格 + 1”代表删除，而不是插入？</summary>
+上面那格是 edit_distance_table[i - 1][j]：source 只用了前 i - 1 个字符，就已经变成了 target 的前 j 个字符。那么 source 多出来的第 i 个字符（末尾字符）就必须删掉，所以是“删除”。同理，左边那格 edit_distance_table[i][j - 1] 表示 source 的前 i 个已经变成 target 的前 j - 1 个，还差 target 的最后一个字符，要插入它。</details>
+<details><summary>2. 编辑距离和最长公共子序列的表格结构一样，区别在哪？</summary>
+两者都看两个前缀的最后一个字符。LCS 求的是最大值，字符相同时左上 + 1，不同时取上、左的最大值，第 0 行、第 0 列是 0；编辑距离求的是最小操作数，字符相同时直接抄左上，不同时取左上、上、左的最小值再 + 1，第 0 行、第 0 列是 j 和 i。</details>
+<details><summary>3. 最长回文子串为什么不能像网格题那样从上到下、从左到右填？</summary>
+因为 is_palindrome[i][j] 依赖的是 is_palindrome[i + 1][j - 1]，它在下一行（i + 1）。从上到下填时，下一行还没有算，读到的是初始值。按子串长度从短到长填，或者 i 从大到小循环，才能保证依赖的格子先算好。四步法的第 4 步就是为这种情况准备的。</details>
+
+<div class="nav"><a href="37-dp-1d.html">← 上一课：一维 DP 高频题</a><a href="39-bit-manipulation.html">下一课：位运算技巧 →</a></div>
+<script src="anim.js"></script>
+<script src="js/38-dp-2d.js"></script>
+</body>
+</html>

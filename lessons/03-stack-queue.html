@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 3 课 · 栈与队列</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 3 课 · 栈与队列</h1>
+<p class="one-line"><b>栈</b>是后进先出（LIFO），像一摞盘子，只能动最上面那个；<b>队列</b>是先进先出（FIFO），像排队买票，从队尾进、从队头出。</p>
+
+<h2>实战里怎么写：list 当栈，deque 当队列</h2>
+<p>业务代码里没人专门写 Stack / Queue 类，直接用现成的：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>栈（撤销、括号匹配、深度优先）</td><td><code>list</code> 的 <code>append</code> / <code>pop</code> / <code>[-1]</code></td><td>均摊 O(1)</td></tr>
+  <tr><td>单线程里的队列（任务排队、BFS）</td><td><code>collections.deque</code> 的 <code>append</code> / <code>popleft</code></td><td>O(1)；<code>list.pop(0)</code> 是 O(n)</td></tr>
+  <tr><td>多线程之间传任务</td><td>标准库 <code>queue.Queue</code> 的 <code>put</code> / <code>get</code></td><td>O(1)，自带锁，<code>get</code> 可以阻塞等待</td></tr>
+</table>
+<pre>from collections import deque
+
+def brackets_balanced(text):
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack = []
+    for character in text:
+        if character in "([{":
+            stack.append(character)                  # 压栈
+        elif character in pairs:
+            if not stack or stack.pop() != pairs[character]:
+                return False
+    return not stack                                 # 最后栈要空
+
+pending = deque(["下载 a.zip", "发邮件"])
+while pending:
+    job = pending.popleft()                          # 先来先处理，O(1)
+    ...</pre>
+<p>完整可运行的版本在 <code>examples/stack_queue_in_practice.py</code>（<code>uv run examples/stack_queue_in_practice.py</code>），还有用两个栈做的撤销 / 重做和一个 <code>queue.Queue</code> 工作线程。下面看 deque 这种队列是怎么做到两头都 O(1) 的。</p>
+
+<h2>栈：一个 list 就够了</h2>
+<div class="row">
+  <span class="label">栈底</span><span class="box">1</span><span class="box">2</span><span class="box hot">3</span><span class="label">← 栈顶（list 末尾）</span>
+</div>
+<pre>items.append(x)   # push：O(1)
+items.pop()       # pop：O(1)
+items[-1]         # peek：O(1)</pre>
+<p>只在 list 的<b>末尾</b>进出，第 1 课讲过，这都是 O(1)。函数调用、撤销、括号匹配，用的都是栈。</p>
+
+<h2>队列：为什么不能也用 list</h2>
+<p>队列要从<b>头部</b>取。<code>list.pop(0)</code> 会让后面所有元素往左挪一格，是 O(n)。</p>
+<p>办法：元素不挪，<b>只挪下标</b>。用 <code>head</code> 记住队头在哪，出队时 <code>head += 1</code> 就行。可这样前面空出来的格子就浪费了。</p>
+
+<h2>环形队列：走到末尾就绕回 0</h2>
+<p>把数组首尾接起来，看成一个环。只记两个数：<code>head</code>（队头下标）和 <code>size</code>（有几个）。</p>
+<div class="row">
+  <span class="label">下标</span><span class="box small">0</span><span class="box small">1</span><span class="box small">2</span><span class="box small">3</span>
+</div>
+<div class="row">
+  <span class="label">格子</span><span class="box">5</span><span class="box empty">·</span><span class="box hot">3</span><span class="box">4</span>
+  <span class="label">head = 2，size = 3，队列顺序是 3、4、5</span>
+</div>
+<pre>def append(self, value):
+    ...                                            # 满了先扩容，见下一节
+    tail = (self._head + self._size) % self.capacity   # 下一个元素放哪
+    self._data[tail] = value
+    self._size += 1
+
+def popleft(self):
+    if self._size == 0:
+        raise IndexError("popleft from empty queue")
+    value = self._data[self._head]
+    self._head = (self._head + 1) % self.capacity      # 出队后队头往前走
+    self._size -= 1
+    return value</pre>
+<p><code>% capacity</code> 就是“回绕”：下标走到 4 时变回 0。</p>
+
+<h2>满了怎么办：翻倍扩容</h2>
+<p>和动态数组一样，开一个两倍长的新数组。但搬家时<b>要按队列顺序搬</b>：从 head 开始数，第 k 个元素在旧数组的 <code>(head + k) % capacity</code>，放进新数组的第 k 格。搬完 head 归 0。</p>
+<p>直接按下标 0、1、2… 复制是错的：上图里 5 会跑到 3、4 前面，顺序就乱了。</p>
+
+<h2>复杂度</h2>
+<table>
+  <tr><th>操作</th><th>栈（list）</th><th>环形队列</th></tr>
+  <tr><td>放进去</td><td>均摊 O(1)</td><td>均摊 O(1)（偶尔扩容 O(n)）</td></tr>
+  <tr><td>取出来</td><td>O(1)</td><td>O(1)</td></tr>
+  <tr><td>看一眼（peek）</td><td>O(1)</td><td>O(1)</td></tr>
+</table>
+
+<h2>动手玩</h2>
+<p>栈：连点几次 <b>push</b>，再连点 <b>pop</b>，看谁先出来。</p>
+<div class="demo" id="stack"></div>
+<p>环形队列：一开始 1、2 已经出队了，head 在 2。点一次 <b>enqueue</b>，看 tail 怎么从 3 绕回 0；再点两次，看满了以后怎么按队列顺序搬家。</p>
+<div class="demo" id="cqueue"></div>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li>队尾下标忘了 <code>% capacity</code>，越界。</li>
+  <li>“空”和“满”时 head 都等于 tail，光看下标分不出来，所以要单独记 <code>size</code>。</li>
+  <li>扩容时按旧下标顺序复制，队列顺序乱掉。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/stack_queue.py</code>。接口按标准库的习惯：<code>Stack</code> 有 <code>push</code> / <code>pop</code> / <code>peek</code>；<code>CircularQueue</code> 的方法名和 <code>deque</code> 一样，<code>append</code> 放队尾、<code>popleft</code> 取队头（动画里的 <code>enqueue</code> / <code>dequeue</code> 就是它们）。两个类都支持 <code>len()</code>、<code>if queue:</code> 判空、<code>for</code> 遍历；空的时候取元素抛 <code>IndexError</code>。</p>
+<p>先写 <code>Stack</code>（几行就完），再写 <code>CircularQueue</code>：<code>__len__</code> → <code>peek</code> → <code>popleft</code> → <code>__iter__</code>（按队列顺序，不是按下标顺序）→ <code>append</code>（最后加扩容）。</p>
+<pre>uv run dsa/stack_queue.py               # 撤销、括号匹配、打印队列的端到端例子
+uv run pytest tests/test_stack_queue.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 用两个栈能不能实现一个队列？</summary>
+能。进队压进栈 A；出队时如果栈 B 空，就把 A 全部倒进 B（顺序正好反过来），再从 B 弹。每个元素最多被倒一次，均摊 O(1)。</details>
+<details><summary>2. 不记 size，只记 head 和 tail，怎么区分空和满？</summary>
+常见做法是故意空一格：<code>(tail + 1) % capacity == head</code> 算满。代价是永远浪费一个格子。</details>
+<details><summary>3. Python 里实际该用什么当队列？</summary>
+单线程用 <code>collections.deque</code>，两端进出都是 O(1)，BFS（第 13 课）就靠它；多线程之间传任务用 <code>queue.Queue</code>。</details>
+
+<div class="nav"><a href="02-linked-list.html">← 上一课：链表</a><a href="04-hash-table.html">下一课：哈希表 →</a></div>
+<script src="anim.js"></script>
+<script src="js/03-stack-queue.js"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 7 课 · 简单排序（选择、插入）与稳定性</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .box.done { background: #e8f5e9; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 7 课 · 简单排序（选择、插入）与稳定性</h1>
+<p class="one-line">两种最朴素的排序：<b>选择排序</b>每轮挑出最小的放到前面；<b>插入排序</b>像理牌，把新牌插进左边已经排好的那一手里。都是 O(n²)。</p>
+
+<h2>实战里怎么写：用 sorted() / list.sort()</h2>
+<p>业务代码里没人手写排序。内置的 Timsort <b>稳定</b>、O(n log n)、近乎有序时接近 O(n)。要学的是怎么用好它：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>要一个新列表，原数据不动</td><td><code>sorted(items, key=..., reverse=...)</code></td><td>O(n log n)，额外 O(n)</td></tr>
+  <tr><td>就地排，省内存</td><td><code>items.sort(...)</code>，返回 <code>None</code></td><td>O(n log n)</td></tr>
+  <tr><td>按字段排</td><td><code>key=operator.itemgetter("score")</code> / <code>attrgetter("created")</code></td><td>key 每个元素只算一次</td></tr>
+  <tr><td>多字段、方向不同</td><td>利用稳定性分两趟排；或数字取负号拼元组</td><td>两趟就是 2 × O(n log n)</td></tr>
+</table>
+<pre>from operator import attrgetter
+
+# 工单：优先级从高到低，同优先级按创建日期从早到晚
+ordered = sorted(tickets, key=attrgetter("created"))        # 先按次要字段
+ordered.sort(key=attrgetter("priority"), reverse=True)      # 再按主要字段；稳定，日期顺序被保留
+
+# 一趟写完也行：元组按字段依次比，数字字段取负号就反过来了
+ordered = sorted(tickets, key=lambda ticket: (-ticket.priority, ticket.created))
+
+sorted(file_names, key=str.casefold)    # 不区分大小写</pre>
+<p>完整可运行的版本在 <code>examples/simple_sorts_in_practice.py</code>（<code>uv run examples/simple_sorts_in_practice.py</code>）。下面两种 O(n²) 排序是理解“稳定性”和 Timsort 的基础。</p>
+
+<h2>选择排序：每轮选一个最小的</h2>
+<p>左边是排好的，右边是没排的。每轮在右边找出最小的，和右边第一个<b>交换</b>，排好的部分就多一个。</p>
+<div class="row">
+  <span class="box done">1</span><span class="box done">2</span><span class="label">｜</span>
+  <span class="box hot">5</span><span class="box">4</span><span class="box found">3</span>
+  <span class="label">← 右边最小是 3，和 5 交换</span>
+</div>
+<pre>def selection_sort(items):
+    for start in range(len(items)):
+        smallest = start
+        for candidate in range(start + 1, len(items)):
+            if items[candidate] &lt; items[smallest]:
+                smallest = candidate
+        items[start], items[smallest] = items[smallest], items[start]</pre>
+
+<h2>插入排序：像理手里的牌</h2>
+<p>左边已经有序。拿起下一个数，只要它左边的比它<b>大</b>，就把左边的往右挪一格，最后把它放进空出来的位置。</p>
+<div class="row">
+  <span class="box done">2</span><span class="box done">4</span><span class="box done">5</span>
+  <span class="label">⟵</span><span class="box hot">3</span>
+  <span class="label">5、4 都比 3 大，往右挪；2 不比 3 大，停，3 放在 2 后面</span>
+</div>
+<pre>def insertion_sort(items):
+    for index in range(1, len(items)):
+        item = items[index]
+        position = index - 1
+        while position &gt;= 0 and items[position] &gt; item:   # 用 &gt;，相等就停
+            items[position + 1] = items[position]
+            position -= 1
+        items[position + 1] = item</pre>
+
+<h2>复杂度</h2>
+<table>
+  <tr><th></th><th>选择排序</th><th>插入排序</th></tr>
+  <tr><td>最好（已经有序）</td><td>O(n²)，照样每轮找最小</td><td><b>O(n)</b>，每个数看一眼就停</td></tr>
+  <tr><td>最坏（完全倒序）</td><td>O(n²)</td><td>O(n²)</td></tr>
+  <tr><td>交换 / 挪动次数</td><td>最多 n−1 次交换</td><td>最坏 O(n²) 次挪动</td></tr>
+  <tr><td>额外空间</td><td>O(1)</td><td>O(1)</td></tr>
+  <tr><td>稳定</td><td><b>否</b></td><td>是</td></tr>
+</table>
+<p>插入排序对<b>近乎有序</b>的数据特别快：每个数只需往左挪几步。所以小数组或“基本排好”的数组，实际中常用它（Python 的 Timsort 里就有它）。</p>
+
+<h2>稳定性：相等的元素别换位置</h2>
+<p>按分数给学生排序，小红和小刚都是 90 分，原来小红在前。<b>稳定</b>的排序保证排完后小红还在小刚前面。先按姓名排、再按分数稳定地排，就能得到“分数相同时按姓名”的结果。</p>
+<div class="row">
+  <span class="box">2<sub>a</sub></span><span class="box">2<sub>b</sub></span><span class="box hot">1</span>
+  <span class="label">→ 选择排序：1 和 2<sub>a</sub> 交换 →</span>
+  <span class="box">1</span><span class="box">2<sub>b</sub></span><span class="box found">2<sub>a</sub></span>
+</div>
+<p>选择排序的“远距离交换”会把 2<sub>a</sub> 甩到 2<sub>b</sub> 后面，所以<b>不稳定</b>。插入排序只在左边严格更大时才挪，相等的永远不越过彼此，所以<b>稳定</b>。</p>
+
+<h2>动手玩</h2>
+<p>先选 <b>选择排序</b> 点“排序”，再切到 <b>插入排序</b> 用同一组数比一比比较次数。默认数组里有两个 3（标了 a、b），留意排完后谁在前。再点 <b>近乎有序</b>，看插入排序有多快。</p>
+<div class="demo" id="ssort"></div>
+
+<h2>最容易错的三个地方</h2>
+<ul>
+  <li>插入排序的条件写成 <code>&gt;=</code>：结果还是对的，但<b>不稳定</b>了。</li>
+  <li>插入排序挪完后，<code>item</code> 放在 <code>position + 1</code>，不是 <code>position</code>。</li>
+  <li>有 <code>key</code> 时，比较的是 key，但挪动和交换的是元素本身。和 <code>list.sort</code> 一样，key 每个元素<b>只算一次</b>：先算好一个 keys 列表，挪元素时 key 跟着一起挪。</li>
+  <li><code>reverse=True</code> 不能“先正着排再整个反转”：那样相等元素的次序也反了，不再稳定。正确做法是把比较方向反过来。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/simple_sorts.py</code>。接口和 <code>list.sort</code> 一样：原地排序、返回 <code>None</code>、只接受关键字参数 <code>key=</code> 和 <code>reverse=</code>。建议顺序：先写不带参数的 <code>selection_sort</code> → <code>insertion_sort</code>，再加 <code>key</code>，最后加 <code>reverse</code>（保持稳定）。</p>
+<pre>uv run dsa/simple_sorts.py               # 工单两趟排序的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_simple_sorts.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 数组已经有序，两种排序各要比较多少次？</summary>
+选择排序还是 n(n−1)/2 次，因为它不知道“已经有序”；插入排序只要 n−1 次，每个数和左边比一次就停。</details>
+<details><summary>2. 什么时候选择排序反而更合适？</summary>
+“写入”很贵的时候（比如写闪存）：它最多只交换 n−1 次，插入排序可能挪动 O(n²) 次。</details>
+<details><summary>3. 只有一种排序键时，稳定性还有用吗？</summary>
+元素就是数字本身时看不出区别；元素是记录（学生、订单）时就有用：可以先按次要字段排，再按主要字段稳定地排。</details>
+
+<div class="nav"><a href="06-binary-search.html">← 上一课：二分查找</a><a href="08-merge-sort.html">下一课：归并排序 →</a></div>
+<script src="anim.js"></script>
+<script src="js/07-simple-sorts.js"></script>
+</body>
+</html>

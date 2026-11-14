@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 14 课 · 拓扑排序</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .graph { display: block; max-width: 100%; }
+  .graph .gnode rect { fill: #fff; stroke: #555; stroke-width: 2; }
+  .graph .gnode.queued rect { fill: #ffe0b2; }
+  .graph .gnode.cur rect { fill: #ffcdd2; stroke: #c62828; }
+  .graph .gnode.drop rect { stroke: #e65100; stroke-width: 3; }
+  .graph .gnode.done { opacity: .3; }
+  .graph text { font: 14px "Microsoft YaHei", sans-serif; text-anchor: middle; }
+  .graph .deg { fill: #e65100; font-weight: bold; }
+  .graph .edge { stroke: #555; stroke-width: 2; fill: none; }
+  .graph .edge.gone { stroke: #ccc; stroke-dasharray: 5 4; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 14 课 · 拓扑排序</h1>
+<p class="one-line">有先后依赖的一堆事，排成一条队，保证<b>每件事都排在它依赖的事后面</b>。比如排课：先修课必须在前。</p>
+
+<h2>实战里怎么写：标准库 graphlib</h2>
+<p>构建系统、包管理器、任务调度器、数据库迁移，都要先排出“谁先做”。Python 3.9 起，标准库 <code>graphlib.TopologicalSorter</code> 已经帮你写好了，输入就是一个 dict：<b>节点 → 它依赖的节点</b>。</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>只要一个合法顺序（安装依赖、跑迁移）</td><td><code>TopologicalSorter(依赖表).static_order()</code></td><td>O(n + m)</td></tr>
+  <tr><td>能并行就并行（CI 构建、任务编排）</td><td><code>prepare()</code> → 循环 <code>get_ready()</code> / <code>done()</code></td><td>O(n + m)</td></tr>
+  <tr><td>配置写出了循环依赖</td><td>捕获 <code>graphlib.CycleError</code>，<code>error.args[1]</code> 是环上的节点</td><td>和排序一起检查，不另花时间</td></tr>
+</table>
+<pre>from graphlib import CycleError, TopologicalSorter
+
+build_steps = {                       # 步骤 -&gt; 它要等的步骤
+    "codegen": ["install"],
+    "lint": ["install"],
+    "compile": ["codegen"],
+    "package": ["compile", "lint"],
+}
+
+list(TopologicalSorter(build_steps).static_order())
+# ['install', 'codegen', 'lint', 'compile', 'package']（合法顺序之一）
+
+sorter = TopologicalSorter(build_steps)
+sorter.prepare()                      # 有环在这里就抛 CycleError
+while sorter.is_active():
+    ready = sorter.get_ready()        # 依赖全部完成、现在就能开工的步骤
+    for step in ready:                # 真实项目里交给线程池并行跑
+        run(step)
+        sorter.done(step)
+
+try:
+    TopologicalSorter({"a": ["b"], "b": ["a"]}).prepare()
+except CycleError as error:
+    print("循环依赖：", error.args[1])  # ['a', 'b', 'a']</pre>
+<p>完整可运行的版本（安装顺序、用线程池并行构建、找出循环依赖）在 <code>examples/topo_sort_in_practice.py</code>（<code>uv run examples/topo_sort_in_practice.py</code>）。下面看它内部是怎么排的。</p>
+
+<h2>问题长什么样</h2>
+<p>把课程画成有向图：<code>u → v</code> 表示“学 v 之前要先学 u”。</p>
+<div class="row">
+  <span class="box">微积分</span><span>→</span><span class="box">数据结构</span><span>→</span><span class="box">算法</span>
+  <span class="label">（编程入门 → 数据结构 也成立）</span>
+</div>
+<p>一个合法的顺序：微积分、编程入门、数据结构、算法……答案<b>往往不止一个</b>，只要每条边都“从前指向后”就行。</p>
+<p>前提：图里<b>不能有环</b>。A 要先学 B、B 又要先学 A，谁都开不了头。没有环的有向图叫 DAG。</p>
+
+<h2>Kahn 算法：先学没有先修课的</h2>
+<p><b>入度</b> = 指向这个点的边数 = 它还差几门先修课。入度为 0 的课，现在就能学。</p>
+<pre>from collections import deque
+from graphlib import CycleError
+
+def topological_order(dependencies):         # {课: [它的先修课, ...]}
+    dependents = {}                          # 反过来存：先修课 -&gt; 依赖它的课
+    remaining = {}                           # 入度：每门课还差几门先修课
+    for course, prerequisites in dependencies.items():
+        remaining.setdefault(course, 0)
+        dependents.setdefault(course, [])
+        for prerequisite in set(prerequisites):   # 重复的依赖只算一次
+            dependents.setdefault(prerequisite, []).append(course)
+            remaining.setdefault(prerequisite, 0)
+            remaining[course] += 1
+
+    queue = deque(course for course, count in remaining.items() if count == 0)
+    order = []
+    while queue:
+        course = queue.popleft()             # 学完这门课
+        order.append(course)
+        for dependent in dependents[course]: # 它不再挡着后面的课
+            remaining[dependent] -= 1
+            if remaining[dependent] == 0:
+                queue.append(dependent)      # 这门课的先修课全学完了
+    if len(order) &lt; len(remaining):
+        raise CycleError("存在循环依赖")
+    return order</pre>
+<p>注意输入存的是“我依赖谁”，而 Kahn 算法要的是“谁依赖我”（学完一门课，去给后面的课减入度），所以第一步先把边反过来存一份。</p>
+<div class="row">
+  <span class="label">队列：</span><span class="box hot">微积分</span><span class="box hot">编程入门</span>
+  <span class="label">← 一开始入度为 0 的都进来</span>
+</div>
+
+<h2>有环会怎样：排不完</h2>
+<p>环上的点互相挡着，入度永远减不到 0，永远进不了队列。所以<b>队列空了、结果却不到 n 个</b>，就说明有环。拓扑排序顺手就把“有没有环”判断了。</p>
+
+<h2>复杂度</h2>
+<table>
+  <tr><th>步骤</th><th>代价</th></tr>
+  <tr><td>建邻接表、数入度</td><td>O(n + m)</td></tr>
+  <tr><td>每个点进出队列一次</td><td>O(n)</td></tr>
+  <tr><td>每条边减一次入度</td><td>O(m)</td></tr>
+  <tr><th>合计</th><th>O(n + m)，n 个点、m 条边</th></tr>
+</table>
+
+<h2>动手玩</h2>
+<p>先点<b>排序（无环）</b>，盯住橙色的入度数字怎么往下掉；再点<b>排序（有环）</b>，多了一条“编程入门要先修毕设”的边，看排到哪里卡住。</p>
+<div class="demo" id="topo"></div>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li>方向搞反：<code>{"数据结构": ["微积分"]}</code> 是数据结构<b>依赖</b>微积分，所以是<b>数据结构的</b>入度加一，微积分学完后去给数据结构减一。</li>
+  <li>忘了<b>只出现在依赖里的点</b>（上例的微积分可能不是键）：它入度为 0，一开始就该入队。</li>
+  <li>有环时不报错，悄悄返回一个不完整的列表。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/topo_sort.py</code>。输入格式和 <code>graphlib</code> 一样（节点 → 它依赖的节点），节点可以是任何可哈希的东西，有环抛 <code>graphlib.CycleError</code>。建议顺序：<code>topological_order</code> → <code>parallel_batches</code>（一次拿走当前所有入度为 0 的点，作为可以并行的一批）→ <code>has_cycle</code>（一两行就够）。测试不比对唯一答案，只检查每个节点是不是都排在它的依赖后面；<code>parallel_batches</code> 的结果会和 <code>graphlib</code> 逐批比对。</p>
+<pre>uv run dsa/topo_sort.py               # 构建流水线的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_topo_sort.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 队列换成栈，结果还对吗？</summary>
+对。只要每次取出的点入度为 0 就行，取的先后只影响得到哪一个合法顺序。</details>
+<details><summary>2. 怎么判断拓扑序是不是唯一的？</summary>
+每一步队列里都恰好只有 1 个点，顺序就是唯一的；某一步有 2 个以上可选，就不唯一。</details>
+<details><summary>3. 除了 Kahn，还有别的做法吗？</summary>
+用 DFS：一个点的所有后继都访问完时，把它记下来；最后把记录反过来就是拓扑序。</details>
+
+<div class="nav"><a href="13-graph-traversal.html">← 上一课：图的遍历</a><a href="15-union-find.html">下一课：并查集 →</a></div>
+<script src="anim.js"></script>
+<script src="js/14-topological-sort.js"></script>
+</body>
+</html>

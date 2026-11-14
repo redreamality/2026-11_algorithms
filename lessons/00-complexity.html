@@ -10,6 +10,26 @@
 <h1>第 0 课 · 复杂度</h1>
 <p class="one-line">复杂度说的不是“跑几秒”，而是<b>数据变多时，要做的工作涨得多快</b>。</p>
 
+<h2>实战里怎么写：复杂度藏在一行代码里</h2>
+<p>日常 Python 代码里很少需要“专门写算法”，真正踩坑的往往是一行看着无害的代码。最常见的就是在循环里对 <code>list</code> 用 <code>in</code>：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>反复问“x 在不在这批数据里”</td><td>先转成 <code>set</code> 再查</td><td>转一次 O(n)，之后每次平均 O(1)</td></tr>
+  <tr><td>查重</td><td><code>len(set(items)) != len(items)</code></td><td>O(n)</td></tr>
+  <tr><td>去重并保留顺序</td><td><code>list(dict.fromkeys(items))</code></td><td>O(n)</td></tr>
+  <tr><td>统计每个值出现几次</td><td><code>collections.Counter(items)</code></td><td>O(n)</td></tr>
+  <tr><td>拿不准哪种写法快</td><td>标准库 <code>timeit</code> 量一下</td><td>别猜</td></tr>
+</table>
+<pre>def new_customers(today_orders, known_customers):
+    """今天下单的人里，哪些是新客户。"""
+    known_set = set(known_customers)          # O(m)，只做一次
+    return [customer for customer in today_orders
+            if customer not in known_set]     # 每次 O(1)，整体 O(n + m)
+
+# 如果直接写 customer not in known_customers（一个 list），
+# 每次都要从头扫一遍，整体变成 O(n × m)：5000 个老客户、1000 个订单就是 500 万次比较。</pre>
+<p>完整可运行的版本在 <code>examples/complexity_in_practice.py</code>（<code>uv run examples/complexity_in_practice.py</code>），会用 <code>timeit</code> 打印两种写法的实际耗时。下面讲怎么一眼看出这种差别。</p>
+
 <h2>一个类比</h2>
 <p>你在班里找一个人：</p>
 <ul>
@@ -27,6 +47,8 @@
   <tr><td>O(n log n)</td><td>10,000</td><td>好的排序</td></tr>
   <tr><td>O(n²)</td><td>1,000,000</td><td>两层循环</td></tr>
 </table>
+<p><b>动手：</b>把 n 从 1 拖到 100，看 O(n²) 怎么把其他几档甩开（条形以 n² 为满格）。</p>
+<div class="demo" id="growth"></div>
 
 <h2>怎么看出来</h2>
 <p>只看<b>循环套了几层、每层跑多少次</b>，常数和小项都扔掉：</p>
@@ -42,14 +64,20 @@ for j in range(n): ...      # + n  → 2n → 还是 O(n)</pre>
 <p>同样的道理，问的是：<b>额外</b>开了多少内存？只用几个变量是 O(1)；新建一个和输入一样大的 set 就是 O(n)。
 很多时候是<b>拿空间换时间</b>，这节课的练习就是例子。</p>
 
+<h2>动手：两种办法找重复</h2>
+<p>同一组数，分别用两种办法跑一遍，比比底下的次数。再点“换一组数”多试几次。</p>
+<div class="demo" id="dup"></div>
+
 <h2>练习</h2>
-<p>问题：列表里有没有重复的数？在 <code>dsa/complexity.py</code> 里用三种办法各写一遍：</p>
+<p>场景：活动报名表里，有没有人用同一个邮箱报了两次？在 <code>dsa/complexity.py</code> 里用三种办法各写一遍，再写一个业务里真正会用的：</p>
 <ol>
   <li><code>has_duplicate_slow</code>：两层循环，两两比较。O(n²)。</li>
-  <li><code>has_duplicate_sorted</code>：排好序后，重复的数一定挨在一起。O(n log n)。</li>
-  <li><code>has_duplicate_fast</code>：用 set 记住见过的数。O(n)，但要 O(n) 的额外空间。</li>
+  <li><code>has_duplicate_sorted</code>：排好序后，重复的值一定挨在一起。O(n log n)。</li>
+  <li><code>has_duplicate_fast</code>：用 set 记住见过的值，碰到重复立刻返回。O(n)，但要 O(n) 的额外空间。它还要能接收生成器，比如 <code>has_duplicate_fast(email.lower() for email in emails)</code>，所以只能 <code>for</code> 走一遍。</li>
+  <li><code>find_duplicates</code>：把重复的邮箱都列出来，每个只列一次。O(n)。</li>
 </ol>
-<pre>uv run pytest tests/test_complexity.py</pre>
+<pre>uv run dsa/complexity.py                # 报名表的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_complexity.py</pre>
 
 <h2>自测</h2>
 <details><summary>1. 下面这段是 O(?)<pre>i = 1
@@ -57,10 +85,12 @@ while i &lt; n:
     i = i * 2</pre></summary>
 O(log n)。i 每次翻倍，翻 log₂n 次就超过 n 了。</details>
 <details><summary>2. <code>has_duplicate_sorted</code> 为什么不能写 <code>nums.sort()</code>？</summary>
-<code>sort()</code> 会改掉调用者传进来的列表，这是副作用。用 <code>sorted(nums)</code> 生成一份新的。</details>
+<code>sort()</code> 会改掉调用者传进来的列表，这是副作用。用 <code>sorted(items)</code> 生成一份新的。</details>
 <details><summary>3. 三种解法里，什么时候 slow 版反而合适？</summary>
 n 很小（比如 10 个以内），或者内存极紧张、又不能改原数据的时候。复杂度只描述“n 很大时”的趋势。</details>
 
 <div class="nav"><a href="index.html">← 目录</a><a href="01-dynamic-array.html">下一课：动态数组 →</a></div>
+<script src="anim.js"></script>
+<script src="js/00-complexity.js"></script>
 </body>
 </html>

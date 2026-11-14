@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 39 课 · 位运算技巧</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.bits { display: grid; gap: 3px 4px; align-items: center; margin: 8px 0; justify-content: start; }
+.bits .box { min-width: 22px; padding: 2px 4px; }
+.bits .box.one { background: #c8e6c9; border-color: #2e7d32; }
+.bits .box.gone { background: #ffcdd2; border-color: #c62828; }
+.bits .box.hot { background: #ffe0b2; border-color: #e65100; }
+.bits .box.fade { opacity: .35; }
+.bits .label { text-align: center; }
+.bits .num { font-family: Consolas, monospace; text-align: right; padding-right: 6px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.box.pick { background: #c8e6c9; border-color: #2e7d32; }
+.steps li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 39 课 · 位运算技巧</h1>
+<p class="one-line">位运算是把一个整数看成<b>一排开关</b>（二进制的每一位是 0 或 1），一次性对所有开关做同样的操作。面试里常考的就几招：<b>异或让成对的数抵消</b>、<b>n &amp; (n - 1) 去掉最低位的 1</b>、<b>用一个整数的各位表示“选了哪些东西”</b>。</p>
+
+<h2>实战里怎么写：enum.Flag、bit_count、ipaddress</h2>
+<p>Python 业务代码里很少直接写 <code>&amp;</code>、<code>|</code>，但位运算无处不在：权限和开关、子网掩码、用一个整数表示一个小集合。多数情况标准库已经包好了。</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>权限、开关、选项的组合</td><td><code>enum.Flag</code>：<code>|</code> 组合，<code>in</code> 判断，<code>&amp;= ~</code> 去掉</td><td>O(1)，一个整数存下所有开关</td></tr>
+  <tr><td>数一个整数里有几个 1</td><td><code>int.bit_count()</code>（Python 3.10+）</td><td>O(1)，C 实现</td></tr>
+  <tr><td>IP 在不在网段里、掩码是多少</td><td>标准库 <code>ipaddress</code></td><td>底层就是 ip &amp; 掩码 == 网段地址</td></tr>
+  <tr><td>元素不超过二三十个的集合（技能、选中的人）</td><td>整数当集合（状态压缩）</td><td>并、交是 O(1)；枚举所有子集 O(2<sup>n</sup>)</td></tr>
+</table>
+<pre>import ipaddress
+from enum import Flag, auto
+
+class Permission(Flag):
+    READ = auto()        # 0b001
+    WRITE = auto()       # 0b010
+    DELETE = auto()      # 0b100
+
+user = Permission.READ | Permission.WRITE
+Permission.WRITE in user             # True，等价于 (user &amp; WRITE) == WRITE
+user &amp;= ~Permission.WRITE            # 收回写权限，只剩 READ
+
+(0b1010_0001).bit_count()            # 3：打开了 3 个功能开关
+
+network = ipaddress.ip_network("192.168.1.0/24")
+ipaddress.ip_address("192.168.1.77") in network                       # True
+int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(network.network_address)   # 同一件事</pre>
+<p>完整可运行的版本在 <code>examples/bit_manipulation_in_practice.py</code>（<code>uv run examples/bit_manipulation_in_practice.py</code>），里面还有一个状态压缩的例子：每个技能占一位，枚举所有“选人方案”的位掩码，找出技能覆盖全部需求的最小团队，用的正是本课题 4 的写法。</p>
+
+<h2>先回顾：五个运算符的直觉</h2>
+<p>下面用 12（二进制 <code>1100</code>）和 10（二进制 <code>1010</code>）举例。每个运算都是<b>一位一位分别算</b>，各位之间互不影响（移位除外）。</p>
+<table>
+  <tr><th>运算</th><th>规则</th><th>直觉</th><th>例子</th></tr>
+  <tr><td><code>a &amp; b</code> 与</td><td>两位都是 1，结果才是 1</td><td>“过滤”：只保留两边都开着的开关。常用来<b>检查</b>某一位是不是 1</td><td>1100 &amp; 1010 = 1000（8）</td></tr>
+  <tr><td><code>a | b</code> 或</td><td>有一位是 1，结果就是 1</td><td>“合并”：把开关打开。常用来<b>设置</b>某一位为 1</td><td>1100 | 1010 = 1110（14）</td></tr>
+  <tr><td><code>a ^ b</code> 异或</td><td>两位不同是 1，相同是 0</td><td>“翻转”：b 里是 1 的位置，把 a 的那一位翻过来。<b>自己异或自己是 0</b></td><td>1100 ^ 1010 = 0110（6）</td></tr>
+  <tr><td><code>a &lt;&lt; k</code> 左移</td><td>整体往左挪 k 位，右边补 0</td><td>乘以 2<sup>k</sup></td><td>0011 &lt;&lt; 2 = 1100（3 → 12）</td></tr>
+  <tr><td><code>a &gt;&gt; k</code> 右移</td><td>整体往右挪 k 位，最右边 k 位丢掉</td><td>除以 2<sup>k</sup> 向下取整</td><td>1101 &gt;&gt; 1 = 0110（13 → 6）</td></tr>
+</table>
+<p>还有一个取反 <code>~a</code>：每一位都翻过来。在 Python 里整数没有固定位数，<code>~a</code> 的结果是 <code>-a - 1</code>，平时很少直接用。</p>
+
+<h2>常用小招式</h2>
+<p>下面的 k 表示“第 k 位”，最右边是第 0 位。<code>1 &lt;&lt; k</code> 就是“只有第 k 位是 1”的数，叫做<b>掩码</b>（mask）。</p>
+<table>
+  <tr><th>想做什么</th><th>写法</th><th>为什么</th></tr>
+  <tr><td>第 k 位是不是 1</td><td><code>(number &gt;&gt; k) &amp; 1</code></td><td>把第 k 位挪到最右边，再只看最右边一位</td></tr>
+  <tr><td>把第 k 位设成 1</td><td><code>number | (1 &lt;&lt; k)</code></td><td>和掩码“或”，那一位一定变成 1，其它位不变</td></tr>
+  <tr><td>把第 k 位清成 0</td><td><code>number &amp; ~(1 &lt;&lt; k)</code></td><td><code>~(1 &lt;&lt; k)</code> 除了第 k 位全是 1，“与”之后只有第 k 位被清掉</td></tr>
+  <tr><td>翻转第 k 位</td><td><code>number ^ (1 &lt;&lt; k)</code></td><td>和 1 异或就是翻转，和 0 异或不变</td></tr>
+  <tr><td>判断奇偶</td><td><code>number &amp; 1</code></td><td>最低位是 1 就是奇数</td></tr>
+  <tr><td><b>去掉最低位的 1</b></td><td><code>number &amp; (number - 1)</code></td><td>见下面题 2，本课最重要的一招</td></tr>
+  <tr><td>只留下最低位的 1</td><td><code>number &amp; -number</code></td><td>拓展了解，树状数组会用到</td></tr>
+</table>
+<p><b>养成加括号的习惯</b>。在 Python 里，<code>&amp;</code> 比 <code>==</code> 优先级高，所以 <code>number &amp; 1 == 0</code> 恰好是对的；但在 C、Java、JavaScript 里它会被理解成 <code>number &amp; (1 == 0)</code>。另外移位比加减优先级低，<code>1 &lt;&lt; k - 1</code> 是 <code>1 &lt;&lt; (k - 1)</code>。写成 <code>(number &amp; 1) == 0</code>、<code>(1 &lt;&lt; k) - 1</code> 就不用记这些。</p>
+
+<h2>题 1：只出现一次的数字（LeetCode 136）</h2>
+<p><b>题意</b>：数组里除了一个数只出现一次，其余每个数都恰好出现两次。找出只出现一次的那个。要求 O(n) 时间、O(1) 额外空间。</p>
+<p><b>例子</b>：<code>[4, 1, 2, 1, 2]</code>，1 和 2 都出现两次，返回 4。</p>
+<p><b>普通做法为什么不满足要求</b>：用字典数每个数出现几次，时间 O(n)，但要 O(n) 额外空间；先排序再看相邻的数，空间省了，但时间是 O(n log n)。</p>
+<p><b>关键观察</b>：异或有三个性质——</p>
+<ul>
+  <li><code>x ^ x = 0</code>：每一位都和自己相同，全变成 0。</li>
+  <li><code>x ^ 0 = x</code>：和 0 异或，每一位都不变。</li>
+  <li>异或可以<b>随意交换顺序、随意加括号</b>（交换律、结合律），因为每一位都是独立地“数 1 的个数是奇数还是偶数”。</li>
+</ul>
+<p><b>这个技巧怎么用上去</b>：把所有数异或起来。因为顺序可以随便换，可以想象先把成对的数排到一起：<code>4 ^ 1 ^ 2 ^ 1 ^ 2 = 4 ^ (1 ^ 1) ^ (2 ^ 2) = 4 ^ 0 ^ 0 = 4</code>。成对的全部抵消成 0，剩下的就是只出现一次的那个。</p>
+<pre>def single_number(numbers):
+    single = 0
+    for number in numbers:
+        single ^= number          # 成对的数异或后抵消成 0
+    return single
+
+# 实际项目里也常写成一行：functools.reduce(operator.xor, numbers, 0)</pre>
+<p><b>为什么是对的</b>：看任意一位。出现两次的数在这一位上贡献了偶数个 1（要么 0 个，要么 2 个），异或的结果只看这一位上 1 的个数是奇是偶，偶数个 1 等于没有。所以每一位的结果，都只由只出现一次的那个数决定。</p>
+<p><b>复杂度</b>：O(n) 时间，O(1) 额外空间。</p>
+<p><b>同一招的变体：丢失的数字（LeetCode 268）</b>。0..n 里缺了一个数，数组里有其余 n 个。把 0..n 全部和数组里的数一起异或，出现两次的抵消，剩下的就是缺的那个。</p>
+
+<h2>题 2：n &amp; (n - 1)：去掉最低位的 1</h2>
+<p><b>它在做什么</b>：减 1 的时候，二进制从最低位开始借位：<b>最低位的那个 1 变成 0，它右边的 0 全部变成 1</b>，更高的位不变。再和原数“与”一下，变化过的那几位全部变成 0，更高的位保持原样。结果就是：<b>原数去掉了最低位的那个 1</b>。</p>
+<table>
+  <tr><th></th><th>十进制</th><th>二进制</th></tr>
+  <tr><td>number</td><td>12</td><td><code>1100</code></td></tr>
+  <tr><td>number - 1</td><td>11</td><td><code>1011</code>（最低位的 1 变 0，右边的 0 变 1）</td></tr>
+  <tr><td>number &amp; (number - 1)</td><td>8</td><td><code>1000</code>（第 2 位的 1 被去掉了）</td></tr>
+</table>
+<h3>用法一：位 1 的个数（LeetCode 191）</h3>
+<p><b>题意</b>：一个非负整数的二进制里有几个 1。例如 11 = <code>1011</code>，有 3 个 1。</p>
+<p><b>普通做法</b>：一位一位地看（<code>number &amp; 1</code>，然后右移），要循环“二进制的总位数”次，32 位整数就是 32 次。</p>
+<p><b>用上这一招</b>：反复执行 <code>number &amp;= number - 1</code>，每次正好去掉一个 1，直到变成 0。去了几次，就有几个 1。循环次数等于 1 的个数，对“1 很少”的数特别快。</p>
+<pre>def count_one_bits(number):
+    one_bit_count = 0
+    while number:
+        number &amp;= number - 1      # 去掉最低位的 1
+        one_bit_count += 1
+    return one_bit_count
+
+# 实际项目里直接用 number.bit_count()（Python 3.10+），这里手写是为了练 n &amp; (n - 1)</pre>
+<h3>用法二：2 的幂（LeetCode 231）</h3>
+<p><b>题意</b>：判断一个整数是不是 2 的幂（1、2、4、8、16……）。</p>
+<p><b>关键观察</b>：2 的幂的二进制<b>恰好只有一个 1</b>（16 = <code>10000</code>）。去掉这唯一的 1 之后就变成 0。反过来，有两个以上 1 的数，去掉最低位的那个后还剩别的 1，不是 0。</p>
+<pre>def is_power_of_two(number):
+    return number &gt; 0 and (number &amp; (number - 1)) == 0</pre>
+<p><code>number &gt; 0</code> 不能省：0 没有任何 1，<code>0 &amp; -1</code> 也等于 0，会被误判成 2 的幂；负数也不是 2 的幂。<b>复杂度</b>：O(1)。</p>
+
+<h2>题 3：比特位计数（LeetCode 338）</h2>
+<p><b>题意</b>：给一个 limit，返回长度为 limit + 1 的列表，第 i 项是 i 的二进制里 1 的个数。</p>
+<p><b>例子</b>：limit = 5，0..5 的二进制是 0、1、10、11、100、101，返回 <code>[0, 1, 1, 2, 1, 2]</code>。</p>
+<p><b>普通做法为什么慢</b>：对每个数单独去数，是 O(limit × 位数)。</p>
+<p><b>关键观察</b>：这其实是一道一维 DP。<code>i &gt;&gt; 1</code> 是把 i 的最后一位去掉，它比 i 小，答案已经算过；i 比它多出来的只有最后一位 <code>i &amp; 1</code>。</p>
+<ol class="steps">
+  <li>状态：<code>one_bit_count[i]</code> = i 的二进制里 1 的个数。</li>
+  <li>转移：<code>one_bit_count[i] = one_bit_count[i &gt;&gt; 1] + (i &amp; 1)</code>。另一种写法用上题 2 的招式：<code>one_bit_count[i] = one_bit_count[i &amp; (i - 1)] + 1</code>（去掉一个 1 之后的数更小，也算过了）。</li>
+  <li>初始值：<code>one_bit_count[0] = 0</code>。</li>
+  <li>遍历顺序：i 从 1 到 limit。</li>
+</ol>
+<p>例如 5 = <code>101</code>：<code>5 &gt;&gt; 1</code> = 2 = <code>10</code>，有 1 个 1；5 的最后一位是 1，所以 5 有 1 + 1 = 2 个 1。<b>复杂度</b>：O(limit)。</p>
+
+<h2>题 4：用位掩码枚举子集（LeetCode 78）</h2>
+<p><b>题意</b>：列出一个数组（元素互不相同）的所有子集。第 21 课用回溯写过，这里换一种写法。</p>
+<p><b>关键观察</b>：n 个元素，每个元素“选或不选”，正好对应一个 n 位二进制数的每一位“1 或 0”。所以 0 到 2<sup>n</sup> − 1 这 2<sup>n</sup> 个整数，和 2<sup>n</sup> 个子集<b>一一对应</b>。这个整数就叫<b>位掩码</b> <code>bit_mask</code>：第 k 位是 1，就表示选了 <code>items[k]</code>。</p>
+<table>
+  <tr><th>bit_mask</th><th>二进制（第 2、1、0 位）</th><th>items = [1, 2, 3] 的子集</th></tr>
+  <tr><td>0</td><td><code>000</code></td><td>[]</td></tr>
+  <tr><td>1</td><td><code>001</code></td><td>[1]</td></tr>
+  <tr><td>2</td><td><code>010</code></td><td>[2]</td></tr>
+  <tr><td>3</td><td><code>011</code></td><td>[1, 2]</td></tr>
+  <tr><td>5</td><td><code>101</code></td><td>[1, 3]</td></tr>
+  <tr><td>7</td><td><code>111</code></td><td>[1, 2, 3]</td></tr>
+</table>
+<pre>def subsets_by_bit_mask(items):
+    all_subsets = []
+    for bit_mask in range(1 &lt;&lt; len(items)):          # 0 到 2^n - 1
+        subset = [items[k] for k in range(len(items)) if (bit_mask &gt;&gt; k) &amp; 1]
+        all_subsets.append(subset)
+    return all_subsets
+
+# 只要子集、不需要位掩码时，标准库写法是
+# chain.from_iterable(combinations(items, size) for size in range(len(items) + 1))</pre>
+<p><b>和回溯比</b>：没有递归，代码更短；而且一个子集可以用一个整数表示，能当字典的键、能存进数组。所以状态压缩 DP（比如“已经访问过哪些城市”）都用位掩码。缺点是 n 不能太大，n = 20 时已经有一百万个子集。<b>复杂度</b>：O(n × 2<sup>n</sup>)。</p>
+
+<h2>动手玩</h2>
+<p>三个按钮各演示一招。<b>异或抵消</b>：每一行是一个数的二进制，最下面一行是到目前为止的异或结果，看成对的数怎样让每一位翻回去。<b>去掉最低位的 1</b>：每一步红色的那一位被 <code>number &amp; (number - 1)</code> 清掉，数一共清了几次。<b>位掩码枚举子集</b>：bit_mask 从 0 数到 7，绿色的位对应被选中的元素。</p>
+<div class="demo" id="bits"></div>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>题</th><th>用到的招式</th><th>时间</th><th>额外空间</th></tr>
+  <tr><td>只出现一次的数字</td><td>异或抵消</td><td>O(n)</td><td>O(1)</td></tr>
+  <tr><td>丢失的数字</td><td>异或抵消</td><td>O(n)</td><td>O(1)</td></tr>
+  <tr><td>位 1 的个数</td><td>n &amp; (n - 1)</td><td>O(1 的个数)</td><td>O(1)</td></tr>
+  <tr><td>2 的幂</td><td>n &amp; (n - 1)</td><td>O(1)</td><td>O(1)</td></tr>
+  <tr><td>比特位计数</td><td>i &gt;&gt; 1 做 DP</td><td>O(limit)</td><td>O(limit)（结果本身）</td></tr>
+  <tr><td>枚举子集</td><td>位掩码</td><td>O(n × 2<sup>n</sup>)</td><td>O(n × 2<sup>n</sup>)（结果本身）</td></tr>
+</table>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li>“<b>其余都出现两次</b>，找出现一次的”“找<b>缺失</b>的数”“要求 O(1) 额外空间”：想异或抵消。</li>
+  <li>“<b>二进制</b>里有几个 1”“<b>2 的幂</b>”“汉明距离”：想 <code>n &amp; (n - 1)</code>。</li>
+  <li>“<b>所有子集</b>”而且 n 很小（一般 n ≤ 20），或者需要用一个数记住“哪些东西已经用过 / 访问过”：想位掩码。</li>
+  <li>“<b>不用加减乘除</b>”实现某个运算：想用异或做“不进位的加法”、用与和左移算进位。</li>
+  <li>题目给的数据范围特别提到“32 位整数”“非负整数”，往往是在暗示位运算。</li>
+</ul>
+
+<h2>LeetCode 对应题目</h2>
+<table>
+  <tr><th>题号</th><th>中文题名</th><th>本课对应</th></tr>
+  <tr><td>136</td><td>只出现一次的数字</td><td>题 1</td></tr>
+  <tr><td>268</td><td>丢失的数字</td><td>题 1 的变体（选做）</td></tr>
+  <tr><td>137</td><td>只出现一次的数字 II</td><td>拓展：其余出现三次，按位统计 1 的个数再对 3 取余</td></tr>
+  <tr><td>260</td><td>只出现一次的数字 III</td><td>拓展：有两个只出现一次，先全部异或，再按某一个为 1 的位分成两组</td></tr>
+  <tr><td>191</td><td>位 1 的个数</td><td>题 2 用法一</td></tr>
+  <tr><td>231</td><td>2 的幂</td><td>题 2 用法二</td></tr>
+  <tr><td>461</td><td>汉明距离</td><td>练手：两个数异或后数 1 的个数</td></tr>
+  <tr><td>338</td><td>比特位计数</td><td>题 3</td></tr>
+  <tr><td>78</td><td>子集</td><td>题 4</td></tr>
+  <tr><td>190</td><td>颠倒二进制位</td><td>练手：逐位取出再拼到另一头</td></tr>
+  <tr><td>371</td><td>两整数之和</td><td>拓展：不用加号做加法（Python 里要手动处理负数，较麻烦）</td></tr>
+</table>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>负数</b>：Python 的整数没有固定位数，负数在位运算里相当于左边有无穷多个 1。对负数执行 <code>while number: number &amp;= number - 1</code> 永远停不下来。本课除了异或类的题，输入都是非负整数；遇到要求按 32 位处理负数的题，先 <code>number &amp;= 0xFFFFFFFF</code>。</li>
+  <li><b>2 的幂忘了判断 number &gt; 0</b>：0 会被误判成 True。</li>
+  <li><b>优先级</b>：不确定的时候一律加括号，尤其是从别的语言改写过来的代码。</li>
+  <li><b>第 k 位从哪数起</b>：最右边是第 0 位。<code>1 &lt;&lt; n</code> 是 2<sup>n</sup>，枚举子集时 <code>range(1 &lt;&lt; n)</code> 正好是 0 到 2<sup>n</sup> − 1。</li>
+  <li>异或抵消只对“<b>恰好出现偶数次</b>”的数有效；出现三次的数不会被抵消（那是 LeetCode 137 的情况）。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/bit_manipulation.py</code>。建议顺序：<code>single_number</code> → <code>count_one_bits</code> → <code>is_power_of_two</code> → <code>count_bits_up_to</code> → <code>subsets_by_bit_mask</code> →（选做）<code>missing_number</code>。</p>
+<pre>uv run dsa/bit_manipulation.py</pre>
+<p>脚本会对每个函数跑几个例子，打印「输入、期望、实际」。</p>
+
+<h2>自测</h2>
+<details><summary>1. 为什么 number &amp; (number - 1) 正好去掉最低位的 1？</summary>
+减 1 时从最低位借位：最低位的那个 1 变成 0，它右边的 0 全变成 1，更高的位不变。和原数“与”时，最低位的 1 那一位是 1 &amp; 0 = 0，它右边那些位是 0 &amp; 1 = 0，更高的位是自己和自己“与”，不变。所以只有最低位的 1 被去掉了。</details>
+<details><summary>2. 一个数组里，除了一个数出现一次，其余都出现两次。如果用求和来做（2 × 所有不同的数之和 − 数组之和）可以吗？和异或比有什么缺点？</summary>
+可以算对，但要先找出“所有不同的数”，这需要一个集合，额外空间就是 O(n) 了。另外在有固定位数的语言里，求和还可能溢出。异或既不用额外空间，也不会溢出。</details>
+<details><summary>3. 比特位计数里，为什么 one_bit_count[i &gt;&gt; 1] 一定已经算好了？</summary>
+i ≥ 1 时 i &gt;&gt; 1 = i // 2 &lt; i，而我们是从小到大填表的，比 i 小的下标都已经填过。这正是四步法第 4 步“遍历顺序要保证用到的状态已经算好”。</details>
+
+<div class="nav"><a href="38-dp-2d.html">← 上一课：二维 DP 高频题</a><a href="index.html">回到目录 →</a></div>
+<script src="anim.js"></script>
+<script src="js/39-bit-manipulation.js"></script>
+</body>
+</html>
