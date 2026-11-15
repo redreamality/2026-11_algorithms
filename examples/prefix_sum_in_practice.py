@@ -52,7 +52,9 @@ def main() -> None:
     print("每笔交易后的余额：", balances)
 
     picker = WeightedPicker(["旧版", "新版"], [90, 10])
-    rng = random.Random(27)  # 固定种子，结果可复现
+    # random.Random(27)：造一个独立的随机数生成器，27 是种子（作用和预备课讲的 random.seed(27) 一样）。
+    # rng.random() 返回 [0, 1) 之间的小数。用独立的生成器比直接用 random 模块函数更可控。
+    rng = random.Random(27)
     counts = Counter(picker.pick(rng) for _ in range(10_000))
     assert 8800 < counts["旧版"] < 9200
     print("1 万次分流：", dict(counts))

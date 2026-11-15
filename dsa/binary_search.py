@@ -12,6 +12,7 @@
   例子：按年龄找人，bisect_left(people, 30, key=lambda person: person.age)。
 - 和 bisect 一样：hi 为 None 表示 len(items)；lo < 0 抛 ValueError。
 - 异常和标准库一致：index 找不到抛 ValueError（和 list.index 一样），isqrt 负数抛 ValueError。
+- 签名里的裸 `*`（如 *, key）：它后面的参数只能按关键字传（key=...），不能按位置传。
 
 写完后运行 uv run dsa/binary_search.py，看端到端的例子是否和期望一致；再跑 uv run pytest tests/test_binary_search.py。
 """

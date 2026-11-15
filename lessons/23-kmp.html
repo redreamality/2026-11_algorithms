@@ -19,9 +19,10 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 23 课 · 选修 · KMP 字符串匹配</h1>
 <p class="one-line">在文本里找模式串。暴力法一失配就<b>退回去从头比</b>；KMP 记住“刚才已经对上了哪些字符”，失配时<b>文本指针不回头</b>，模式按一张前缀表直接往右跳。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器与 next(gen, 默认值)</a>（<code>find_all</code> 是生成器，<code>find</code> 靠 <code>next(..., -1)</code>）、<a href="python-basics.html#loop-tools">enumerate</a>、<a href="python-basics.html#exceptions">try / except 与 ValueError</a>（<code>index</code> 找不到要抛）、<a href="python-basics.html#lambda-key">lambda</a>（实战里给 <code>re.sub</code> 传替换函数）；预备课没讲标准库 <code>re</code>，下面实战一节开头就地补了最小用法。前面的课 —— 本课自成一体，暴力匹配和 KMP 都只用循环和字符串下标，不依赖某棵具体的前置结构。</p>
 
 <h2>实战里怎么写：直接用 str 和 re</h2>
-<p>日常代码里没人手写 KMP。Python 的字符串方法和 <code>re</code> 已经够用：</p>
+<p>日常代码里没人手写 KMP。Python 的字符串方法和 <code>re</code> 已经够用。<code>re</code> 是标准库的正则表达式模块（预备课没讲，这里只补本课用到的三样）：<code>re.finditer(模式, 文本)</code> 逐个给出每个匹配对象，用 <code>match.start()</code> 拿起点；<code>(?=...)</code> 叫<b>前瞻</b>，意思是“这个位置后面要跟得上一段内容”，所以匹配位置可以重叠（普通匹配会互相吃掉）；<code>re.escape(词)</code> 把普通字符串里的特殊字符转义掉，让它按字面意思匹配：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
   <tr><td>有没有</td><td><code>pattern in text</code></td><td>通常接近 O(n)</td></tr>

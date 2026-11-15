@@ -2,6 +2,7 @@
 
 排序本身直接用 sorted()，它的 Timsort 就是归并排序的改良版。归并的思想真正要自己用的地方是“合并有序数据”：
 1. 多个已经有序的序列（各服务器的日志、各分片的查询结果）→ heapq.merge，惰性、不用全读进内存。
+   用法：把任意多个已排好序的序列传给它（可加 key=、reverse=True），它按序逐个产出。内部用堆实现（第 12 课讲），这里只当现成工具用。
 2. 数据大到内存放不下 → 外部排序：切块，每块用 sorted 排好写到临时文件，再 heapq.merge 合起来。
 3. 只是把两个小列表合并后排序 → sorted(a + b) 最省事，Timsort 能识别出两段有序区，接近 O(n)。
 
@@ -25,13 +26,15 @@ def external_sort(numbers, chunk_size: int, work_folder: Path) -> list[int]:
     """场景二：外部排序。假装内存一次只放得下 chunk_size 个数。"""
     chunk_files = []
     iterator = iter(numbers)
-    for chunk_number in itertools.count():
+    chunk_number = 0
+    while True:
         chunk = list(itertools.islice(iterator, chunk_size))
         if not chunk:
             break
         path = work_folder / f"chunk_{chunk_number}.txt"
         path.write_text("".join(f"{value}\n" for value in sorted(chunk)), encoding="utf-8")
         chunk_files.append(path)
+        chunk_number += 1
     handles = [path.open(encoding="utf-8") for path in chunk_files]
     try:
         return [int(line) for line in heapq.merge(*handles, key=int)]  # 每个文件同时只读一行
@@ -49,8 +52,8 @@ def main() -> None:
     for line in timeline:
         print("   ", line)
 
-    rng = random.Random(8)
-    numbers = [rng.randint(0, 10_000) for _ in range(1_000)]
+    random.seed(8)  # 固定随机种子，每次运行生成同一批数
+    numbers = [random.randint(0, 10_000) for _ in range(1_000)]
     with tempfile.TemporaryDirectory() as folder:
         result = external_sort(numbers, chunk_size=128, work_folder=Path(folder))
         chunk_count = len(list(Path(folder).glob("chunk_*.txt")))

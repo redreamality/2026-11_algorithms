@@ -1,6 +1,6 @@
 """第 9 课：快速排序。讲解见 lessons/09-quick-sort.html
 
-实际项目里排序用 sorted() / list.sort()；“第 k 小 / 中位数 / 前几名”用 statistics.median、heapq.nsmallest，
+实际项目里排序用 sorted() / list.sort()；“第 k 小 / 中位数 / 前几名”用 statistics.median；前几名用 sorted(...)[:k] 先排再切，
 见 examples/quick_sort_in_practice.py。这里自己手写：
 - quick_sort(items, *, key=None, reverse=False)：用法和 list.sort 一样，原地排序、返回 None（但不稳定）。
 - select(iterable, k, *, key=None)：第 k 小的元素，不排序整个数组，平均 O(n)。拿来算中位数、P95 延迟。
@@ -13,6 +13,7 @@
 - 和 list.sort 一样，key 对每个元素只调用一次。做法：先建一个 (key, 原下标) 的列表，对它原地快排
   （原下标各不相同，所以永远不会去比较元素本身），排完再按原下标把元素重新排回 items。
 - select 不修改传进来的数据：先 list(iterable) 复制一份，在副本上分区。
+- 签名里的裸 `*`（如 *, key=None, reverse=False）：它后面的参数只能按关键字传（key=...），不能按位置传。
 
 写完后运行 uv run dsa/quick_sort.py，看端到端的例子是否和期望一致；再跑 uv run pytest tests/test_quick_sort.py。
 """

@@ -15,9 +15,10 @@ table.dp td.path { background: #ffcdd2; }
 <p><a href="index.html">← 目录</a></p>
 <h1>第 20 课 · 动态规划（二）：背包与序列</h1>
 <p class="one-line">上一课是“递归 + 记个本子”。这一课反过来：<b>直接画一张表，从小格子往大格子填</b>，填到右下角就是答案。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#class">NamedTuple</a>（骨架和实战里的 Item / Campaign）、<a href="python-basics.html#comprehension">推导式与二维表</a>（<code>[[0] * (budget + 1) for _ in range(...)]</code>）、<a href="python-basics.html#loop-tools">enumerate、range 倒序、切片 [::-1]</a>、<a href="python-basics.html#lambda-key">sorted 与 key=</a>、<a href="python-basics.html#fstring">f-string 的 {x!r}</a>、<a href="python-basics.html#abc">collections.abc 的 Sequence</a>；前面的课 —— <a href="19-dp-memo.html">第 19 课 · 动态规划（一）</a>（格子代表什么、从哪几个格子推出来）、<a href="18-greedy.html">第 18 课 · 贪心</a>（实战里“按性价比贪心”的反例）。</p>
 
 <h2>实战里怎么写：先看标准库有没有</h2>
-<p>这一课的几个 DP 在真实项目里天天出现，只是常常藏在库里：</p>
+<p>这一课的几个 DP 在真实项目里天天出现，只是常常藏在库里。<code>difflib</code> 是标准库里的文本对比模块（预备课没讲它，这里就地补两句话）：<code>unified_diff(旧, 新, ...)</code> 逐行给出和 <code>git diff</code> 一样的补丁，行前加 <code>-</code> 表示删、<code>+</code> 表示加、空格表示没变；<code>get_close_matches(词, 候选列表)</code> 挑出和这个词最接近的几个候选，拼写纠错就用它：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
   <tr><td>比较两个文件 / 两版配置，生成补丁</td><td>标准库 <code>difflib.unified_diff</code></td><td>约 O(n × m)，和 LCS 同一类</td></tr>

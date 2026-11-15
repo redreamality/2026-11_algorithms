@@ -14,9 +14,11 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 8 课 · 归并排序</h1>
 <p class="one-line">对半分，两半<b>各自排好</b>，再像拉拉链一样<b>合并</b>。分到只剩 1 个时，它自己就是有序的。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器（yield、iter、next）</a>、<a href="python-basics.html#yield-from">yield from</a>、<a href="python-basics.html#type-hints">类型标注（Iterable、Iterator）</a>、<a href="python-basics.html#itertools">itertools.islice</a>、<a href="python-basics.html#unpack">切片与 extend</a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归与分治</a>（归并排序是典型的分治）、<a href="07-simple-sorts.html">第 7 课 · 简单排序</a>（稳定性）、<a href="00-complexity.html">第 0 课 · 复杂度</a>。</p>
 
 <h2>实战里怎么写：排序用 sorted，合并用 heapq.merge</h2>
 <p><code>sorted()</code> 用的 Timsort 本身就是归并排序的改良版，不用自己写。归并的思想真正派上用场，是<b>合并已经有序的数据</b>：</p>
+<p>合并这件事标准库里有现成的：<code>heapq.merge(序列1, 序列2, …, key=…)</code>。把任意多个<b>已经排好序</b>的序列传给它，它就按从小到大的顺序逐个产出，边读边出、不用全部装进内存。reverse=True 表示输入和输出都是从大到小。它内部用「堆」实现——堆是第 12 课的主角，这里先当现成工具用，只记上面这几句用法就够。</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
   <tr><td>几台服务器的日志各自有序，合成一份时间线</td><td><code>heapq.merge(*files, key=...)</code></td><td>O(n log k)，k 路；惰性，每路同时只读一行</td></tr>

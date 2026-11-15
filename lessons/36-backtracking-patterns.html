@@ -19,6 +19,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 36 课 · 回溯高频题</h1>
 <p class="one-line">第 21 课的模板“选择 → 递归 → 撤销”能解决一大类题。面试里换花样，主要换的是三件事：<b>每一层在选什么</b>、<b>什么时候算走到底</b>、<b>哪些分支可以提前剪掉</b>。这一课用六道高频题把这三件事练熟，重点是“有重复元素时怎么去重”。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#itertools">itertools 的 <code>product</code>、<code>combinations</code>、<code>permutations</code></a>、<a href="python-basics.html#closure">嵌套函数与 <code>nonlocal</code></a>、<a href="python-basics.html#comprehension">推导式与生成器表达式（<code>any(...)</code>）</a>、<a href="python-basics.html#unpack">解包（<code>*arguments</code>）</a>、<a href="python-basics.html#loop-tools">切片复制 <code>path[:]</code></a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归</a>、<a href="21-backtracking.html">第 21 课 · 回溯</a>、<a href="35-grid-search.html">第 35 课 · 网格搜索</a>（单词搜索用到方向数组）。</p>
 
 <h2>实战里怎么写：先看 itertools 够不够</h2>
 <p>业务代码里“列出所有方案”很常见：CI 测试矩阵、商品规格组合、挑评审人、排班排课。前三种直接用标准库 <code>itertools</code>，一行就够；只有约束多、组合数爆炸时才手写回溯。</p>

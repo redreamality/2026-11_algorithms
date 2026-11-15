@@ -20,6 +20,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 18 课 · 贪心</h1>
 <p class="one-line">贪心就是<b>每一步都拿眼下最好的</b>，拿了不反悔。写起来最短，但只有在“局部最好能推出全局最好”时才对。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#lambda-key">lambda 与 key=</a>（<code>attrgetter</code> 见下方说明）、<a href="python-basics.html#loop-tools">divmod</a>、<a href="python-basics.html#dict-tools">Counter</a>、<a href="python-basics.html#class">NamedTuple</a>、<a href="python-basics.html#type-hints">类型标注</a>、<a href="python-basics.html#exceptions">异常</a>、<a href="python-basics.html#fstring">f-string 格式化</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>、<a href="07-simple-sorts.html">第 7 课 · 排序与稳定性</a>（结束时间相同时按输入顺序）。</p>
 
 <h2>实战里怎么写：sorted + 一次遍历</h2>
 <p>贪心在业务代码里不用调任何库，几乎都是“按某个关键字 <code>sorted</code>，再扫一遍，能要就要”。难的不是写，而是<b>选对排序关键字、确认贪心是对的</b>。</p>
@@ -49,6 +50,7 @@ def make_change_in_cents(amount, denominations=(10000, 5000, 2000, 1000, 500, 10
         raise ValueError(f"凑不出 {amount} 分")
     return change</pre>
 <p>完整可运行的版本（会议室、空闲时段、找零）在 <code>examples/greedy_in_practice.py</code>（<code>uv run examples/greedy_in_practice.py</code>）。下面讲这些写法为什么对、什么时候会错。</p>
+<p>两个预备课没细讲的写法，就地补一句：<code>attrgetter("end")</code> 和预备课见过的 <code>itemgetter(2)</code> 是一家，只是按<b>属性</b>名取值，这里等价于 <code>lambda booking: booking.end</code>；<code>sorted(denominations, reverse=True)</code> 里的 <code>reverse=True</code> 表示<b>从大到小</b>排（找零要从最大面值开始拿）。</p>
 
 <h2>一个类比</h2>
 <p>一天想多参加几个活动：先挑<b>最早结束</b>的那个，剩下的时间最多，后面能塞进去的也最多。然后在不冲突的里面再挑最早结束的……这就是贪心。</p>

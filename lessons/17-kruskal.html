@@ -22,6 +22,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 17 课 · 最小生成树（Kruskal）</h1>
 <p class="one-line">给几座村子修路，要让<b>所有村子都连通</b>，又要<b>总花费最少</b>。Kruskal 的办法很朴素：<b>从最便宜的路开始修，会绕成圈的就不修</b>。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#lambda-key">key=、operator.itemgetter 与排序稳定性</a>、<a href="python-basics.html#comprehension">字典推导式与生成器表达式</a>（<code>{room: room for room in rooms}</code>、<code>sum(w for _, _, w in tree)</code>）、<a href="python-basics.html#unpack">解包</a>（<code>for start, end, meters in ...</code>）、<a href="python-basics.html#exceptions">异常</a>（找不到答案时 <code>raise ValueError</code>）、<a href="python-basics.html#dict-tools">setdefault</a>、<a href="python-basics.html#type-hints">类型标注</a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="15-union-find.html">第 15 课 · 并查集</a>（判环靠它）、<a href="13-graph-traversal.html">第 13 课 · 图</a>（连通块）、<a href="00-complexity.html">第 0 课 · 复杂度</a>。</p>
 
 <h2>实战里怎么写：sorted + 小并查集</h2>
 <p>布网线、铺管道、修路这类“全连上、总成本最低”的问题，以及把相近的东西分组（门店划片区、相似文档归类），用的都是最小生成树。标准库没有现成的 MST，不过 Kruskal 就是 <b><code>sorted</code> 加上第 15 课的小并查集</b>，十几行就能写完。</p>

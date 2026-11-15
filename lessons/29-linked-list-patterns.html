@@ -15,6 +15,8 @@
 <h1>第 29 课 · 链表高频技巧</h1>
 <p class="one-line">链表面试题翻来覆去就是几招：<b>改指针前先记住后面的节点</b>（反转）、<b>在头前面放一个哑节点</b>（合并、删除）、<b>快慢指针</b>（找中点、判环、找入环点）、<b>前后指针拉开固定距离</b>（倒数第 N 个）。这一课把每一招讲透，并说明它为什么是对的。</p>
 
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#type-hints">类型标注（<code>X | None</code>、引号前向引用）</a>、<a href="python-basics.html#unpack">多重赋值（<code>slow = fast = head</code>）</a>、<a href="python-basics.html#fstring">f-string</a>、<a href="python-basics.html#exceptions">raise 与 try/except</a>、<a href="python-basics.html#dunder"><code>__repr__</code></a>、<a href="python-basics.html#lambda-key">lambda</a>（自测脚本里用到）；前面的课 —— <a href="02-linked-list.html">第 2 课 · 单链表</a>（<code>Node</code>、顺着 <code>next</code> 走）、<a href="08-merge-sort.html">第 8 课 · 归并排序</a>（题 2 的“合并”就是它的合并步骤）、<a href="25-two-pointers.html">第 25 课 · 双指针</a>（快慢指针第一次出现）。</p>
+
 <h2>实战里怎么写：业务代码里几乎不手写链表</h2>
 <p>先说实话：Python 业务代码里几乎没人写 <code>ListNode</code>。但“顺着 next 一路走”的结构到处都有，只是不叫链表：员工 → 经理 → 总监的上级关系、分类表的 <code>parent_id</code>、短链接的重定向链，本质都是“key → 下一个 key”。这时本课的技巧（尤其是判环）就是真需求：数据录错了，重定向或上级链会无限循环。</p>
 <table>

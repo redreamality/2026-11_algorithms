@@ -18,6 +18,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 11 课 · 二叉搜索树</h1>
 <p class="one-line">二叉搜索树（BST）只多一条规则：<b>左边都比我小，右边都比我大</b>。于是每比一次就能扔掉一半，像在树上做二分查找。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#abc">继承 MutableMapping（白送的方法）</a>、<a href="python-basics.html#sortedcontainers">sortedcontainers</a>、<a href="python-basics.html#exceptions">异常约定（KeyError）</a>、<a href="python-basics.html#generator">生成器（yield）</a>、<a href="python-basics.html#dict-tools">setdefault</a>、<a href="python-basics.html#class">@classmethod</a>；前面的课 —— <a href="10-binary-tree.html">第 10 课 · 二叉树</a>、<a href="06-binary-search.html">第 6 课 · 二分查找（bisect）</a>、<a href="05-recursion.html">第 5 课 · 递归（删除用递归写）</a></p>
 
 <h2>长什么样</h2>
 <div class="row" style="justify-content:center;max-width:300px"><span class="box">5</span></div>
@@ -29,7 +30,7 @@
 <p>业务代码里几乎没人手写 BST。Python 没有内置的有序字典（<code>dict</code> 只记插入顺序，不按大小排），实际按场景二选一：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
-  <tr><td>数据基本不变，只查询</td><td>排好序的 <code>list</code> + 标准库 <code>bisect</code></td><td>查 O(log n)，插入要挪元素 O(n)</td></tr>
+  <tr><td>数据基本不变，只查询</td><td>排好序的 <code>list</code> + 标准库 <code>bisect</code>（<a href="06-binary-search.html">第 6 课</a>）</td><td>查 O(log n)，插入要挪元素 O(n)</td></tr>
   <tr><td>边查边改</td><td>第三方库 <code>sortedcontainers</code> 的 <code>SortedDict</code> / <code>SortedList</code></td><td>增删查都约 O(log n)</td></tr>
 </table>
 <pre>from bisect import bisect_right

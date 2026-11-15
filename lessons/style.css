@@ -57,3 +57,6 @@ input[type=number] { width: 60px; }
 
 details { background: #f7f9fc; padding: 8px 14px; border-radius: 6px; margin: 8px 0; }
 summary { cursor: pointer; }
+
+/* 每课开头的“开始前要会”：链接到预备课和前面的课 */
+.prereq { background: #e8f5e9; padding: 8px 14px; border-radius: 6px; font-size: 15px; }

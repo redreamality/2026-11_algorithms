@@ -12,7 +12,7 @@
 
 import heapq
 from bisect import bisect_right
-from ipaddress import IPv4Address
+from ipaddress import IPv4Address  # IPv4Address("10.0.0.1") 把地址变成能比较的对象，int(...) 取出它对应的整数
 
 
 def hhmm(minutes: int) -> str:

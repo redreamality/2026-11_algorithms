@@ -75,7 +75,8 @@ def split_into_words(text: str, vocabulary: set[str]) -> list[str] | None:
     就是单词拆分（LeetCode 139），只是要返回切法而不只是 True/False。
     split_starting_at(start) = text[start:] 的一种切法；cache 保证每个起点只算一次。
     """
-    longest_word = max(map(len, vocabulary), default=0)
+    # 最长的词有几个字母。default=0：vocabulary 为空时 max 不报错，返回 0
+    longest_word = max((len(word) for word in vocabulary), default=0)
 
     @cache
     def split_starting_at(start: int) -> tuple[str, ...] | None:

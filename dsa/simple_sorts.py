@@ -13,6 +13,7 @@
 - reverse=True 时从大到小排，并且和 list.sort 一样仍然要保持稳定：key 相等的元素保持原来的先后次序。
   （所以不能“先正着排再整个反转”，那样相等元素的次序也被反过来了。）
 - insertion_sort 必须稳定。提示：往左挪的条件用“严格大于”，不要用“大于等于”。
+- 签名里的裸 `*`（如 *, key, reverse）：它后面的参数只能按关键字传（key=...），不能按位置传。
 
 写完后运行 uv run dsa/simple_sorts.py，看端到端的例子是否和期望一致；再跑 uv run pytest tests/test_simple_sorts.py。
 """

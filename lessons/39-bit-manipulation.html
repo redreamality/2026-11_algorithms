@@ -22,6 +22,24 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 39 课 · 位运算技巧</h1>
 <p class="one-line">位运算是把一个整数看成<b>一排开关</b>（二进制的每一位是 0 或 1），一次性对所有开关做同样的操作。面试里常考的就几招：<b>异或让成对的数抵消</b>、<b>n &amp; (n - 1) 去掉最低位的 1</b>、<b>用一个整数的各位表示“选了哪些东西”</b>。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#numbers">整数运算（<code>//</code>、大整数）</a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#loop-tools"><code>enumerate</code></a>、<a href="python-basics.html#class">类（这里用 <code>enum.Flag</code> 写一个类）</a>、<a href="python-basics.html#dunder"><code>in</code> 背后的魔法方法</a>；前面的课 —— <a href="21-backtracking.html">第 21 课 · 回溯（子集）</a>、<a href="37-dp-1d.html">第 37 课 · 一维 DP（四步法）</a>。位运算本身（<code>&amp;</code>、<code>|</code>、<code>^</code>、<code>&lt;&lt;</code>、<code>&gt;&gt;</code>）是这一课第一次正式讲，从下面第一节开始。</p>
+
+<h2>五个运算符的直觉</h2>
+<p>先看 Python 里怎么写二进制：数字前加 <code>0b</code> 就是按二进制写的整数，<code>0b1100</code> 就是 12；中间可以加下划线方便看，<code>0b1010_0001</code> 等于 <code>0b10100001</code>。反过来，<code>bin(12)</code> 返回字符串 <code>'0b1100'</code>，用来打印看看每一位。</p>
+<pre>0b1100            # 12
+0b1010_0001       # 161，下划线只是分隔，不影响值
+bin(12)           # '0b1100'
+12 &amp; 10, 12 | 10, 12 ^ 10   # (8, 14, 6)，规则见下表</pre>
+<p>下面用 12（二进制 <code>1100</code>）和 10（二进制 <code>1010</code>）举例。每个运算都是<b>一位一位分别算</b>，各位之间互不影响（移位除外）。</p>
+<table>
+  <tr><th>运算</th><th>规则</th><th>直觉</th><th>例子</th></tr>
+  <tr><td><code>a &amp; b</code> 与</td><td>两位都是 1，结果才是 1</td><td>“过滤”：只保留两边都开着的开关。常用来<b>检查</b>某一位是不是 1</td><td>1100 &amp; 1010 = 1000（8）</td></tr>
+  <tr><td><code>a | b</code> 或</td><td>有一位是 1，结果就是 1</td><td>“合并”：把开关打开。常用来<b>设置</b>某一位为 1</td><td>1100 | 1010 = 1110（14）</td></tr>
+  <tr><td><code>a ^ b</code> 异或</td><td>两位不同是 1，相同是 0</td><td>“翻转”：b 里是 1 的位置，把 a 的那一位翻过来。<b>自己异或自己是 0</b></td><td>1100 ^ 1010 = 0110（6）</td></tr>
+  <tr><td><code>a &lt;&lt; k</code> 左移</td><td>整体往左挪 k 位，右边补 0</td><td>乘以 2<sup>k</sup></td><td>0011 &lt;&lt; 2 = 1100（3 → 12）</td></tr>
+  <tr><td><code>a &gt;&gt; k</code> 右移</td><td>整体往右挪 k 位，最右边 k 位丢掉</td><td>除以 2<sup>k</sup> 向下取整，等于 <code>a // 2**k</code></td><td>1101 &gt;&gt; 1 = 0110（13 → 6）</td></tr>
+</table>
+<p>还有一个取反 <code>~a</code>：每一位都翻过来。在 Python 里整数没有固定位数，<code>~a</code> 的结果是 <code>-a - 1</code>，平时很少单独用，主要和 <code>&amp;</code> 搭配“清掉某些位”（下面的实战和小招式里都会见到）。和 <code>+=</code> 一样，这些运算也有 <code>&amp;=</code>、<code>|=</code>、<code>^=</code> 的简写。</p>
 
 <h2>实战里怎么写：enum.Flag、bit_count、ipaddress</h2>
 <p>Python 业务代码里很少直接写 <code>&amp;</code>、<code>|</code>，但位运算无处不在：权限和开关、子网掩码、用一个整数表示一个小集合。多数情况标准库已经包好了。</p>
@@ -42,26 +60,20 @@ class Permission(Flag):
 
 user = Permission.READ | Permission.WRITE
 Permission.WRITE in user             # True，等价于 (user &amp; WRITE) == WRITE
-user &amp;= ~Permission.WRITE            # 收回写权限，只剩 READ
+user &amp;= ~Permission.WRITE            # 收回写权限，只剩 READ（~WRITE 是“除了写权限那一位，其余全是 1”）
 
 (0b1010_0001).bit_count()            # 3：打开了 3 个功能开关
 
 network = ipaddress.ip_network("192.168.1.0/24")
 ipaddress.ip_address("192.168.1.77") in network                       # True
 int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(network.network_address)   # 同一件事</pre>
+<p>上面用到的三个标准库工具，用法就这么多：</p>
+<ul>
+  <li><code>enum.Flag</code>：写一个继承它的类，每个成员是一个开关。<code>auto()</code> 自动给成员分配下一个 2 的幂（1、2、4……），所以每个成员正好占一位。成员之间可以用 <code>|</code>、<code>&amp;</code>、<code>~</code> 组合，<code>a in b</code> 判断“a 的开关 b 是不是全有”（Flag 替你实现了 <code>__contains__</code>）。</li>
+  <li><code>int.bit_count()</code>：整数自带的方法，返回二进制里 1 的个数。直接对数字字面量调用时要加括号，写成 <code>(0b101).bit_count()</code>。</li>
+  <li><code>ipaddress</code>：<code>ip_address("…")</code> 解析一个 IP，<code>ip_network("…/24")</code> 解析一个网段，<code>in</code> 判断 IP 在不在网段里，<code>int(…)</code> 把 IP 或掩码变成一个整数。</li>
+</ul>
 <p>完整可运行的版本在 <code>examples/bit_manipulation_in_practice.py</code>（<code>uv run examples/bit_manipulation_in_practice.py</code>），里面还有一个状态压缩的例子：每个技能占一位，枚举所有“选人方案”的位掩码，找出技能覆盖全部需求的最小团队，用的正是本课题 4 的写法。</p>
-
-<h2>先回顾：五个运算符的直觉</h2>
-<p>下面用 12（二进制 <code>1100</code>）和 10（二进制 <code>1010</code>）举例。每个运算都是<b>一位一位分别算</b>，各位之间互不影响（移位除外）。</p>
-<table>
-  <tr><th>运算</th><th>规则</th><th>直觉</th><th>例子</th></tr>
-  <tr><td><code>a &amp; b</code> 与</td><td>两位都是 1，结果才是 1</td><td>“过滤”：只保留两边都开着的开关。常用来<b>检查</b>某一位是不是 1</td><td>1100 &amp; 1010 = 1000（8）</td></tr>
-  <tr><td><code>a | b</code> 或</td><td>有一位是 1，结果就是 1</td><td>“合并”：把开关打开。常用来<b>设置</b>某一位为 1</td><td>1100 | 1010 = 1110（14）</td></tr>
-  <tr><td><code>a ^ b</code> 异或</td><td>两位不同是 1，相同是 0</td><td>“翻转”：b 里是 1 的位置，把 a 的那一位翻过来。<b>自己异或自己是 0</b></td><td>1100 ^ 1010 = 0110（6）</td></tr>
-  <tr><td><code>a &lt;&lt; k</code> 左移</td><td>整体往左挪 k 位，右边补 0</td><td>乘以 2<sup>k</sup></td><td>0011 &lt;&lt; 2 = 1100（3 → 12）</td></tr>
-  <tr><td><code>a &gt;&gt; k</code> 右移</td><td>整体往右挪 k 位，最右边 k 位丢掉</td><td>除以 2<sup>k</sup> 向下取整</td><td>1101 &gt;&gt; 1 = 0110（13 → 6）</td></tr>
-</table>
-<p>还有一个取反 <code>~a</code>：每一位都翻过来。在 Python 里整数没有固定位数，<code>~a</code> 的结果是 <code>-a - 1</code>，平时很少直接用。</p>
 
 <h2>常用小招式</h2>
 <p>下面的 k 表示“第 k 位”，最右边是第 0 位。<code>1 &lt;&lt; k</code> 就是“只有第 k 位是 1”的数，叫做<b>掩码</b>（mask）。</p>
@@ -73,7 +85,7 @@ int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(netw
   <tr><td>翻转第 k 位</td><td><code>number ^ (1 &lt;&lt; k)</code></td><td>和 1 异或就是翻转，和 0 异或不变</td></tr>
   <tr><td>判断奇偶</td><td><code>number &amp; 1</code></td><td>最低位是 1 就是奇数</td></tr>
   <tr><td><b>去掉最低位的 1</b></td><td><code>number &amp; (number - 1)</code></td><td>见下面题 2，本课最重要的一招</td></tr>
-  <tr><td>只留下最低位的 1</td><td><code>number &amp; -number</code></td><td>拓展了解，树状数组会用到</td></tr>
+  <tr><td>只留下最低位的 1</td><td><code>number &amp; -number</code></td><td>拓展了解，树状数组会用到（本课程不讲树状数组）</td></tr>
 </table>
 <p><b>养成加括号的习惯</b>。在 Python 里，<code>&amp;</code> 比 <code>==</code> 优先级高，所以 <code>number &amp; 1 == 0</code> 恰好是对的；但在 C、Java、JavaScript 里它会被理解成 <code>number &amp; (1 == 0)</code>。另外移位比加减优先级低，<code>1 &lt;&lt; k - 1</code> 是 <code>1 &lt;&lt; (k - 1)</code>。写成 <code>(number &amp; 1) == 0</code>、<code>(1 &lt;&lt; k) - 1</code> 就不用记这些。</p>
 
@@ -94,7 +106,9 @@ int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(netw
         single ^= number          # 成对的数异或后抵消成 0
     return single
 
-# 实际项目里也常写成一行：functools.reduce(operator.xor, numbers, 0)</pre>
+# 实际项目里也常写成一行：functools.reduce(operator.xor, numbers, 0)
+# reduce(函数, 序列, 初始值) 从初始值开始，拿函数依次“滚”过每个元素：((0 ^ 4) ^ 1) ^ 2 ...
+# operator.xor(a, b) 就是 a ^ b，和预备课里 operator.itemgetter 是同一个模块</pre>
 <p><b>为什么是对的</b>：看任意一位。出现两次的数在这一位上贡献了偶数个 1（要么 0 个，要么 2 个），异或的结果只看这一位上 1 的个数是奇是偶，偶数个 1 等于没有。所以每一位的结果，都只由只出现一次的那个数决定。</p>
 <p><b>复杂度</b>：O(n) 时间，O(1) 额外空间。</p>
 <p><b>同一招的变体：丢失的数字（LeetCode 268）</b>。0..n 里缺了一个数，数组里有其余 n 个。把 0..n 全部和数组里的数一起异或，出现两次的抵消，剩下的就是缺的那个。</p>
@@ -158,8 +172,9 @@ int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(netw
         all_subsets.append(subset)
     return all_subsets
 
-# 只要子集、不需要位掩码时，标准库写法是
-# chain.from_iterable(combinations(items, size) for size in range(len(items) + 1))</pre>
+# 只要子集、不需要位掩码时，标准库写法是（见预备课 itertools 一节）
+# chain.from_iterable(combinations(items, size) for size in range(len(items) + 1))
+# chain.from_iterable(很多个序列) 和 chain(*很多个序列) 一样，把它们首尾接起来</pre>
 <p><b>和回溯比</b>：没有递归，代码更短；而且一个子集可以用一个整数表示，能当字典的键、能存进数组。所以状态压缩 DP（比如“已经访问过哪些城市”）都用位掩码。缺点是 n 不能太大，n = 20 时已经有一百万个子集。<b>复杂度</b>：O(n × 2<sup>n</sup>)。</p>
 
 <h2>动手玩</h2>

@@ -1,14 +1,14 @@
 """第 2 课：单链表。讲解见 lessons/02-linked-list.html
 
-实际项目里要“两端快速增删”直接用 collections.deque（见 examples/linked_list_in_practice.py）。
-这里自己造一个单链表，方法名和 deque 一样，写完就能直接替换着用：
+实际项目里很少专门写链表类，但“每个对象指向下一个”的结构很常见，见 examples/linked_list_in_practice.py。
+这里自己造一个单链表。方法名照搬标准库队列 collections.deque 的叫法（第 3 课会讲 deque）：
 tasks = LinkedList(["a", "b"]); tasks.append("c"); tasks.appendleft("urgent"); tasks.popleft();
 len(tasks)、for task in tasks、"b" in tasks、tasks.remove("b")、tasks.reverse()。
 
 规则：
 - 只能通过 Node 的 next 指针串起数据，不要在内部偷偷用 list 存元素。
 - 同时维护 head（头）和 tail（尾），让 append 也是 O(1)。
-- 异常和 deque / list 一致：空链表 popleft 抛 IndexError；remove 一个不存在的值抛 ValueError。
+- 异常和 list 一致：空链表 popleft 抛 IndexError；remove 一个不存在的值抛 ValueError。
 - 每个改动链表的方法写完后，都检查一下 head、tail、size 是否还对。
   最容易出错的地方是：链表变空、只剩一个节点、删掉的正好是尾巴。
 

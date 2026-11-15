@@ -15,6 +15,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 21 课 · 回溯</h1>
 <p class="one-line">回溯 = <b>试一步，不行就退回来换一条路</b>。像走迷宫：每个岔口挑一条走，走到死胡同就退回上一个岔口。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器与 next()</a>、<a href="python-basics.html#yield-from">yield from</a>（本课的核心写法）、<a href="python-basics.html#itertools">itertools 的 permutations / combinations / product / islice</a>、<a href="python-basics.html#unpack">* 解包</a>（实战里 <code>set().union(*(people[name] for name in team))</code>、<code>product(*dimensions.values())</code> 用到）、<a href="python-basics.html#dict-tools">dict.fromkeys 与 get</a>、<a href="python-basics.html#type-hints">Iterator 标注</a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归与分治</a>、<a href="10-binary-tree.html">第 10 课 · 二叉树</a>（深度优先地走一棵树）、<a href="20-dp-knapsack.html">第 20 课 · 背包 DP</a>（自测第 3 题要把两者放在一起比）。</p>
 
 <h2>实战里怎么写：先看 itertools 够不够</h2>
 <p>只是“把所有排列 / 组合列出来”，标准库 <code>itertools</code> 已经写好了，而且都是<b>惰性生成器</b>：要几个算几个。</p>
@@ -46,7 +47,7 @@ first_ten = list(islice(plans, 10))          # 想要更多再接着拿</pre>
 <p>完整可运行的版本在 <code>examples/backtracking_in_practice.py</code>（<code>uv run examples/backtracking_in_practice.py</code>）。<code>itertools</code> 管不了“边生成边检查约束”，这时就要自己写回溯。下面看它的结构。</p>
 
 <h2>三步模板：选择 → 递归 → 撤销</h2>
-<p>写成生成器，每找到一个解就 <code>yield</code> 出去，用法就和 <code>itertools</code> 一样了：</p>
+<p>写成生成器，每找到一个解就 <code>yield</code> 出去，用法就和 <code>itertools</code> 一样了（<code>yield</code> 和 <code>yield from</code> 的用法见<a href="python-basics.html#yield-from">预备课</a>；递归见<a href="05-recursion.html">第 5 课</a>）：</p>
 <pre>def permutations(items):
     used = [False] * len(items)
     path = []

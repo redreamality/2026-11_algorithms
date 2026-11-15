@@ -21,6 +21,8 @@
 <h1>第 26 课 · 滑动窗口</h1>
 <p class="one-line">滑动窗口 = <b>用两个同方向走的下标框住一段连续区间，右边界负责把新元素放进来，左边界负责把旧元素请出去</b>。枚举所有子串或子数组要 O(n²)，滑动窗口只要 O(n)。</p>
 
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#loop-tools">enumerate</a>、<a href="python-basics.html#dict-tools">dict 的 setdefault / get</a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#class">类与 <code>__init__</code></a>、<a href="python-basics.html#type-hints">类型标注（<code>dict[str, ...]</code>）</a>；前面的课 —— <a href="03-stack-queue.html">第 3 课 · 栈与队列</a>（<code>deque</code>）、<a href="04-hash-table.html">第 4 课 · 哈希表</a>（用 dict 计数）、<a href="25-two-pointers.html">第 25 课 · 双指针</a>（两个下标同方向走、不回头）。</p>
+
 <h2>实战里怎么写：先看真实代码里的滑动窗口</h2>
 <p>真实项目里最常见的是“按时间滑动的窗口”：限流、移动平均、最近 N 条日志、近 7 天销售额。几乎都用标准库 <code>collections.deque</code>，它两端进出都是 O(1)（<code>list.pop(0)</code> 是 O(n)，不要用）。</p>
 <table>
@@ -48,7 +50,7 @@ class RateLimiter:
         request_times.append(now)          # 扩张：新请求放进窗口
         return True
 
-recent_errors = deque(maxlen=100)          # 固定大小的窗口：只留最近 100 条</pre>
+recent_errors = deque(maxlen=100)          # maxlen=N：最多存 N 条，满了再 append 就自动从左边挤掉最旧的</pre>
 <p>完整可运行的版本在 <code>examples/sliding_window_in_practice.py</code>（<code>uv run examples/sliding_window_in_practice.py</code>），还有移动平均和滚动和的例子。限流器里“右边进、左边出、每个元素只进出一次”，正是下面面试题用的同一个模板。</p>
 
 <h2>窗口是什么</h2>
@@ -99,7 +101,7 @@ for window_end in range(len(items)):
   <tr><td>1004</td><td>最大连续 1 的个数 III</td><td>求最长</td></tr>
   <tr><td>904</td><td>水果成篮</td><td>求最长</td></tr>
   <tr><td>424</td><td>替换后的最长重复字符</td><td>求最长（稍难）</td></tr>
-  <tr><td>239</td><td>滑动窗口最大值（困难，要配合单调队列）</td><td>固定大小</td></tr>
+  <tr><td>239</td><td>滑动窗口最大值（困难，要用“单调队列”技巧，这里先不展开）</td><td>固定大小</td></tr>
 </table>
 
 <h2>第 1 题：无重复字符的最长子串（求最长）</h2>
@@ -202,7 +204,7 @@ return shortest_length or 0</pre>
 <details><summary>2. 第 1 题能不能让 window_start 直接跳过去，而不是一格一格挪？</summary>
 可以。用 dict 记录每个字符最后一次出现的下标 last_index_by_character。遇到重复字符时，window_start 直接跳到 max(window_start, last_index_by_character[character] + 1)。要取 max，是因为那个下标可能已经在窗口左边了（例如 "abba" 遇到第二个 a 时）。复杂度仍然是 O(n)，只是常数小一些。</details>
 <details><summary>3. 如果 numbers 里有负数，长度最小的子数组还能用滑动窗口吗？</summary>
-不能。窗口和够了以后收缩，去掉的可能是负数，和反而变大，“收缩到不够为止”的推理不成立。这种情况要用前缀和加单调队列（LeetCode 862，和至少为 K 的最短子数组）。</details>
+不能。窗口和够了以后收缩，去掉的可能是负数，和反而变大，“收缩到不够为止”的推理不成立。这种情况要用到后面几课的工具：前缀和（第 27 课）加单调队列（后面会见到），对应 LeetCode 862，和至少为 K 的最短子数组。</details>
 
 <div class="nav"><a href="25-two-pointers.html">← 上一课：双指针</a><a href="27-prefix-sum.html">下一课：前缀和与哈希计数 →</a></div>
 <script src="anim.js"></script>

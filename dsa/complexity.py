@@ -8,6 +8,9 @@
 - 前三个函数接收的 items 可以是数字、字符串，任何能比较相等的值都行。
 - 不能修改传进来的 items。
 
+类型标注里的 Hashable 意思是“能放进 set、能当 dict 的键”的值：数字、字符串、元组可以，list 不行。
+为什么有这个限制，第 4 课讲哈希表时会讲。
+
 写完后运行 uv run dsa/complexity.py，看端到端的例子是否和期望一致；再跑 uv run pytest tests/test_complexity.py。
 """
 
@@ -60,6 +63,9 @@ if __name__ == "__main__":
     # 端到端场景：活动报名表，检查有没有人用同一个邮箱报了两次。
     signups = ["amy@x.com", "bob@x.com", "amy@x.com", "cat@x.com", "bob@x.com", "amy@x.com"]
     for function in (has_duplicate_slow, has_duplicate_sorted, has_duplicate_fast):
+        # function.__name__ 是函数的名字字符串。lambda 里写 function=function，是把这一轮的 function
+        # 存成 lambda 的默认参数；这里 show 会立刻调用 lambda，不写也行，但养成习惯可以避开
+        # “循环里造的 lambda 全都用到最后一个值”的坑。
         show(f"{function.__name__}(报名表)", lambda function=function: function(signups), True)
     show("has_duplicate_fast(生成器：小写化后的邮箱)",
          lambda: has_duplicate_fast(email.lower() for email in ["A@x.com", "a@x.com"]), True)

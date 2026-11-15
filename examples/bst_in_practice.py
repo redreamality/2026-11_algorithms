@@ -56,6 +56,7 @@ class PriceIndex:
 
 
 def main() -> None:
+    # datetime(年, 月, 日, 时, 分) 构造一个时间点；时间点之间可以直接用 <、> 比较先后
     history = [
         (datetime(2026, 11, 1, 9, 0), "v1"),
         (datetime(2026, 11, 3, 14, 30), "v2"),

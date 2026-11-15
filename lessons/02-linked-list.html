@@ -9,24 +9,42 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 2 课 · 链表</h1>
 <p class="one-line">链表的每个节点只记两样东西：<b>自己的值</b>和<b>下一个是谁</b>。像寻宝游戏，每张纸条告诉你下一张在哪。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器、yield 与 next(迭代器, 默认值)</a>、<a href="python-basics.html#itertools">itertools.islice</a>、<a href="python-basics.html#dunder">魔法方法</a>（<code>__iter__</code>、<code>__contains__</code>、<code>__eq__</code>）、<a href="python-basics.html#type-hints">类型标注 <code>Node | None</code> 与引号前向引用</a>、<a href="python-basics.html#unpack">多重赋值（交换）</a>、<a href="python-basics.html#exceptions">异常约定（IndexError、ValueError）</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>、<a href="01-dynamic-array.html">第 1 课 · 动态数组</a>（拿来对比）。</p>
 
-<h2>实战里怎么写：用 deque 和 OrderedDict</h2>
-<p>业务代码里几乎没人手写链表节点。真正要用到链表“两端增删快、已知位置挪动快”的特性时，直接用标准库：</p>
+<h2>实战里怎么写：没人写 LinkedList 类，但“指向下一个”的对象到处都是</h2>
+<p>业务代码里几乎没人专门写一个链表类。但“每个对象记着上一个 / 下一个是谁”的结构很常见，最典型的是<b>版本历史</b>：git 的每次提交只记“我的上一次提交是谁”（parent），一个分支就是指向最新提交的名字，整条历史就是一条单链表。</p>
 <table>
-  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
-  <tr><td>两端都要增删（任务队列、工单、BFS）</td><td><code>collections.deque</code> 的 <code>append</code> / <code>appendleft</code> / <code>popleft</code></td><td>两端 O(1)；<code>list.pop(0)</code> 是 O(n)</td></tr>
-  <tr><td>只留最近 N 条</td><td><code>deque(maxlen=N)</code></td><td>O(1)，满了自动挤掉另一头</td></tr>
-  <tr><td>找到某项后挪到最前 / 最后（最近打开、LRU）</td><td><code>collections.OrderedDict</code> 的 <code>move_to_end</code></td><td>O(1)，底层是哈希表 + 双向链表</td></tr>
-  <tr><td>按值删中间某一项</td><td><code>deque.remove(value)</code></td><td>O(n)，要先找到它</td></tr>
+  <tr><th>场景</th><th>怎么做</th><th>代价</th></tr>
+  <tr><td>新提交一次</td><td>新建节点，parent 指向旧的最新提交，分支名挪到新节点</td><td>O(1)，就是链表的头部插入</td></tr>
+  <tr><td>开新分支</td><td>新分支直接指向当前提交，<b>不复制</b>历史</td><td>O(1)，两个分支共用同一段尾巴</td></tr>
+  <tr><td>看历史（<code>git log</code>）</td><td>沿着 parent 一路往回走，用生成器逐个产出</td><td>走几步花几步，可以随时停</td></tr>
+  <tr><td>撤销最近一次提交</td><td>分支名挪回 parent</td><td>O(1)</td></tr>
 </table>
-<pre>from collections import deque
+<pre>class Commit:
+    def __init__(self, message, parent=None):
+        self.message = message
+        self.parent = parent                # 上一次提交；第一次提交没有，是 None
 
-tickets = deque(["退款-101", "咨询-102"])
-tickets.append("投诉-103")          # 普通工单排队尾，O(1)
-tickets.appendleft("加急-999")      # 加急插队头，O(1)
-next_ticket = tickets.popleft()     # 客服从队头取，O(1)
-tickets.remove("咨询-102")          # 用户撤回：O(n)，找不到抛 ValueError</pre>
-<p>完整可运行的版本在 <code>examples/linked_list_in_practice.py</code>（<code>uv run examples/linked_list_in_practice.py</code>），还有一个用 <code>OrderedDict</code> 做的“最近打开的文件”。下面看链表为什么能把这些操作做到 O(1)。</p>
+
+def history(commit):
+    """从某次提交往回走，逐个产出提交说明。"""
+    while commit is not None:
+        yield commit.message
+        commit = commit.parent
+
+
+main = None
+for message in ["初始化", "加登录页", "修复样式"]:
+    main = Commit(message, main)            # 头部插入：O(1)
+feature = Commit("加支付", main)            # 新分支：挂在 main 后面，历史一个都没复制
+print(list(history(feature)))               # ['加支付', '修复样式', '加登录页', '初始化']</pre>
+<p>完整可运行的版本在 <code>examples/linked_list_in_practice.py</code>（<code>uv run examples/linked_list_in_practice.py</code>），还会找两个分支“从哪里分叉的”。</p>
+<p>另外两种常见需求，标准库有现成的工具，后面专门讲，这一课的代码和练习都不用它们：</p>
+<ul>
+  <li>两端都要快速增删的队列：<code>collections.deque</code>，第 3 课讲。</li>
+  <li>按 key 找到某项、再挪到最前（“最近使用”）：<code>collections.OrderedDict</code>，第 30 课讲 LRU 缓存时讲。</li>
+</ul>
+<p>下面看链表为什么能把头部增删做到 O(1)。</p>
 
 <h2>长什么样</h2>
 <div class="row">
@@ -93,7 +111,7 @@ tickets.remove("咨询-102")          # 用户撤回：O(n)，找不到抛 Value
 <p>测试会专门检查这三种情况。</p>
 
 <h2>练习</h2>
-<p>补全 <code>dsa/linked_list.py</code> 里的 <code>LinkedList</code>。方法名和 <code>deque</code> 一样，写完就能直接替换着用：<code>append</code>、<code>appendleft</code>、<code>popleft</code>、<code>remove</code>、<code>reverse</code>，再加上 <code>len()</code>、<code>for</code>、<code>in</code>。动画里的 <code>push_front</code> / <code>push_back</code> / <code>pop_front</code> 分别对应 <code>appendleft</code> / <code>append</code> / <code>popleft</code>。异常和标准库一致：空链表 <code>popleft</code> 抛 <code>IndexError</code>，<code>remove</code> 找不到抛 <code>ValueError</code>。</p>
+<p>补全 <code>dsa/linked_list.py</code> 里的 <code>LinkedList</code>。方法名照搬标准库队列 <code>deque</code> 的叫法（第 3 课会讲，到时候你会觉得眼熟）：<code>append</code>、<code>appendleft</code>、<code>popleft</code>、<code>remove</code>、<code>reverse</code>，再加上 <code>len()</code>、<code>for</code>、<code>in</code>。动画里的 <code>push_front</code> / <code>push_back</code> / <code>pop_front</code> 分别对应 <code>appendleft</code> / <code>append</code> / <code>popleft</code>。异常和标准库一致：空链表 <code>popleft</code> 抛 <code>IndexError</code>，<code>remove</code> 找不到抛 <code>ValueError</code>。</p>
 <p>建议顺序：<code>appendleft</code> → <code>__iter__</code>（用 <code>yield</code>）→ <code>append</code> → <code>popleft</code> → <code>__contains__</code> → <code>remove</code> → <code>reverse</code>。</p>
 <pre>uv run dsa/linked_list.py               # 客服工单队列的端到端例子，逐条打印期望和实际
 uv run pytest tests/test_linked_list.py</pre>
@@ -101,10 +119,10 @@ uv run pytest tests/test_linked_list.py</pre>
 <h2>自测</h2>
 <details><summary>1. 为什么链表取第 i 个是 O(n)？</summary>
 节点不连续，没法算地址，只能从 head 开始沿着 next 走 i 步。</details>
-<details><summary>2. 有 tail 指针，为什么删尾巴（deque 的 pop）在单链表上还是 O(n)？</summary>
+<details><summary>2. 有 tail 指针，为什么删尾巴在单链表上还是 O(n)？</summary>
 删掉尾巴以后，tail 要指向倒数第二个节点，可单链表没法往回走，只能从头找。双向链表就能做到 O(1)。</details>
-<details><summary>3. Python 里什么东西是用链表实现的？</summary>
-<code>collections.deque</code> 底层是一串定长块组成的双向链表，所以它的两端增删都是 O(1)。</details>
+<details><summary>3. 两个分支共用同一段历史（实战例子里的 main 和 feature），为什么不用担心改了一个影响另一个？</summary>
+提交一旦建好就不再修改，新提交只是新建一个节点挂在前面，分支名挪过去。旧节点的 <code>parent</code> 从来不变，所以共用的那段尾巴对谁都一样。只有原地改指针（比如 <code>reverse</code>）才会影响所有共用它的人。</details>
 
 <div class="nav"><a href="01-dynamic-array.html">← 上一课：动态数组</a><a href="03-stack-queue.html">下一课：栈与队列 →</a></div>
 <script src="anim.js"></script>

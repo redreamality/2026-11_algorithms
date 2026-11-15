@@ -25,6 +25,8 @@
 <h1>第 28 课 · 单调栈</h1>
 <p class="one-line">单调栈就是一个普通的栈，只是我们规定：栈里的元素从栈底到栈顶<b>一直保持递增（或一直保持递减）</b>。它专门回答这样一类问题：<b>“每个元素右边（或左边）第一个比它大（或小）的元素是谁？”</b>暴力做法要 O(n²)，单调栈只要 O(n)。</p>
 
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#loop-tools">enumerate</a>、<a href="python-basics.html#comprehension">推导式与生成器表达式</a>、<a href="python-basics.html#type-hints">类型标注（<code>list[tuple[int, int]]</code>）</a>、<a href="python-basics.html#exceptions">try/except</a>（骨架自测里用到）；前面的课 —— <a href="01-dynamic-array.html">第 1 课 · 动态数组</a>（均摊 O(1) 的数法，本课“为什么是 O(n)”用的同一招）、<a href="03-stack-queue.html">第 3 课 · 栈与队列</a>（<code>list</code> 当栈：<code>append</code> / <code>pop</code> / <code>[-1]</code>）、<a href="04-hash-table.html">第 4 课 · 哈希表</a>（题 2 用 dict 存答案）。</p>
+
 <h2>实战里怎么写：先看真实代码里的单调栈</h2>
 <p>标准库里没有现成的单调栈，Python 的 <code>list</code> 用 <code>append</code> / <code>pop</code> 就是栈。它出现在“每一项都要回头（或往前）看第一个更大 / 更小的”这类报表和监控里：</p>
 <table>
@@ -81,7 +83,7 @@ spanner = StockSpanner()
 <p>很多题要的不是“那个更大的数是多少”，而是“隔了几个位置”（每日温度）或者“中间有多宽”（最大矩形、接雨水）。存了下标，距离和宽度都能直接算；需要值的时候，用 <code>numbers[index]</code> 取一下就行。存值的话，位置信息就丢了。</p>
 
 <h3>为什么是 O(n)，而不是 O(n²)</h3>
-<p>代码里有两层循环，看起来像 O(n²)。但换个角度数一数：<b>每个下标只会入栈一次，也最多出栈一次</b>。while 循环每执行一次就弹出一个下标，所以整个遍历过程中 while 循环加起来最多执行 n 次。for 循环 n 次，加上 while 循环一共 n 次，总共 O(n)。这种“把所有操作摊开来算总数”的方法叫均摊分析。</p>
+<p>代码里有两层循环，看起来像 O(n²)。但换个角度数一数：<b>每个下标只会入栈一次，也最多出栈一次</b>。while 循环每执行一次就弹出一个下标，所以整个遍历过程中 while 循环加起来最多执行 n 次。for 循环 n 次，加上 while 循环一共 n 次，总共 O(n)。这种“把所有操作摊开来算总数”的方法叫均摊分析，第 1 课分析 <code>list.append</code> 时用的就是它。</p>
 
 <h3>四种变体怎么选</h3>
 <table>

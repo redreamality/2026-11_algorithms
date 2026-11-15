@@ -7,6 +7,7 @@ dict 和 set 就是哈希表，没人另造一个。要会的是按场景挑对�
 4. 去重 / 判断“见没见过” → set。
 5. 缓存函数结果 → functools.lru_cache / functools.cache（底层就是 dict）。
 6. 自定义对象当 key → 用 @dataclass(frozen=True)，自动生成 __hash__ 和 __eq__。
+   frozen=True 表示对象建好后字段不能再改；不可变，Python 才敢替它算 hash。
 
 运行：uv run examples/hash_table_in_practice.py
 """

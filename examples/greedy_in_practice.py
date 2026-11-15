@@ -10,7 +10,7 @@
 """
 
 from collections import Counter
-from datetime import time
+from datetime import time  # time(9, 30) 表示 9 点 30 分；time 对象之间可以直接用 <、<= 比先后
 from operator import attrgetter
 from typing import NamedTuple
 
@@ -78,6 +78,7 @@ def main() -> None:
     busy = [(time(14), time(16)), (time(9), time(10)), (time(9, 30), time(11)), (time(15), time(17))]
     slots = free_slots(busy, time(9), time(18))
     assert slots == [(time(11), time(14)), (time(17), time(18))]
+    # f-string 里的 :%H:%M 是给时间对象用的格式：按“时:分”打印，比如 11:00
     print("空闲时段：", [f"{start:%H:%M}-{end:%H:%M}" for start, end in slots])
 
     change = make_change_in_cents(18830)  # 188.30 元

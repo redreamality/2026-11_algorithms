@@ -38,6 +38,7 @@ def flood_fill(image: list[list[str]], start_row: int, start_col: int, new_color
 
 
 def mines_around(mines: set[tuple[int, int]], row: int, col: int) -> int:
+    # in 的结果是 True / False，sum 时 True 当 1、False 当 0，加起来就是周围的雷数
     return sum((row + row_step, col + col_step) in mines for row_step, col_step in ALL_EIGHT_DIRECTIONS)
 
 

@@ -27,7 +27,11 @@ COMMENTS = {
 
 
 def max_nesting_depth(comment: dict) -> int:
-    """楼中楼最多嵌套几层（只有自己算 1 层）。本课“最大深度”的 N 叉版本。"""
+    """楼中楼最多嵌套几层（只有自己算 1 层）。本课“最大深度”的 N 叉版本。
+
+    max 的 default=0：没有孩子时生成器是空的，max 对空序列会抛 ValueError，
+    default=0 表示“一个孩子都没有就按 0 算”。
+    """
     return 1 + max((max_nesting_depth(child) for child in comment["children"]), default=0)
 
 

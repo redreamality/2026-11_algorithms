@@ -20,6 +20,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 13 课 · 图的表示、BFS、DFS</h1>
 <p class="one-line">图就是<b>点</b>加<b>连线</b>。遍历有两种走法：BFS 像水波，一圈圈往外扩；DFS 像走迷宫，一条路走到底，走不通再回头。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#dict-tools">defaultdict 与 get</a>、<a href="python-basics.html#generator">生成器与 next()</a>、<a href="python-basics.html#comprehension">生成器表达式</a>、<a href="python-basics.html#loop-tools">切片步长（<code>chain[::-1]</code>）</a>；前面的课 —— <a href="03-stack-queue.html">第 3 课 · 队列与栈（deque）</a>、<a href="05-recursion.html">第 5 课 · 递归</a></p>
 
 <h2>实战里怎么写：一个 dict 就是图</h2>
 <p>Python 没有内置的图类型，日常也用不着：<b>dict 就是邻接表</b>，键是节点，值是邻居 list。节点直接用业务里的东西（用户名、URL、<code>(行, 列)</code> 坐标），不用编号成 0..n-1。</p>

@@ -9,13 +9,14 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 3 课 · 栈与队列</h1>
 <p class="one-line"><b>栈</b>是后进先出（LIFO），像一摞盘子，只能动最上面那个；<b>队列</b>是先进先出（FIFO），像排队买票，从队尾进、从队头出。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#dunder">魔法方法</a>（<code>__len__</code>、<code>__iter__</code>、<code>__bool__</code> 的退路）、<a href="python-basics.html#generator">生成器</a>、<a href="python-basics.html#class">@property</a>、<a href="python-basics.html#exceptions">异常约定（IndexError）</a>、<a href="python-basics.html#numbers"><code>%</code> 取余</a>、<a href="python-basics.html#closure">嵌套函数</a>、<a href="python-basics.html#walrus">海象运算符 :=</a>；前面的课 —— <a href="01-dynamic-array.html">第 1 课 · 动态数组</a>（翻倍扩容、均摊 O(1)）、<a href="02-linked-list.html">第 2 课 · 链表</a>（<code>append</code> / <code>popleft</code> 这套方法名）。</p>
 
 <h2>实战里怎么写：list 当栈，deque 当队列</h2>
 <p>业务代码里没人专门写 Stack / Queue 类，直接用现成的：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
-  <tr><td>栈（撤销、括号匹配、深度优先）</td><td><code>list</code> 的 <code>append</code> / <code>pop</code> / <code>[-1]</code></td><td>均摊 O(1)</td></tr>
-  <tr><td>单线程里的队列（任务排队、BFS）</td><td><code>collections.deque</code> 的 <code>append</code> / <code>popleft</code></td><td>O(1)；<code>list.pop(0)</code> 是 O(n)</td></tr>
+  <tr><td>栈（撤销、括号匹配）</td><td><code>list</code> 的 <code>append</code> / <code>pop</code> / <code>[-1]</code></td><td>均摊 O(1)</td></tr>
+  <tr><td>单线程里的队列（任务排队）</td><td><code>collections.deque</code> 的 <code>append</code> / <code>popleft</code></td><td>O(1)；<code>list.pop(0)</code> 是 O(n)</td></tr>
   <tr><td>多线程之间传任务</td><td>标准库 <code>queue.Queue</code> 的 <code>put</code> / <code>get</code></td><td>O(1)，自带锁，<code>get</code> 可以阻塞等待</td></tr>
 </table>
 <pre>from collections import deque
@@ -35,7 +36,22 @@ pending = deque(["下载 a.zip", "发邮件"])
 while pending:
     job = pending.popleft()                          # 先来先处理，O(1)
     ...</pre>
-<p>完整可运行的版本在 <code>examples/stack_queue_in_practice.py</code>（<code>uv run examples/stack_queue_in_practice.py</code>），还有用两个栈做的撤销 / 重做和一个 <code>queue.Queue</code> 工作线程。下面看 deque 这种队列是怎么做到两头都 O(1) 的。</p>
+<p><code>collections.deque</code>（读作 “deck”，double-ended queue，双端队列）是这一课第一次正式出场的标准库工具。用法和 list 很像，只是多了一组操作<b>左端</b>的方法：</p>
+<pre>from collections import deque
+
+line = deque(["a", "b"])        # 用任何可迭代对象建，空的就是 deque()
+line.append("c")                # 右端进：deque(['a', 'b', 'c'])
+line.appendleft("z")            # 左端进：deque(['z', 'a', 'b', 'c'])
+line.popleft()                  # 'z'   左端出；空的时候抛 IndexError
+line.pop()                      # 'c'   右端出
+line[0], len(line), "a" in line # ('a', 2, True)   下标、len、in 都能用（但按下标取中间元素是 O(n)）
+
+recent = deque(maxlen=3)        # 限长：满了以后从一端进，另一端自动挤掉一个
+for page in ["首页", "搜索", "商品", "购物车"]:
+    recent.append(page)
+print(recent)                   # deque(['搜索', '商品', '购物车'], maxlen=3)</pre>
+<p>第 1 课里“只留最近 3 条”要手动 <code>del items[0]</code>（O(n)），换成 <code>deque(maxlen=3)</code> 就是 O(1)。CPython 的 deque 底层是一串定长小块串成的双向链表（第 2 课链表的升级版）；下面讲另一种做到两头都快的办法：环形队列。</p>
+<p>完整可运行的版本在 <code>examples/stack_queue_in_practice.py</code>（<code>uv run examples/stack_queue_in_practice.py</code>），还有用两个栈做的撤销 / 重做和一个 <code>queue.Queue</code> 工作线程。多线程不是这门课的内容，那一段只需看懂三件事：<code>threading.Thread(target=函数)</code> 造一个线程、<code>start()</code> 让它和主程序同时跑、<code>join()</code> 等它跑完；<code>queue.Queue</code> 的 <code>put</code> 放进队尾，<code>get</code> 从队头取，队列空时 <code>get</code> 会停下来等。</p>
 
 <h2>栈：一个 list 就够了</h2>
 <div class="row">
@@ -44,7 +60,7 @@ while pending:
 <pre>items.append(x)   # push：O(1)
 items.pop()       # pop：O(1)
 items[-1]         # peek：O(1)</pre>
-<p>只在 list 的<b>末尾</b>进出，第 1 课讲过，这都是 O(1)。函数调用、撤销、括号匹配，用的都是栈。</p>
+<p>只在 list 的<b>末尾</b>进出，第 1 课讲过，这都是 O(1)。撤销、括号匹配用的都是栈；Python 执行函数调用时也靠一个栈记住“回到哪里”，第 5 课讲递归时会看到。</p>
 
 <h2>队列：为什么不能也用 list</h2>
 <p>队列要从<b>头部</b>取。<code>list.pop(0)</code> 会让后面所有元素往左挪一格，是 O(n)。</p>
@@ -111,7 +127,7 @@ uv run pytest tests/test_stack_queue.py</pre>
 <details><summary>2. 不记 size，只记 head 和 tail，怎么区分空和满？</summary>
 常见做法是故意空一格：<code>(tail + 1) % capacity == head</code> 算满。代价是永远浪费一个格子。</details>
 <details><summary>3. Python 里实际该用什么当队列？</summary>
-单线程用 <code>collections.deque</code>，两端进出都是 O(1)，BFS（第 13 课）就靠它；多线程之间传任务用 <code>queue.Queue</code>。</details>
+单线程用 <code>collections.deque</code>，两端进出都是 O(1)，后面第 13 课的广度优先搜索就靠它；多线程之间传任务用 <code>queue.Queue</code>。</details>
 
 <div class="nav"><a href="02-linked-list.html">← 上一课：链表</a><a href="04-hash-table.html">下一课：哈希表 →</a></div>
 <script src="anim.js"></script>

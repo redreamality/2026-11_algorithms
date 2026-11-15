@@ -3,13 +3,13 @@
 Python 的 sorted() 是 Timsort，不是快排；但快排的“分区”思想解决的问题，标准库都有现成的：
 1. 排序 → sorted() / list.sort()。
 2. 中位数、分位数（P95 延迟）→ statistics.median / statistics.quantiles。
-3. 前 k 名、后 k 名（k 远小于 n）→ heapq.nlargest / nsmallest，O(n log k)。
-4. 只要第 k 小的一个值、数据量大 → 自己写 quickselect，平均 O(n)；或者装 numpy 用 numpy.partition。
+3. 前 k 名、后 k 名 → sorted(key=..., reverse=True)[:k] 切前 k 个；数据特别大时标准库还有 heapq.nlargest /
+   nsmallest（内部靠堆，第 12 课讲用法、第 33 课细讲，这里不展开）。
+4. 只要第 k 小的一个值、数据量大 → 自己写 quickselect，平均 O(n)。
 
 运行：uv run examples/quick_sort_in_practice.py
 """
 
-import heapq
 import statistics
 
 
@@ -24,8 +24,9 @@ def latency_report(latencies_ms: list[float]) -> dict[str, float]:
 
 
 def top_sellers(sales: dict[str, int], count: int) -> list[str]:
-    """场景二：销量前几名。只要前 count 个时，nlargest 比整个排序省。"""
-    return heapq.nlargest(count, sales, key=sales.__getitem__)
+    """场景二：销量前几名。先整体排序再切前 count 个；销量相同的按字典序先后。"""
+    ranked = sorted(sales.items(), key=lambda item: item[1], reverse=True)
+    return [name for name, _ in ranked[:count]]
 
 
 def main() -> None:
@@ -40,7 +41,7 @@ def main() -> None:
     assert top_sellers(sales, 3) == ["耳机", "U 盘", "鼠标"]
     print("销量前三：", top_sellers(sales, 3))
 
-    cheapest_two = heapq.nsmallest(2, [("显示器", 899), ("鼠标", 59), ("键盘", 199)], key=lambda item: item[1])
+    cheapest_two = sorted([("显示器", 899), ("鼠标", 59), ("键盘", 199)], key=lambda item: item[1])[:2]
     assert [name for name, _ in cheapest_two] == ["鼠标", "键盘"]
     print("最便宜的两个：", cheapest_two)
 

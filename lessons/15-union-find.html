@@ -19,6 +19,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 15 课 · 并查集</h1>
 <p class="one-line">并查集只回答一个问题：<b>这两个是不是一伙的？</b>支持“把两伙合成一伙”和“查是不是一伙”，两件事都近似 O(1)。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#unpack">解包与交换</a>（<code>a, b = b, a</code>、<code>parent[element], element = root, parent[element]</code>）、<a href="python-basics.html#dict-tools">setdefault 与按值分组</a>、<a href="python-basics.html#dunder">魔法方法</a>（骨架里的 <code>__len__</code>、<code>__contains__</code>）、<a href="python-basics.html#type-hints">类型标注与 collections.abc</a>、<a href="python-basics.html#generator">iter() 与 next()</a>、<a href="python-basics.html#comprehension">生成器表达式</a>、<a href="python-basics.html#fstring">f-string 的 !r</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>、<a href="04-hash-table.html">第 4 课 · 哈希表</a>（dict 为什么快、“可哈希”是什么意思）。</p>
 
 <h2>实战里怎么写：复制一个二十行的小类</h2>
 <p>标准库没有并查集，但它短到不值得引第三方库，实际项目里就是自己写一个小类。<code>parent</code> 用 <b>dict</b>，元素直接用业务里的东西（邮箱、设备 ID、<code>(行, 列)</code>），不用先编号成 0..n-1。</p>

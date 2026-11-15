@@ -18,6 +18,7 @@
 
 from collections.abc import Hashable, Iterator, Mapping
 
+# 类型别名：写 Graph 就等于写后面那一长串，意思是 {节点: {邻点: 权重}}。
 Graph = Mapping[Hashable, Mapping[Hashable, float]]
 
 
@@ -50,7 +51,7 @@ def shortest_path(graph: Graph, source, target) -> tuple[float, list] | None:
 
 
 if __name__ == "__main__":
-    from itertools import takewhile
+    from itertools import takewhile   # takewhile(条件, 序列)：从头挨个取，条件一不满足就停，后面的全不要
 
     def show(title, compute, expected):
         """运行一个例子，打印期望和实际结果。compute 是一个不带参数的函数。"""

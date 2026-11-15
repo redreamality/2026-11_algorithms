@@ -12,6 +12,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 7 课 · 简单排序（选择、插入）与稳定性</h1>
 <p class="one-line">两种最朴素的排序：<b>选择排序</b>每轮挑出最小的放到前面；<b>插入排序</b>像理牌，把新牌插进左边已经排好的那一手里。都是 O(n²)。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#lambda-key">lambda、key=、sorted 与 sort、排序稳定、itemgetter</a>、<a href="python-basics.html#class">@dataclass</a>、<a href="python-basics.html#unpack">多重赋值交换</a>、<a href="python-basics.html#loop-tools">range 与 enumerate</a>、<a href="python-basics.html#fstring">f-string 的 !r</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>（O(n²)、O(n log n)）。</p>
 
 <h2>实战里怎么写：用 sorted() / list.sort()</h2>
 <p>业务代码里没人手写排序。内置的 Timsort <b>稳定</b>、O(n log n)、近乎有序时接近 O(n)。要学的是怎么用好它：</p>
@@ -19,14 +20,14 @@
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
   <tr><td>要一个新列表，原数据不动</td><td><code>sorted(items, key=..., reverse=...)</code></td><td>O(n log n)，额外 O(n)</td></tr>
   <tr><td>就地排，省内存</td><td><code>items.sort(...)</code>，返回 <code>None</code></td><td>O(n log n)</td></tr>
-  <tr><td>按字段排</td><td><code>key=operator.itemgetter("score")</code> / <code>attrgetter("created")</code></td><td>key 每个元素只算一次</td></tr>
+  <tr><td>按字段排</td><td><code>key=lambda ticket: ticket.priority</code>，或 <code>key=operator.itemgetter("priority")</code>（见<a href="python-basics.html#lambda-key">预备课</a>）</td><td>key 每个元素只算一次</td></tr>
   <tr><td>多字段、方向不同</td><td>利用稳定性分两趟排；或数字取负号拼元组</td><td>两趟就是 2 × O(n log n)</td></tr>
 </table>
-<pre>from operator import attrgetter
+<pre>from operator import itemgetter
 
 # 工单：优先级从高到低，同优先级按创建日期从早到晚
-ordered = sorted(tickets, key=attrgetter("created"))        # 先按次要字段
-ordered.sort(key=attrgetter("priority"), reverse=True)      # 再按主要字段；稳定，日期顺序被保留
+ordered = sorted(tickets, key=lambda ticket: ticket.created)   # 先按次要字段
+ordered.sort(key=lambda ticket: ticket.priority, reverse=True) # 再按主要字段；稳定，日期顺序被保留
 
 # 一趟写完也行：元组按字段依次比，数字字段取负号就反过来了
 ordered = sorted(tickets, key=lambda ticket: (-ticket.priority, ticket.created))

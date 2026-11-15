@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>预备课 · Python 基础</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.listing { margin: 6px 0; }
+.listing .line { display: block; padding: 0 6px; white-space: pre; }
+.listing .line.hot { background: #ffe0b2; }
+.listing .line.idle { background: #e3f2fd; }
+.panels { display: flex; gap: 16px; flex-wrap: wrap; }
+.panel { flex: 1; min-width: 260px; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>预备课 · Python 基础</h1>
+<p class="one-line">后面 40 课的代码会用到的 Python 写法，都集中在这一页。<b>变量、if、for、函数、list、dict 默认你会</b>；这里只讲容易生疏或没见过的。</p>
+
+<h2>这一课怎么用</h2>
+<ul>
+  <li>第一遍快速扫一遍，知道有哪些东西就行，不用背。</li>
+  <li>后面每一课开头都有一行「开始前要会」，链接到这一页对应的小节。遇到不熟的再点回来细看。</li>
+  <li>每一节的代码都是完整的，复制到一个 <code>.py</code> 文件里用 <code>uv run</code> 就能跑。</li>
+  <li>本页只讲<b>语言和通用工具</b>。<code>deque</code>、<code>heapq</code>、<code>bisect</code> 这类数据结构工具，放在讲它原理的那一课里一起讲，不在这里提前用。</li>
+</ul>
+
+<h2>目录</h2>
+<ol>
+  <li><a href="#main">运行方式：<code>uv run</code>、<code>if __name__ == "__main__"</code>、<code>assert</code></a></li>
+  <li><a href="#fstring">f-string：<code>{x!r}</code>、<code>{x:.2f}</code>、<code>{x=}</code></a></li>
+  <li><a href="#comprehension">推导式与生成器表达式</a></li>
+  <li><a href="#unpack">解包：多重赋值、交换、<code>*rest</code>、<code>*args</code></a></li>
+  <li><a href="#loop-tools">循环小工具：<code>enumerate</code>、<code>zip</code>、<code>range</code> 倒序、切片步长、<code>divmod</code></a></li>
+  <li><a href="#lambda-key">函数当参数：<code>lambda</code> 与 <code>key=</code></a></li>
+  <li><a href="#dict-tools">字典小工具：<code>get</code>、<code>setdefault</code>、<code>defaultdict</code>、<code>Counter</code></a></li>
+  <li><a href="#exceptions">异常：<code>try</code>/<code>except</code>/<code>else</code>、<code>raise ... from</code>、<code>with</code></a></li>
+  <li><a href="#type-hints">类型标注：<code>list[int]</code>、<code>Node | None</code>、<code>Iterator</code></a></li>
+  <li><a href="#class">类：<code>@property</code>、<code>@classmethod</code>、<code>@dataclass</code>、<code>NamedTuple</code></a></li>
+  <li><a href="#dunder">魔法方法：让自己的类支持 <code>len</code>、<code>in</code>、<code>for</code>、<code>[]</code>、<code>==</code>、<code>&lt;</code></a></li>
+  <li><a href="#abc">继承 <code>collections.abc</code>：写几个方法，白送一堆</a></li>
+  <li><a href="#generator">生成器：<code>yield</code>、<code>next()</code>、<code>iter()</code></a></li>
+  <li><a href="#yield-from">委托：<code>yield from</code></a></li>
+  <li><a href="#closure">嵌套函数：闭包、<code>nonlocal</code>、<code>global</code></a></li>
+  <li><a href="#decorator">装饰器与 <code>functools.cache</code></a></li>
+  <li><a href="#itertools">itertools：<code>accumulate</code>、<code>pairwise</code>、<code>combinations</code> 等</a></li>
+  <li><a href="#numbers">数字：<code>math.inf</code>、<code>//</code> 与 <code>%</code>、大整数、<code>random</code></a></li>
+  <li><a href="#walrus">海象运算符 <code>:=</code></a></li>
+  <li><a href="#sortedcontainers">第三方库 <code>sortedcontainers</code>：一直有序的 list / dict</a></li>
+  <li><a href="#params">函数参数：默认值、关键字参数、仅限关键字的 <code>*</code>、<code>**kwargs</code></a></li>
+  <li><a href="#sets">集合运算、<code>frozenset</code>、什么能当 dict 的键</a></li>
+  <li><a href="#datetime">日期时间：<code>datetime</code>、<code>date</code>、<code>timedelta</code></a></li>
+</ol>
+
+<h2 id="main">1. 运行方式：<code>uv run</code>、<code>if __name__ == "__main__"</code>、<code>assert</code></h2>
+<p>本项目用 <code>uv</code> 管理 Python 和依赖。<code>uv run 文件.py</code> 会自动用项目的虚拟环境去跑，不用自己激活。</p>
+<p>每个骨架文件末尾都有这样一段：</p>
+<pre>def double(x):
+    return x * 2
+
+
+if __name__ == "__main__":
+    # 只有直接运行这个文件时（uv run 文件.py）才会执行；
+    # 被别的文件 import 时（比如 pytest 导入它做测试）不会执行。
+    assert double(3) == 6, "double(3) 应该是 6"
+    print("全部通过")</pre>
+<ul>
+  <li><code>__name__</code> 是 Python 自动给每个文件设的变量：直接运行时它等于 <code>"__main__"</code>，被 import 时等于模块名。</li>
+  <li><code>assert 条件, 说明</code>：条件为假就抛 <code>AssertionError</code>，并带上说明。<code>examples/</code> 里的实战脚本就是靠一串 <code>assert</code> 检查自己算得对不对。</li>
+</ul>
+
+<h2 id="fstring">2. f-string：<code>{x!r}</code>、<code>{x:.2f}</code>、<code>{x=}</code></h2>
+<p>字符串前加 <code>f</code>，花括号里可以直接写表达式。冒号后面是格式，<code>!r</code> 表示用 <code>repr()</code> 显示（字符串会带引号，方便看出空格和类型）。</p>
+<pre>name = "Bob"
+price = 3.14159
+items = [1, 2]
+
+print(f"你好，{name}")          # 你好，Bob
+print(f"{name!r}")              # 'Bob'      带引号，一眼看出是字符串
+print(f"{price:.2f}")           # 3.14       保留两位小数
+print(f"{12345:,}")             # 12,345     千分位
+print(f"{len(items) = }")       # len(items) = 2   调试用：连表达式一起打印
+print(f"[{name:&gt;6}]")           # [   Bob]  右对齐，占 6 格</pre>
+<p>类里的 <code>__repr__</code> 常写成 <code>f"LinkedList({list(self)!r})"</code>，就是这个用法。</p>
+
+<h2 id="comprehension">3. 推导式与生成器表达式</h2>
+<p>一行生成一个新容器，读法是“对 … 里的每个 …，如果 …，就放进来 …”：</p>
+<pre>nums = [3, -1, 4, -1, 5]
+
+squares = [n * n for n in nums]                 # 列表：[9, 1, 16, 1, 25]
+positives = [n for n in nums if n &gt; 0]          # 带条件：[3, 4, 5]
+unique = {n for n in nums}                      # 集合：{3, -1, 4, 5}
+index_of = {n: i for i, n in enumerate(nums)}   # 字典：值 → 最后一次出现的下标（enumerate 见第 5 节）
+grid = [[0] * 3 for _ in range(2)]              # 2 行 3 列的二维表：[[0, 0, 0], [0, 0, 0]]</pre>
+<p>二维表一定要用推导式建。<code>[[0] * 3] * 2</code> 看着一样，其实两行是<b>同一个</b> list，改一行另一行跟着变。同样道理，<code>grid.copy()</code> 和 <code>grid[:]</code> 只复制外层，里面的每一行还是共用的；要连里层一起复制，用 <code>[row[:] for row in grid]</code> 或 <code>copy.deepcopy(grid)</code>。</p>
+<p>把方括号换成圆括号，就是<b>生成器表达式</b>：不先造出整个 list，而是边算边给。直接传给 <code>sum</code>、<code>any</code>、<code>max</code> 这类函数时，连圆括号都可以省：</p>
+<pre>total = sum(n * n for n in nums)              # 不建中间 list，省内存
+has_negative = any(n &lt; 0 for n in nums)       # 碰到第一个负数就停，不再往后算
+longest = max(len(word) for word in ["a", "abc", "ab"])   # 3</pre>
+<p>生成器是怎么做到“边算边给”的，见第 13 节。</p>
+
+<h2 id="unpack">4. 解包：多重赋值、交换、<code>*rest</code>、<code>*args</code></h2>
+<pre>x, y = 1, 2
+x, y = y, x                 # 交换，不需要临时变量：x = 2, y = 1
+
+point = (3, 4)
+row, col = point            # 元组拆开赋给两个变量
+
+first, *rest = [1, 2, 3, 4]       # first = 1, rest = [2, 3, 4]
+*init, last = [1, 2, 3, 4]        # init = [1, 2, 3], last = 4
+
+for name, score in [("Ann", 90), ("Bob", 85)]:   # for 里也能拆
+    print(name, score)
+
+merged = [*[1, 2], *[3, 4]]       # 把两个 list 摊开拼起来：[1, 2, 3, 4]
+print(*[1, 2, 3])                 # 等于 print(1, 2, 3)
+
+
+def total(*numbers):              # 收任意多个位置参数，numbers 是一个元组
+    return sum(numbers)
+
+
+total(1, 2, 3)                    # 6</pre>
+<p>注意 <code>x, y = y, x</code> 的执行顺序：右边先整体算出一个元组 <code>(2, 1)</code>，再依次赋给左边。链表反转里会写 <code>previous_node, current_node = current_node, current_node.next</code>，靠的就是这一点。</p>
+
+<h2 id="loop-tools">5. 循环小工具：<code>enumerate</code>、<code>zip</code>、<code>range</code> 倒序、切片步长、<code>divmod</code></h2>
+<pre>words = ["a", "b", "c"]
+
+for index, word in enumerate(words):        # 同时拿到下标和值：0 a、1 b、2 c
+    ...
+for index, word in enumerate(words, 1):     # 下标从 1 开始数
+
+names = ["Ann", "Bob"]
+scores = [90, 85]
+for name, score in zip(names, scores):      # 两个序列并排走，按短的那个停
+    ...
+dict(zip(names, scores))                    # {'Ann': 90, 'Bob': 85}
+
+for i in range(5, 0, -1):                   # 倒着数：5 4 3 2 1（终点 0 不含）
+    ...
+
+nums = [0, 1, 2, 3, 4, 5]
+nums[::-1]        # [5, 4, 3, 2, 1, 0]  新建一个倒序副本
+nums[::2]         # [0, 2, 4]           每隔一个取一个
+nums[1:4]         # [1, 2, 3]           左闭右开
+nums[-1]          # 5                   负数下标从末尾数
+
+quotient, remainder = divmod(17, 5)         # (3, 2)，等于 (17 // 5, 17 % 5)</pre>
+<p>切片总是<b>新建</b>一个 list，要把切出来的元素一个个复制过去，并不是“免费”的。在循环里反复切片会悄悄变慢，第 0 课讲完复杂度后再细说。</p>
+
+<h2 id="lambda-key">6. 函数当参数：<code>lambda</code> 与 <code>key=</code></h2>
+<p>Python 里函数也是一个值，可以存进变量、当参数传。<code>lambda 参数: 表达式</code> 是一个没有名字的小函数，只能写一个表达式，表达式的值就是返回值：</p>
+<pre>def by_length(word):
+    return len(word)
+
+by_length_lambda = lambda word: len(word)     # 和上面的 def 等价</pre>
+<p>最常见的用途是给 <code>sorted</code>、<code>min</code>、<code>max</code> 传 <code>key=</code>：<b>先对每个元素算出 key，再按 key 比较</b>，返回的仍然是原来的元素。</p>
+<pre>students = [("Ann", 90), ("Bob", 85), ("Cid", 90)]
+
+sorted(students, key=lambda student: student[1])
+# [('Bob', 85), ('Ann', 90), ('Cid', 90)]   按分数升序
+
+sorted(students, key=lambda student: (-student[1], student[0]))
+# [('Ann', 90), ('Cid', 90), ('Bob', 85)]   分数降序；同分按名字升序
+
+max(students, key=lambda student: student[1])   # ('Ann', 90)  同样大时取第一个
+sorted(["b", "A", "c"], key=str.lower)          # ['A', 'b', 'c']  直接传现成的函数也行</pre>
+<ul>
+  <li>key 返回<b>元组</b>时按位比较：先比第一项，相等再比第二项。数字取负号就能让这一项倒过来排。</li>
+  <li><code>sorted(x)</code> 返回新 list，不动原数据；<code>x.sort()</code> 原地排、返回 <code>None</code>。</li>
+  <li>Python 的排序是<b>稳定</b>的：key 相同的元素，排完后保持原来的先后顺序。为什么重要，第 7 课讲。</li>
+  <li><code>operator.itemgetter(1)</code> 等价于 <code>lambda item: item[1]</code>，在别人的代码里会见到。</li>
+  <li><code>sorted(x, reverse=True)</code> 整体倒过来排（降序），稳定性不变。</li>
+  <li><code>max(x, default=0)</code>：x 为空时返回 0，而不是抛 <code>ValueError</code>。<code>min</code> 同理。</li>
+</ul>
+<p><b>循环里造 lambda 的坑</b>：lambda 记住的是<b>变量</b>，不是当时的值。循环结束后再调用，它们看到的都是变量最后的值：</p>
+<pre>adders = [lambda x: x + step for step in range(3)]
+[add(10) for add in adders]          # [12, 12, 12]，不是 [10, 11, 12]
+
+adders = [lambda x, step=step: x + step for step in range(3)]   # 用默认参数把当时的值“钉住”
+[add(10) for add in adders]          # [10, 11, 12]</pre>
+<p>骨架文件里的自测函数 <code>show(title, compute, expected)</code> 也是这个思路：<code>compute</code> 传一个 <code>lambda: len(tickets)</code> 进去，<code>show</code> 在 <code>try</code> 里调用它，这样没实现的方法抛异常也不会让整个脚本停下。</p>
+
+<h2 id="dict-tools">7. 字典小工具：<code>get</code>、<code>setdefault</code>、<code>defaultdict</code>、<code>Counter</code></h2>
+<p>这一节只讲怎么用。dict 内部为什么查找这么快，是第 4 课的内容。</p>
+<pre>stock = {"apple": 3}
+
+stock.get("pear")          # None       键不存在不报错（stock["pear"] 会抛 KeyError）
+stock.get("pear", 0)       # 0          可以给默认值
+dict.fromkeys(["a", "b"])  # {'a': None, 'b': None}
+list(dict.fromkeys([3, 1, 3, 2]))   # [3, 1, 2]   去重并保留顺序（dict 记得插入顺序）</pre>
+<p><b>按某个东西分组</b>是最常见的需求，有三种写法，效果一样：</p>
+<pre>words = ["apple", "avocado", "banana"]
+
+# 写法一：手动判断
+groups = {}
+for word in words:
+    if word[0] not in groups:
+        groups[word[0]] = []
+    groups[word[0]].append(word)
+
+# 写法二：setdefault(键, 默认值)：键不在就先放进默认值；不管在不在，都返回字典里这个键对应的值
+groups = {}
+for word in words:
+    groups.setdefault(word[0], []).append(word)
+
+# 写法三：defaultdict(list)：访问不存在的键时，自动调用 list() 造一个空列表放进去
+from collections import defaultdict
+
+groups = defaultdict(list)
+for word in words:
+    groups[word[0]].append(word)
+
+# 三种都得到 {'a': ['apple', 'avocado'], 'b': ['banana']}</pre>
+<p><code>defaultdict</code> 的坑：只是<b>读</b>一下 <code>groups["z"]</code>，也会往里面插入一个 <code>"z": []</code>。只想查不想插，就用 <code>"z" in groups</code> 或 <code>groups.get("z")</code>。</p>
+<p><b>计数</b>用 <code>Counter</code>，它是一个“值默认为 0 的 dict”：</p>
+<pre>from collections import Counter
+
+counts = Counter("banana")       # Counter({'a': 3, 'n': 2, 'b': 1})
+counts["a"]                      # 3
+counts["z"]                      # 0   不存在的键返回 0，而且不会插入
+counts.most_common(2)            # [('a', 3), ('n', 2)]
+counts["b"] += 1                 # 当普通 dict 用，可以直接加</pre>
+
+<h2 id="exceptions">8. 异常：<code>try</code>/<code>except</code>/<code>else</code>、<code>raise ... from</code>、<code>with</code></h2>
+<pre>def parse_age(text):
+    try:
+        age = int(text)
+    except ValueError as error:          # 只接住会出现的那一种异常
+        raise ValueError(f"年龄必须是整数：{text!r}") from error
+    else:                                # try 里没出错才走这里
+        if age &lt; 0:
+            raise ValueError(f"年龄不能是负数：{age}")
+        return age
+
+
+try:
+    parse_age("abc")
+except ValueError as error:
+    print(error)                         # 年龄必须是整数：'abc'</pre>
+<ul>
+  <li><code>raise 新异常 from 原异常</code>：换成对调用者更好懂的说法，同时把原始原因也挂在报错信息里，排查时两层都能看到。</li>
+  <li>不要写光秃秃的 <code>except:</code>，它会把拼错变量名之类的 bug 也吞掉。</li>
+  <li>自定义异常：<code>class EmptyError(Exception): pass</code>，或者继承一个意思相近的内置异常，例如 <code>class QueueEmpty(IndexError): pass</code>，这样调用者 <code>except IndexError</code> 也能接住它。</li>
+</ul>
+<p>我们手写的数据结构，抛的异常要和标准库<b>一致</b>，别人才能无缝替换：</p>
+<table>
+  <tr><th>情况</th><th>标准库的做法</th><th>例子</th></tr>
+  <tr><td>按位置取，越界或者容器为空</td><td><code>IndexError</code></td><td><code>[].pop()</code>、<code>[1][5]</code></td></tr>
+  <tr><td>按键取，键不存在</td><td><code>KeyError(key)</code></td><td><code>{}["x"]</code></td></tr>
+  <tr><td>值本身不对（找不到、格式错）</td><td><code>ValueError</code></td><td><code>[1].remove(2)</code>、<code>int("abc")</code></td></tr>
+  <tr><td>类型不对</td><td><code>TypeError</code></td><td><code>1 + "a"</code></td></tr>
+</table>
+<p><code>with</code> 用来管理“用完必须收尾”的资源，比如文件。离开 <code>with</code> 块时会自动关闭，中途抛异常也会关：</p>
+<pre>with open("orders.csv", encoding="utf-8") as file:
+    for line in file:
+        print(line.strip())
+# 到这里文件已经关闭了</pre>
+<p>测试里的 <code>with pytest.raises(IndexError):</code> 也是 <code>with</code>：块里的代码<b>必须</b>抛出 <code>IndexError</code>，测试才算通过。</p>
+
+<h2 id="type-hints">9. 类型标注：<code>list[int]</code>、<code>Node | None</code>、<code>Iterator</code></h2>
+<p>骨架里函数签名上的类型标注<b>只是注释</b>，Python 运行时不检查。它的作用是告诉读代码的人：参数应该传什么，会返回什么。</p>
+<pre>from collections.abc import Callable, Iterable, Iterator
+
+
+def average(scores: list[float]) -&gt; float: ...           # 参数是 float 的 list，返回 float
+def find(names: dict[str, int], name: str) -&gt; int | None: ...   # 可能返回 int，也可能返回 None
+def total(items: Iterable[int]) -&gt; int: ...              # 任何能 for 的东西：list、set、生成器……
+def walk() -&gt; Iterator[int]: ...                        # 生成器函数（第 13 节）一般这样标
+def apply(func: Callable[[int], int], x: int) -&gt; int: ...   # func 是“收一个 int、返回 int”的函数</pre>
+<ul>
+  <li><code>A | B</code> 读作“A 或者 B”。<code>Node | None</code> 是最常见的：链表和树里，“下一个节点”可能不存在。</li>
+  <li>类型写在<b>引号</b>里（<code>next: "Node | None"</code>），是因为 <code>Node</code> 这个类还没定义完，就在自己的 <code>__init__</code> 里引用了自己。加引号可以推迟求值。</li>
+  <li><code>Iterable</code> 只承诺“能 for”；<code>Iterator</code> 还承诺“能 <code>next()</code>”。区别见第 13 节。</li>
+  <li><code>tuple[int, str]</code> 是“正好两项、分别是 int 和 str”的元组；<code>tuple[str, ...]</code> 是“任意多项、每项都是 str”的元组。</li>
+</ul>
+
+<h2 id="class">10. 类：<code>@property</code>、<code>@classmethod</code>、<code>@dataclass</code>、<code>NamedTuple</code></h2>
+<pre>class Account:
+    def __init__(self, owner, balance=0):    # 创建对象时自动调用
+        self.owner = owner                    # self 就是“这个对象自己”
+        self._balance = balance               # 下划线开头：约定为内部用，外面别直接改
+
+    @property
+    def balance(self):                        # 像属性一样读：account.balance（不加括号）
+        return self._balance
+
+    def deposit(self, amount):
+        if amount &lt;= 0:
+            raise ValueError("金额必须为正")
+        self._balance += amount
+
+    @classmethod
+    def from_text(cls, text):                 # 另一种创建方式：Account.from_text("Ann:100")
+        owner, balance = text.split(":")      # cls 就是 Account 这个类本身
+        return cls(owner, int(balance))
+
+    @staticmethod
+    def is_valid_owner(name):                 # 和对象、类都无关，只是放在类里的普通函数
+        return name.isalpha()
+
+
+account = Account.from_text("Ann:100")
+account.deposit(50)
+print(account.balance)                        # 150
+account.balance = 0                           # AttributeError：property 只读</pre>
+<p><b>只是装数据的类</b>，不用手写 <code>__init__</code>，用 <code>@dataclass</code> 自动生成 <code>__init__</code>、<code>__repr__</code>、<code>__eq__</code>：</p>
+<pre>from dataclasses import dataclass, field
+
+
+@dataclass
+class Order:
+    order_id: int
+    amount: float
+    tags: list[str] = field(default_factory=list)   # 可变的默认值必须这样写
+
+
+order = Order(1, 9.9)
+print(order)                      # Order(order_id=1, amount=9.9, tags=[])
+order == Order(1, 9.9)            # True，按字段比较
+
+
+@dataclass(order=True)            # order=True：还能按字段顺序比大小，可以直接排序
+class Task:
+    priority: int
+    name: str
+
+
+sorted([Task(2, "b"), Task(1, "z")])   # [Task(priority=1, name='z'), Task(priority=2, name='b')]</pre>
+<p>为什么默认值要写 <code>field(default_factory=list)</code>：如果写 <code>tags: list = []</code>，所有对象会共用<b>同一个</b> list。普通函数的默认参数也有同样的坑，所以骨架里写 <code>def __init__(self, items=())</code>，用不可变的空元组当默认值。</p>
+<p><b>不可变的</b>小记录可以用 <code>NamedTuple</code>：它就是一个元组，但每一项有名字。</p>
+<pre>from typing import NamedTuple
+
+
+class Edge(NamedTuple):
+    start: str
+    end: str
+    weight: int
+
+
+edge = Edge("A", "B", 5)
+edge.weight          # 5      按名字取
+edge[2]              # 5      也能按下标取
+start, end, weight = edge     # 也能解包
+edge.weight = 6      # AttributeError：不能改</pre>
+<p><code>isinstance(x, (int, float))</code> 判断 x 是不是其中某个类型（或它们的子类）的对象。</p>
+
+<h2 id="dunder">11. 魔法方法：让自己的类支持 <code>len</code>、<code>in</code>、<code>for</code>、<code>[]</code>、<code>==</code>、<code>&lt;</code></h2>
+<p>前后各两个下划线的方法叫“魔法方法”（dunder）。你不直接调用它们，而是 Python 在遇到对应写法时替你调用：</p>
+<table>
+  <tr><th>你写</th><th>Python 实际调用</th></tr>
+  <tr><td><code>len(x)</code></td><td><code>x.__len__()</code></td></tr>
+  <tr><td><code>item in x</code></td><td><code>x.__contains__(item)</code></td></tr>
+  <tr><td><code>for item in x</code></td><td><code>x.__iter__()</code>，见第 13 节</td></tr>
+  <tr><td><code>x[i]</code> / <code>x[i] = v</code> / <code>del x[i]</code></td><td><code>__getitem__</code> / <code>__setitem__</code> / <code>__delitem__</code></td></tr>
+  <tr><td><code>x == y</code></td><td><code>x.__eq__(y)</code></td></tr>
+  <tr><td><code>x &lt; y</code></td><td><code>x.__lt__(y)</code></td></tr>
+  <tr><td><code>if x:</code></td><td><code>x.__bool__()</code>；没有就看 <code>len(x) != 0</code></td></tr>
+  <tr><td>在交互环境或 print 列表里显示 x</td><td><code>x.__repr__()</code></td></tr>
+</table>
+<pre>class Playlist:
+    def __init__(self, songs=()):
+        self._songs = list(songs)
+
+    def __len__(self):
+        return len(self._songs)
+
+    def __getitem__(self, index):
+        return self._songs[index]          # 越界时 list 自己会抛 IndexError
+
+    def __contains__(self, song):
+        return song in self._songs
+
+    def __eq__(self, other):
+        if not isinstance(other, Playlist):
+            return NotImplemented          # 不认识对方的类型：交给 Python 去试对方的 __eq__
+        return self._songs == other._songs
+
+    def __repr__(self):
+        return f"Playlist({self._songs!r})"
+
+
+playlist = Playlist(["a", "b"])
+len(playlist), playlist[0], "b" in playlist     # (2, 'a', True)
+bool(Playlist())                                # False，因为长度是 0</pre>
+<p><code>NotImplemented</code>（不是 <code>NotImplementedError</code>）是一个特殊值，意思是“这次比较我不管”，Python 会接着试对方的 <code>__eq__</code>，都不管就按“不相等”处理。而 <code>raise NotImplementedError</code> 是骨架里“这里还没写”的占位。两者名字像，用途完全不同。</p>
+<p>只要定义了 <code>__lt__</code>，<code>sorted</code>、<code>min</code>、<code>max</code> 就能直接比较你的对象。</p>
+
+<h2 id="abc">12. 继承 <code>collections.abc</code>：写几个方法，白送一堆</h2>
+<p><code>collections.abc</code> 里是一些“容器模板”。继承它，写好它要求的几个基础方法，其余方法它都替你写好了：</p>
+<table>
+  <tr><th>继承</th><th>你必须写</th><th>白送的</th></tr>
+  <tr><td><code>Sequence</code>（只读序列）</td><td><code>__getitem__</code>、<code>__len__</code></td><td><code>in</code>、<code>for</code>、<code>reversed</code>、<code>index</code>、<code>count</code></td></tr>
+  <tr><td><code>MutableSequence</code>（可改序列，像 list）</td><td>上面两个 + <code>__setitem__</code>、<code>__delitem__</code>、<code>insert</code></td><td>再加 <code>append</code>、<code>pop</code>、<code>remove</code>、<code>extend</code>、<code>+=</code> 等</td></tr>
+  <tr><td><code>Mapping</code>（只读字典）</td><td><code>__getitem__</code>、<code>__iter__</code>、<code>__len__</code></td><td><code>in</code>、<code>get</code>、<code>keys</code>、<code>values</code>、<code>items</code>、<code>==</code></td></tr>
+  <tr><td><code>MutableMapping</code>（可改字典，像 dict）</td><td>上面三个 + <code>__setitem__</code>、<code>__delitem__</code></td><td>再加 <code>pop</code>、<code>setdefault</code>、<code>update</code> 等</td></tr>
+</table>
+<pre>from collections.abc import Sequence
+
+
+class Playlist(Sequence):
+    def __init__(self, songs=()):
+        self._songs = list(songs)
+
+    def __getitem__(self, index):
+        return self._songs[index]
+
+    def __len__(self):
+        return len(self._songs)
+
+
+playlist = Playlist(["a", "b", "a"])
+"b" in playlist                 # True   白送的
+list(reversed(playlist))        # ['a', 'b', 'a']
+playlist.count("a")             # 2
+playlist.index("b")             # 1</pre>
+<p>白送的方法是用你写的基础方法拼出来的，比如 <code>in</code> 就是从头 <code>for</code> 一遍。它们对，但不一定最快。需要更快时，自己重写那一个方法就行（比如 <code>__contains__</code>）。</p>
+<p>注意：<code>Mapping</code> 的 <code>get</code> 和 <code>in</code> 是靠“<code>__getitem__</code> 抛 <code>KeyError</code>”来判断键不存在的。所以手写字典类时，找不到键<b>必须</b>抛 <code>KeyError</code>，抛别的异常或返回 <code>None</code> 都会出错。</p>
+
+<h2 id="generator">13. 生成器：<code>yield</code>、<code>next()</code>、<code>iter()</code></h2>
+<p>函数里只要出现 <code>yield</code>，它就变成<b>生成器函数</b>。调用它<b>不会马上执行</b>函数体，而是返回一个生成器对象。每次向它要下一个值（<code>next()</code>），函数体就从上次停下的地方往下跑，跑到下一个 <code>yield</code> 交出一个值，然后<b>暂停</b>，局部变量原样保留。函数体跑完时，生成器结束。</p>
+<pre>def count_down(n):
+    while n &gt; 0:
+        yield n          # 交出 n，然后停在这里
+        n -= 1           # 下次 next() 从这一行接着跑
+
+
+numbers = count_down(3)  # 只是造了一个生成器，函数体一行都没跑
+next(numbers)            # 3
+next(numbers)            # 2
+next(numbers)            # 1
+next(numbers)            # 抛 StopIteration：没有更多值了
+
+for n in count_down(3):  # for 帮你反复 next()，碰到 StopIteration 就正常结束
+    print(n)             # 3 2 1</pre>
+<p><b>动手：</b>一步步执行 <code>count_down(3)</code>，看函数在哪里暂停、局部变量 <code>n</code> 怎么保留下来。</p>
+<div class="demo" id="generator-demo"></div>
+<p><code>for</code> 循环背后的规矩（迭代协议）是：</p>
+<ol>
+  <li><code>for x in obj</code> 先调用 <code>iter(obj)</code>，也就是 <code>obj.__iter__()</code>，拿到一个<b>迭代器</b>。</li>
+  <li>然后反复调用 <code>next(迭代器)</code>，直到它抛出 <code>StopIteration</code>。</li>
+</ol>
+<p>所以，让自己的类能被 <code>for</code>，最省事的办法是<b>把 <code>__iter__</code> 写成生成器</b>：</p>
+<pre>class Node:
+    def __init__(self, value, next=None):
+        self.value = value
+        self.next = next
+
+
+class LinkedList:
+    def __init__(self, head=None):
+        self.head = head
+
+    def __iter__(self):
+        node = self.head
+        while node is not None:
+            yield node.value
+            node = node.next
+
+
+chain = LinkedList(Node(1, Node(2, Node(3))))
+list(chain)       # [1, 2, 3]
+2 in chain        # True：没写 __contains__ 时，in 会用 __iter__ 挨个找</pre>
+<p>生成器的特点和坑：</p>
+<ul>
+  <li><b>省内存</b>：一次只产出一个值，不需要先造出整个 list。</li>
+  <li><b>懒</b>：不往下要，就不往下算。所以可以在中途停下：<code>any(...)</code> 找到一个就停。</li>
+  <li><b>只能走一遍</b>：走完就空了。<code>numbers = count_down(3)</code> 之后 <code>list(numbers)</code> 是 <code>[3, 2, 1]</code>，再 <code>list(numbers)</code> 就是 <code>[]</code>。需要多次遍历时，先 <code>list()</code> 存下来。</li>
+  <li><code>next(iterator, 默认值)</code>：没有下一个值时返回默认值，不抛异常。常用来取“第一个满足条件的”：<code>next((n for n in nums if n &gt; 3), None)</code>。</li>
+  <li><b>遍历的时候别改容器</b>：在 <code>for</code> 一个 dict 或 set 的过程中往里加、删元素，会抛 <code>RuntimeError</code>；list 不报错，但会跳过元素。要改就先 <code>list()</code> 拷一份再遍历。</li>
+</ul>
+
+<h2 id="yield-from">14. 委托：<code>yield from</code></h2>
+<p><code>yield from 可迭代对象</code> 等于“把它里面的值一个个 <code>yield</code> 出去”：</p>
+<pre>def chain_all(*iterables):
+    for iterable in iterables:
+        yield from iterable          # 等价于：for item in iterable: yield item
+
+
+list(chain_all([1, 2], "ab", range(3)))   # [1, 2, 'a', 'b', 0, 1, 2]</pre>
+<p>它最大的用处是在<b>一个生成器里调用另一个生成器</b>：外层把“产出值”这件事整个委托给里层，里层产出的每个值都原样穿过外层，交到最外面的 <code>for</code> 手里。</p>
+<pre>def numbers_then_letters():
+    yield from count_down(2)         # 先把 count_down(2) 的 2、1 交出去
+    yield from "ab"                  # 再交出 'a'、'b'
+    yield "done"
+
+
+list(numbers_then_letters())          # [2, 1, 'a', 'b', 'done']</pre>
+<p><b>动手：</b>看外层生成器怎么把 <code>next()</code> 转交给里层、里层产出的值怎么穿过外层。</p>
+<div class="demo" id="yield-from-demo"></div>
+<p>常见错误：在生成器里调用另一个生成器却<b>忘了写 <code>yield from</code></b>。只写 <code>count_down(2)</code> 一行，只是造了一个生成器对象然后扔掉，什么都不会产出。第 5 课以后，“函数调用自己”（递归）的生成器会经常用到 <code>yield from</code>，比如按顺序遍历一棵树。</p>
+
+<h2 id="closure">15. 嵌套函数：闭包、<code>nonlocal</code>、<code>global</code></h2>
+<p>函数里可以再定义函数。里层函数能<b>读</b>外层函数的变量（这叫闭包）。后面很多课会这样写：外层函数准备好数据，里层定义一个辅助函数干活，最后调用它。</p>
+<pre>def count_long_words(words, min_length):
+    def is_long(word):
+        return len(word) &gt;= min_length      # 直接读外层的 min_length
+    return sum(1 for word in words if is_long(word))</pre>
+<p>但如果里层要<b>给外层变量重新赋值</b>，必须先声明 <code>nonlocal</code>。不声明的话，Python 会把它当成里层自己的新局部变量：</p>
+<pre>def make_counter():
+    count = 0
+
+    def increment():
+        nonlocal count          # 不写这行，下一行会报 UnboundLocalError
+        count += 1
+        return count
+
+    return increment
+
+
+counter = make_counter()
+counter(), counter()            # (1, 2)：count 被保存在闭包里</pre>
+<ul>
+  <li>只是<b>修改</b>外层变量指向的对象（比如 <code>result.append(x)</code>、<code>seen.add(x)</code>），不算重新赋值，不需要 <code>nonlocal</code>。</li>
+  <li><code>global 变量名</code> 是同样的意思，只不过针对的是文件顶层的变量。尽量少用：全局状态让函数的结果依赖外部，难测试。</li>
+</ul>
+
+<h2 id="decorator">16. 装饰器与 <code>functools.cache</code></h2>
+<p>写在函数定义上一行的 <code>@某某</code> 叫装饰器。<code>@decorator</code> 加在 <code>def f</code> 上，等价于定义完以后执行 <code>f = decorator(f)</code>：把原函数交给装饰器，换成一个加了额外功能的新函数。前面见过的 <code>@property</code>、<code>@classmethod</code>、<code>@dataclass</code> 都是装饰器。</p>
+<p><code>functools.cache</code> 给函数加上“记住结果”的功能：同样的参数第二次调用时，直接返回上次的结果，不再执行函数体。</p>
+<pre>from functools import cache
+
+
+@cache
+def slow_square(n):
+    print(f"真的在算 {n}")
+    return n * n
+
+
+slow_square(4)     # 打印“真的在算 4”，返回 16
+slow_square(4)     # 什么都不打印，直接返回 16
+slow_square.cache_clear()   # 清空记住的结果</pre>
+<ul>
+  <li>它用一个 dict 记结果，键就是参数。所以参数必须能当 dict 的键：数字、字符串、元组可以，<b>list、dict、set 不行</b>（会抛 <code>TypeError: unhashable type</code>）。为什么，第 4 课讲。</li>
+  <li><code>functools.lru_cache(maxsize=128)</code> 是有容量上限的版本：满了就扔掉最久没用的结果。“最久没用”具体怎么实现，第 30 课讲。</li>
+  <li>它在算法里的大用处是“记忆化”，第 19 课专门讲。</li>
+</ul>
+<p>自己写一个装饰器：收一个函数，返回一个包了一层的新函数。<code>functools.wraps</code> 把原函数的名字和文档复制到新函数上，否则调试时看到的名字全是 <code>wrapper</code>：</p>
+<pre>from functools import wraps
+
+
+def count_calls(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):        # 原样收下任何参数（见第 21 节）
+        wrapper.calls += 1
+        return func(*args, **kwargs)     # 原样转交给原函数
+    wrapper.calls = 0
+    return wrapper
+
+
+@count_calls
+def add(a, b):
+    return a + b
+
+
+add(1, 2), add(3, 4)
+add.calls          # 2
+add.__name__       # 'add'（没有 @wraps 的话是 'wrapper'）</pre>
+
+<h2 id="itertools">17. itertools：<code>accumulate</code>、<code>pairwise</code>、<code>combinations</code> 等</h2>
+<p>标准库 <code>itertools</code> 里都是返回迭代器的小工具，要看结果时用 <code>list()</code> 包一下：</p>
+<pre>from itertools import accumulate, chain, combinations, islice, pairwise, permutations, product
+
+list(accumulate([1, 2, 3, 4]))          # [1, 3, 6, 10]        逐个累加
+list(accumulate([3, 1, 4], max))        # [3, 3, 4]            逐个取“到目前为止最大”
+list(pairwise([1, 2, 3]))               # [(1, 2), (2, 3)]     相邻两个一组
+list(chain([1, 2], [3]))                # [1, 2, 3]            首尾接起来
+list(islice(count_down(100), 3))        # [100, 99, 98]        只取前 3 个，生成器也能用
+list(combinations("abc", 2))            # [('a','b'), ('a','c'), ('b','c')]   不管顺序的组合
+list(permutations("ab"))                # [('a','b'), ('b','a')]              排列，顺序不同算不同
+list(product([0, 1], repeat=2))         # [(0,0), (0,1), (1,0), (1,1)]        笛卡尔积，相当于两层 for
+list(accumulate([1, 2, 3], initial=0))  # [0, 1, 3, 6]         前面多放一个起始值（前缀和常用）
+list(chain.from_iterable([[1], [2, 3]]))  # [1, 2, 3]          把“一串列表”摊平一层
+
+from itertools import count, takewhile
+
+ids = count(1)                           # 无穷的 1, 2, 3, ……；常用来发递增编号
+next(ids), next(ids)                     # (1, 2)
+list(takewhile(lambda n: n &lt; 4, [1, 3, 5, 2]))   # [1, 3]  从头取，碰到第一个不满足的就停</pre>
+<p>（<code>count_down</code> 是第 13 节定义的生成器。）</p>
+
+<h2 id="numbers">18. 数字：<code>math.inf</code>、<code>//</code> 与 <code>%</code>、大整数、<code>random</code></h2>
+<pre>import math
+import random
+
+math.inf                  # 正无穷，比任何数字都大；-math.inf 比任何数字都小
+float("inf") == math.inf  # True，两种写法一样
+min(5, math.inf)          # 5   所以常拿它当“还没找到”的初始最小值
+
+7 // 2, 7 % 2             # (3, 1)    整除、取余
+-7 // 2, -7 % 2           # (-4, 1)   注意：// 向下取整（不是向零），% 的结果和除数同号
+2 ** 100                  # 1267650600228229401496703205376   int 没有上限，不会溢出
+0.1 + 0.2 == 0.3          # False：浮点数有误差，比较用 math.isclose(0.1 + 0.2, 0.3)
+
+random.seed(42)           # 固定随机种子：每次运行得到同样的“随机”序列，方便测试
+random.randint(1, 6)      # 1～6 的随机整数，两端都包含
+random.choice(["a", "b"]) # 随机挑一个
+random.shuffle(cards)     # 原地打乱一个 list（cards 是某个 list）
+random.random()           # [0, 1) 之间的随机小数
+rng = random.Random(42)   # 一个自带种子的独立随机数生成器，不影响全局的 random.seed
+rng.randint(1, 6)         # 用法和 random.randint 一样
+
+10_000_000                # 数字里可以加下划线方便读，等于 10000000
+sum([True, False, True])  # 2   True 当 1、False 当 0，所以“数满足条件的个数”可以写 sum(x &gt; 0 for x in nums)</pre>
+<p>位运算（<code>&amp;</code>、<code>|</code>、<code>^</code>、<code>&lt;&lt;</code>、<code>&gt;&gt;</code>）在第 39 课专门讲，前面用到时会就地解释。</p>
+
+<h2 id="walrus">19. 海象运算符 <code>:=</code></h2>
+<p><code>name := 表达式</code>：算出表达式的值，赋给 name，<b>同时</b>把这个值作为整个式子的结果。常用在 <code>while</code> 条件里，省掉重复的一行：</p>
+<pre>lines = ["a", "b", ""]
+reader = iter(lines)
+
+# 不用海象：读一次放循环前，循环末尾再读一次
+line = next(reader)
+while line:
+    print(line)
+    line = next(reader)
+
+# 用海象：读和判断写在一起
+reader = iter(lines)
+while (line := next(reader)):
+    print(line)</pre>
+<p>看不惯可以不用，任何地方都能改回普通赋值。</p>
+
+<h2 id="sortedcontainers">20. 第三方库 <code>sortedcontainers</code>：一直有序的 list / dict</h2>
+<p>这是本项目唯一的第三方依赖（不是标准库），已经写在 <code>pyproject.toml</code> 里，<code>uv run</code> 时会自动装好。自己的项目里要用，执行 <code>uv add sortedcontainers</code>。</p>
+<p>它提供三个容器，特点是<b>插入、删除之后仍然保持排好序</b>，而且这些操作都很快（快到什么程度、为什么能这么快，第 24 课讲完平衡树后就明白了；现在当成好用的黑盒）：</p>
+<pre>from sortedcontainers import SortedDict, SortedList, SortedSet
+
+scores = SortedList([50, 90, 70])
+scores.add(80)               # 插进去，自动放到对的位置
+print(scores)                # SortedList([50, 70, 80, 90])
+scores[0], scores[-1]        # (50, 90)   最小、最大
+scores.remove(70)            # 删掉一个 70；不存在会抛 ValueError
+scores.bisect_left(80)       # 1          80 应该插在下标几（第 6 课讲这个函数名的由来）
+list(scores.irange(60, 90))  # [80, 90]   取出 60～90 之间的值（两端都包含）
+
+prices = SortedDict({"pear": 3, "apple": 5})
+list(prices)                 # ['apple', 'pear']   键始终按顺序排
+prices.peekitem(0)           # ('apple', 5)        最小的键和它的值
+
+tags = SortedSet(["b", "a", "b"])   # SortedSet(['a', 'b'])   去重 + 有序</pre>
+<table>
+  <tr><th>容器</th><th>像什么</th><th>多出来的本事</th></tr>
+  <tr><td><code>SortedList</code></td><td>list，但不能指定位置插入</td><td>永远有序；取最小 / 最大、按范围取</td></tr>
+  <tr><td><code>SortedDict</code></td><td>dict</td><td>键按顺序遍历；按范围取键</td></tr>
+  <tr><td><code>SortedSet</code></td><td>set</td><td>元素按顺序遍历</td></tr>
+</table>
+
+<h2 id="params">21. 函数参数：默认值、关键字参数、仅限关键字的 <code>*</code>、<code>**kwargs</code></h2>
+<pre>def search(items, target, start=0):          # start 有默认值，可以不传
+    ...
+
+search([1, 2], 2)                  # 按位置传
+search([1, 2], target=2, start=1)  # 按名字传（关键字参数），顺序可以随便
+
+
+def top(items, *, key=None, reverse=False):   # 单独一个 * ：它后面的参数只能按名字传
+    ...
+
+top([3, 1], key=abs)               # 可以
+top([3, 1], abs)                   # TypeError：key 必须写成 key=abs</pre>
+<p>骨架里常见 <code>def index(items, target, *, key=None)</code> 这种签名（第 6 课）。单独的 <code>*</code> 不收任何参数，只是一条分界线：逼调用者写出 <code>key=</code>，调用处一眼就能看懂，也不会把参数顺序传错。<code>sorted(items, key=..., reverse=True)</code> 本身就是这样设计的。</p>
+<pre>def log(message, **kwargs):        # **kwargs 收下所有“没有对应参数名”的关键字参数，是一个 dict
+    print(message, kwargs)
+
+log("下单", user="Ann", amount=3)   # 下单 {'user': 'Ann', 'amount': 3}
+
+options = {"sep": "-", "end": "!\n"}
+print("a", "b", **options)         # 调用时 ** 把 dict 摊开成关键字参数：打印 a-b!</pre>
+<p>默认值只在<b>定义函数时算一次</b>。所以别用可变对象当默认值：<code>def add(item, bucket=[])</code> 会让每次调用共用同一个 list。用 <code>None</code> 或 <code>()</code> 代替（第 10 节也提过）。</p>
+
+<h2 id="sets">22. 集合运算、<code>frozenset</code>、什么能当 dict 的键</h2>
+<pre>a = {1, 2, 3}
+b = {2, 3, 4}
+
+a | b        # {1, 2, 3, 4}   并集：在 a 或在 b
+a &amp; b        # {2, 3}         交集：同时在两个里
+a - b        # {1}            差集：在 a 不在 b
+a ^ b        # {1, 4}         只在其中一个里
+a &lt;= b       # False          a 是不是 b 的子集
+a.isdisjoint({7})   # True    没有共同元素</pre>
+<p><b>能放进 set、能当 dict 键的值，必须“可哈希”</b>。用法上记一条就够：<b>不可变的</b>可以（数字、字符串、元素都不可变的元组、<code>frozenset</code>），<b>可变的</b>不行（list、dict、set）。放错会报 <code>TypeError: unhashable type: 'list'</code>。为什么有这个限制、<code>hash()</code> 函数干了什么，第 4 课讲。</p>
+<pre>seen = set()
+seen.add((1, 2))          # 可以：元组
+seen.add([1, 2])          # TypeError：list 不能放进 set
+
+group = frozenset({"a", "b"})   # 不可变的 set：不能 add，但可以当 dict 的键、放进别的 set
+pairs = {group: 3}
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)   # frozen=True：字段不能改，于是对象可哈希，可以当键
+class Point:
+    x: int
+    y: int
+
+
+{Point(0, 0): "原点"}</pre>
+
+<h2 id="datetime">23. 日期时间：<code>datetime</code>、<code>date</code>、<code>timedelta</code></h2>
+<p>实战脚本里的业务例子（订单、日志、会议）常带时间：</p>
+<pre>from datetime import date, datetime, timedelta
+
+start = datetime(2026, 11, 15, 9, 30)          # 年、月、日、时、分
+end = start + timedelta(hours=1, minutes=15)   # 加一段时长：10:45
+end - start                                    # timedelta(seconds=4500)，两个时刻相减得到时长
+(end - start).total_seconds() / 60             # 75.0 分钟
+start &lt; end                                    # True   时刻可以直接比大小、排序
+datetime.fromisoformat("2026-11-15 09:30")     # 从文本解析
+start.strftime("%m-%d %H:%M")                  # '11-15 09:30'   格式化成文本
+date(2026, 11, 15).weekday()                   # 6   星期一是 0，星期日是 6</pre>
+
+<h2>练习</h2>
+<p>场景：一家小书店的后台。在 <code>dsa/python_basics.py</code> 里完成下面几个函数和类，每个都对应上面的一两个小节：</p>
+<ol>
+  <li><code>group_by_author</code>：把书按作者分组（第 7 节 <code>setdefault</code>）。</li>
+  <li><code>top_sellers</code>：按销量降序、同销量按书名升序，取前 k 本（第 6 节 <code>key=</code>）。</li>
+  <li><code>parse_price</code>：把 <code>"¥12.50"</code> 解析成数字，格式不对抛 <code>ValueError</code> 并用 <code>from</code> 挂上原因（第 8 节）。</li>
+  <li><code>running_totals</code>：用生成器逐天产出累计销售额（第 13 节）。</li>
+  <li><code>all_titles</code>：用 <code>yield from</code> 把几个书架上的书名接起来（第 14 节）。</li>
+  <li><code>Shelf</code>：一个只读的书架类，继承 <code>Sequence</code>，支持 <code>len</code>、<code>[]</code>、<code>in</code>、<code>for</code>、<code>==</code>（第 11、12 节）。</li>
+</ol>
+<pre>uv run dsa/python_basics.py              # 书店的端到端例子，逐条打印期望和实际
+uv run pytest tests/test_python_basics.py</pre>
+<p>想看这些写法在一个真实小脚本里怎么配合，读 <code>examples/python_basics_in_practice.py</code>（<code>uv run examples/python_basics_in_practice.py</code>）：读一段订单文本，统计、分组、排序后输出报表。</p>
+
+<h2>自测</h2>
+<details><summary>1. <code>numbers = (n * n for n in range(3))</code>，连续执行两次 <code>sum(numbers)</code>，结果分别是多少？</summary>
+5 和 0。生成器只能走一遍，第一次 <code>sum</code> 已经把它走完了。</details>
+<details><summary>2. 手写的字典类里，<code>__getitem__</code> 找不到键时返回 <code>None</code>，会出什么问题？</summary>
+继承 <code>Mapping</code> 白送的 <code>in</code> 和 <code>get</code> 都靠 <code>KeyError</code> 判断“没有”。返回 <code>None</code> 的话，<code>"x" in d</code> 永远是 <code>True</code>，<code>d.get("x", 0)</code> 返回 <code>None</code> 而不是 0。</details>
+<details><summary>3. 下面的生成器为什么丢了 2 和 1？<pre>def countdown_then_done():
+    count_down(2)
+    yield "done"
+
+list(countdown_then_done())   # 只得到 ['done']</pre></summary>
+<code>count_down(2)</code> 只是造了一个生成器对象就扔掉了，里面的 2、1 没有交出来。要写成 <code>yield from count_down(2)</code>。</details>
+<details><summary>4. <code>sorted(words, key=len)</code> 和 <code>sorted(words, key=len())</code> 有什么区别？</summary>
+<code>key=len</code> 把函数本身传进去，让 <code>sorted</code> 对每个元素调用它。<code>len()</code> 是立刻调用（而且少了参数，直接报 <code>TypeError</code>）。</details>
+
+<div class="nav"><a href="index.html">← 目录</a><a href="00-complexity.html">下一课：复杂度 →</a></div>
+<script src="anim.js"></script>
+<script src="js/python-basics.js"></script>
+</body>
+</html>

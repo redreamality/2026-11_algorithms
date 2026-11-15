@@ -13,6 +13,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 5 课 · 递归与分治</h1>
 <p class="one-line">递归就是函数调用自己。只要两样东西：<b>一个能直接回答的最小问题</b>，和<b>把大问题缩小一点再交给自己</b>。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#yield-from">yield from</a>、<a href="python-basics.html#generator">生成器（yield）</a>、<a href="python-basics.html#decorator">@functools.cache</a>、<a href="python-basics.html#class">isinstance</a>、<a href="python-basics.html#type-hints">类型标注（Iterator）</a>、<a href="python-basics.html#exceptions">异常（raise ValueError）</a>、<a href="python-basics.html#comprehension">生成器表达式</a>、<a href="python-basics.html#fstring">f-string 的 !r</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>（O(...) 记号）。</p>
 
 <h2>实战里怎么写：递归用在“递归形状”的数据上</h2>
 <p>业务代码里没人手写阶乘和幂，<code>math.factorial</code>、<code>pow</code> 都现成。真正要自己写递归的，是<b>数据本身一层套一层</b>的时候：</p>
@@ -20,7 +21,7 @@
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
   <tr><td>遍历目录树</td><td>标准库 <code>Path.rglob</code> / <code>os.walk</code>，不用自己递归</td><td>O(文件数)</td></tr>
   <tr><td>嵌套 JSON、组织架构、评论楼中楼</td><td>自己写一个几行的递归函数</td><td>O(节点数)，栈深 = 嵌套层数</td></tr>
-  <tr><td>同一个子问题被反复算</td><td><code>@functools.cache</code> 记忆化</td><td>指数级降到“子问题个数”</td></tr>
+  <tr><td>同一个子问题被反复算</td><td><code>@functools.cache</code> 记忆化（见<a href="python-basics.html#decorator">预备课</a>；原理第 19 课细讲，这里先用）</td><td>指数级降到“子问题个数”</td></tr>
   <tr><td>数据可能极深（用户上传的 JSON）</td><td>改用显式栈 <code>stack = [...]</code> + <code>while</code></td><td>不受约 1000 层的递归上限限制</td></tr>
 </table>
 <pre>from functools import cache

@@ -15,7 +15,7 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True)  # frozen=True：建好后字段不能再改，当不可变的记录用（@dataclass 的一个开关）
 class LogEntry:
     timestamp: int  # 秒
     message: str

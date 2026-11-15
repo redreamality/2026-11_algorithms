@@ -22,11 +22,13 @@
 <h1>第 25 课 · 双指针</h1>
 <p class="one-line">双指针 = <b>用两个下标同时在数组上走，每一步都根据当前情况排除掉一批不可能的答案</b>。原本要两层循环 O(n²) 才能枚举完的“一对位置”，变成两个下标各走一遍，O(n)。</p>
 
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#unpack">解包与交换</a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#loop-tools">切片</a>、<a href="python-basics.html#lambda-key">lambda 与 sorted vs sort</a>、<a href="python-basics.html#dict-tools">dict.fromkeys</a>、<a href="python-basics.html#type-hints">类型标注（<code>X | None</code>）</a>、<a href="python-basics.html#exceptions">try/except</a>；前面的课 —— <a href="08-merge-sort.html">第 8 课 · 归并排序</a>（“合并两份有序数据”的思路）、<a href="12-heap.html">第 12 课 · 堆</a>（实战表里的 <code>heapq.merge</code>）。</p>
+
 <h2>实战里怎么写：先看真实代码里的双指针</h2>
 <p>业务代码里很少有人写“对撞指针找两数之和”，但双指针的想法天天在用，只是常常藏在标准库里：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
-  <tr><td>合并两份已经排好序的数据（两台服务器的日志、两页排好序的结果）</td><td>标准库 <code>heapq.merge(a, b)</code>，内部就是每份数据一个指针</td><td>O(n + m)，边读边合并，不用全部读进内存</td></tr>
+  <tr><td>合并两份已经排好序的数据（两台服务器的日志、两页排好序的结果）</td><td>标准库 <code>heapq.merge(a, b)</code>（第 12 课的 heapq，那里见过它），内部就是每份数据一个指针</td><td>O(n + m)，边读边合并，不用全部读进内存</td></tr>
   <tr><td>两份排好序的数据要<b>对齐</b>：对账，找两边都有的、只有一边有的</td><td>手写同向双指针</td><td>O(n + m)，额外空间 O(1)</td></tr>
   <tr><td>按条件删元素、保持顺序</td><td>列表推导式 <code>[x for x in items if keep(x)]</code></td><td>O(n)，多一份列表的内存</td></tr>
   <tr><td>保持顺序地去重</td><td><code>list(dict.fromkeys(items))</code></td><td>O(n)</td></tr>
@@ -88,7 +90,7 @@ def reconcile(ledger_ids: list[int], bank_ids: list[int]):
   <tr><td>16</td><td>最接近的三数之和</td><td>排序 + 对撞</td></tr>
   <tr><td>876</td><td>链表的中间结点</td><td>快慢（链表）</td></tr>
   <tr><td>141</td><td>环形链表</td><td>快慢（链表）</td></tr>
-  <tr><td>42</td><td>接雨水（困难，学完再挑战）</td><td>对撞</td></tr>
+  <tr><td>42</td><td>接雨水（困难，第 28 课会用单调栈专门讲）</td><td>对撞</td></tr>
 </table>
 
 <h2>第 1 题：两数之和 II（对撞指针）</h2>
@@ -222,7 +224,7 @@ for fast in range(len(numbers)):
 
 <h2>自测</h2>
 <details><summary>1. 两数之和 II 为什么要求数组有序？无序时用什么？</summary>
-对撞指针的每一步推理都依赖有序：和太小就说明要更大的数，而更大的数一定在右边。无序时这个推理不成立，要用第 27 课的哈希表做法：一边走一边把见过的数存进 dict，O(n) 时间、O(n) 空间。</details>
+对撞指针的每一步推理都依赖有序：和太小就说明要更大的数，而更大的数一定在右边。无序时这个推理不成立。第 27 课会讲一个不要求有序的哈希表做法：一边走一边把见过的数存进 dict，O(n) 时间、O(n) 空间，这里先不展开。</details>
 <details><summary>2. 盛水题里两根竖线一样高，移动哪一根？会不会错过答案？</summary>
 移动哪一根都可以。设两根都高 h，它们的面积是 h × 宽度。只留下其中任何一根、换一个更靠里的搭档，高度最多还是 h，宽度变小，面积不会更大。所以两根都已经“用完了”，扔掉哪一根都不会错过答案。</details>
 <details><summary>3. 快慢指针在链表上怎么找中间节点？</summary>

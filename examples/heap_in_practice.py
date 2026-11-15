@@ -44,6 +44,7 @@ def slowest_requests(log_lines: list[str], limit: int) -> list[tuple[str, int]]:
 
 
 def main() -> None:
+    # datetime(年, 月, 日, 时, 分) 是一个时间点，timedelta(minutes=30) 是一段时长，相加得到另一个时间点
     start = datetime(2026, 11, 10, 9, 0)
     scheduler = Scheduler()
     scheduler.schedule(start + timedelta(minutes=30), "生成日报")

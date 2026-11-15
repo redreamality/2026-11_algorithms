@@ -13,6 +13,7 @@
 - 稳定：两边 key 相等时先取左边（left）的。reverse=True 时也一样。
 - 和 heapq.merge 一样，merge 的 reverse=True 表示两路输入都是从大到小排好的，输出也从大到小。
 - merge_sort 对每个元素只调用一次 key：先把每个元素和它的 key 配成一对，排序时比较 key，最后再把元素取出来。
+- 签名里的裸 `*`（如 *, key=None, reverse=False）：它后面的参数只能按关键字传（key=...），不能按位置传。
 
 写完后运行 uv run dsa/merge_sort.py，看端到端的例子是否和期望一致；再跑 uv run pytest tests/test_merge_sort.py。
 """

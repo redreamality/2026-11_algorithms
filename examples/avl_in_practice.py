@@ -2,7 +2,7 @@
 
 Python 标准库没有平衡树。按场景选：
 1. 只是偶尔要有序结果 → 普通 dict / list，用的时候 sorted() 一次，O(n log n)。
-2. 数据基本不变 → 排好序的 list + bisect（第 11 课）。
+2. 数据基本不变 → 排好序的 list + bisect（第 6 课讲过 bisect，第 11 课实战里用过）。
 3. 边改边要有序、按排名取、按范围取 → sortedcontainers 的 SortedList / SortedDict。
    它不是平衡树，而是把数据切成很多段有序的小 list，靠二分定位；给的保证和平衡树一样
    （增删查约 O(log n)），实践中往往还更快。Java 的 TreeMap、C++ 的 std::map 用的是红黑树。

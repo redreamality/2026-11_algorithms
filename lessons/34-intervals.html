@@ -24,6 +24,8 @@
 <h1>第 34 课 · 区间问题</h1>
 <p class="one-line">区间题几乎都是同一个开头：<b>先排序，再从左往右扫一遍</b>。难点只在于按什么排：要把重叠的区间<b>拼起来</b>，按<b>起点</b>排；要挑出尽量多<b>互不重叠</b>的区间，按<b>终点</b>排。</p>
 
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#lambda-key">lambda 与 key=（sorted 的排序键）</a>、<a href="python-basics.html#unpack">解包（for start, end in …）</a>、<a href="python-basics.html#numbers">float("-inf")</a>、<a href="python-basics.html#type-hints">类型标注</a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="07-simple-sorts.html">第 7 课 · 排序与稳定性（sorted 不动原数据）</a>、<a href="06-binary-search.html">第 6 课 · 二分查找（bisect_right）</a>、<a href="12-heap.html">第 12 课 · 堆与优先队列（题 4 的会议室）</a>、<a href="18-greedy.html">第 18 课 · 贪心（活动选择）</a>。</p>
+
 <h2>先把说法统一</h2>
 <p>一个区间写成 <code>[start, end]</code>，表示从 start 到 end 这一段，比如一场会议从 2 点开到 5 点就是 <code>[2, 5]</code>。</p>
 <p><b>两个区间什么时候重叠？</b>把 <code>[a_start, a_end]</code> 和 <code>[b_start, b_end]</code> 想成数轴上的两条线段。它们<b>不</b>重叠只有两种情况：a 整个在 b 左边（<code>a_end &lt; b_start</code>），或者 a 整个在 b 右边（<code>b_end &lt; a_start</code>）。把这两种情况取反，就得到重叠的条件：</p>
@@ -72,7 +74,7 @@ def owner_of(address_value, range_starts, range_rows):
         return None
     _, last, owner = range_rows[index]
     return owner if address_value &lt;= last else None   # 也可能落在两段之间的空隙里</pre>
-<p>完整可运行的版本在 <code>examples/intervals_in_practice.py</code>（<code>uv run examples/intervals_in_practice.py</code>），IP 用标准库 <code>ipaddress</code> 转成整数再比较。合并时段就是下面的题 1，会议室就是题 4。</p>
+<p>完整可运行的版本在 <code>examples/intervals_in_practice.py</code>（<code>uv run examples/intervals_in_practice.py</code>），IP 用标准库 <code>ipaddress</code> 转成整数再比较：<code>IPv4Address("10.0.0.1")</code> 把点分十进制的地址变成能比较大小的对象，<code>int(...)</code> 再取出它对应的 32 位整数（例如 <code>int(IPv4Address("10.0.0.1"))</code> 是 167772161），这样 IP 段就变成了普通的整数区间。合并时段就是下面的题 1，会议室就是题 4。</p>
 
 <h2>怎么认出这类题</h2>
 <p>题目给的是一组“开始时间、结束时间”或者“左端点、右端点”，并且出现下面这些说法时，基本就是区间题：</p>

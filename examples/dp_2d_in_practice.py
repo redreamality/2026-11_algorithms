@@ -52,7 +52,7 @@ def main() -> None:
 
     close = get_close_matches("instal", commands, n=2, cutoff=0.6)
     assert close[0] == "install"
-    ratio = SequenceMatcher(None, "instal", "install").ratio()
+    ratio = SequenceMatcher(None, "instal", "install").ratio()  # 第一个参数 None：不忽略任何字符
     assert round(ratio, 2) == 0.92
     print(f"difflib 的建议：{close}，相似度 {ratio:.2f}")
 

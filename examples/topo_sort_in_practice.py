@@ -9,7 +9,6 @@
 运行：uv run examples/topo_sort_in_practice.py
 """
 
-from concurrent.futures import ThreadPoolExecutor
 from graphlib import CycleError, TopologicalSorter
 
 # 步骤 -> 它要等的步骤
@@ -29,17 +28,20 @@ def install_order(requirements: dict[str, list[str]]) -> list[str]:
     return list(TopologicalSorter(requirements).static_order())
 
 
-def run_pipeline(steps: dict[str, list[str]], max_workers: int = 4) -> list[set[str]]:
-    """场景二：像 CI 一样并行跑构建步骤。返回每一轮同时跑了哪些步骤。"""
+def run_pipeline(steps: dict[str, list[str]]) -> list[set[str]]:
+    """场景二：像 CI 一样分批跑构建步骤。返回每一轮同时可以跑哪些步骤。
+
+    每轮 get_ready() 拿到的都是“依赖全部完成、现在就能开工”的步骤。
+    真实项目里会把这一批交给线程池或子进程并行跑；这里为了只演示拓扑排序，直接按顺序标记完成。
+    """
     sorter = TopologicalSorter(steps)
     sorter.prepare()  # 这一步就会检查环，有环立刻抛 CycleError
     rounds = []
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        while sorter.is_active():
-            ready = sorter.get_ready()  # 依赖都完成了的步骤
-            rounds.append(set(ready))
-            for finished_step in pool.map(lambda step: step, ready):  # 真实项目里这里是 subprocess.run(...)
-                sorter.done(finished_step)
+    while sorter.is_active():
+        ready = sorter.get_ready()  # 依赖都完成了的步骤
+        rounds.append(set(ready))
+        for finished_step in ready:
+            sorter.done(finished_step)
     return rounds
 
 

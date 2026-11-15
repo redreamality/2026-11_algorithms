@@ -2,7 +2,7 @@
 
 业务代码里排序一律用内置的 sorted() / list.sort()（Timsort：稳定，O(n log n)，近乎有序时接近 O(n)）。
 要会的是怎么“用好”它：
-1. 按字段排 → key=operator.itemgetter / attrgetter 或 lambda。
+1. 按字段排 → key=operator.itemgetter 或 lambda。
 2. 多个字段、方向不同 → 利用稳定性分两趟排（先次要、后主要），或者数字字段取负号拼成元组。
 3. 只要返回新列表、不改原数据 → sorted()；就地排、省内存 → list.sort()，返回 None。
 4. 不区分大小写、按自然语言习惯 → key=str.casefold。
@@ -12,7 +12,7 @@
 
 from dataclasses import dataclass
 from datetime import date
-from operator import attrgetter, itemgetter
+from operator import itemgetter
 
 
 @dataclass
@@ -24,8 +24,8 @@ class Ticket:
 
 def triage(tickets: list[Ticket]) -> list[int]:
     """场景一：工单按“优先级从高到低，同优先级按创建日期从早到晚”。两趟稳定排序，不用拼复杂的 key。"""
-    ordered = sorted(tickets, key=attrgetter("created"))
-    ordered.sort(key=attrgetter("priority"), reverse=True)
+    ordered = sorted(tickets, key=lambda ticket: ticket.created)
+    ordered.sort(key=lambda ticket: ticket.priority, reverse=True)
     return [ticket.id for ticket in ordered]
 
 

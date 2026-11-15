@@ -9,30 +9,33 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 1 课 · 动态数组</h1>
 <p class="one-line">数组是一排<b>连续</b>的格子，所以按下标取数很快；“动态”的意思是：格子不够时，换一排更大的。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#dunder">魔法方法</a>（<code>__getitem__</code>、<code>__len__</code>、<code>__eq__</code>、<code>NotImplemented</code>）、<a href="python-basics.html#abc">继承 collections.abc</a>、<a href="python-basics.html#class">@property</a>、<a href="python-basics.html#exceptions">异常约定（IndexError）与 pytest.raises</a>、<a href="python-basics.html#loop-tools">切片与 range 步长</a>、<a href="python-basics.html#unpack">多重赋值</a>、<a href="python-basics.html#fstring">f-string 的 !r</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>。</p>
 
 <h2>实战里怎么写：直接用 list</h2>
 <p>Python 的 <code>list</code> 就是动态数组，业务代码里没人另造一个。要会的是<b>什么时候 list 合适、什么时候换别的</b>：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
   <tr><td>末尾追加、按下标读写</td><td><code>list</code> 的 <code>append</code>、<code>items[i]</code></td><td>均摊 O(1) / O(1)</td></tr>
-  <tr><td>头部频繁增删（任务队列、最近 N 条）</td><td><code>collections.deque</code>（可设 <code>maxlen</code>）</td><td>两端都是 O(1)；<code>list.insert(0, x)</code> 是 O(n)</td></tr>
+  <tr><td>头部频繁增删（任务队列）</td><td>数据少时 list 也行；数据多时换第 3 课会讲的 <code>deque</code></td><td><code>list.insert(0, x)</code>、<code>del items[0]</code> 是 O(n)，原因见下文</td></tr>
   <tr><td>拼一大段文本</td><td>先 <code>append</code> 进 list，最后 <code>"\n".join(lines)</code></td><td>整体 O(总长度)</td></tr>
   <tr><td>分批处理（每 500 条写一次库）</td><td>切片 <code>rows[start:start + 500]</code></td><td>每批 O(批大小)</td></tr>
 </table>
-<pre>from collections import deque
-
-def build_csv(rows):
+<pre>def build_csv(rows):
     lines = ["name,score"]
     for name, score in rows:
         lines.append(f"{name},{score}")      # 均摊 O(1)
     return "\n".join(lines)                  # 一次性拼接
 
-batches = [rows[start:start + 500] for start in range(0, len(rows), 500)]
+rows = [("Ann", 90)] * 1200
+batches = [rows[start:start + 500] for start in range(0, len(rows), 500)]   # 三批：500、500、200
 
-recent_pages = deque(maxlen=3)               # 只留最近 3 条，满了自动挤掉最旧的
+recent_pages = []                            # 只留最近 3 条
 for page in ["首页", "搜索", "商品", "购物车"]:
-    recent_pages.append(page)                # deque(['搜索', '商品', '购物车'])</pre>
-<p>完整可运行的版本在 <code>examples/dynamic_array_in_practice.py</code>（<code>uv run examples/dynamic_array_in_practice.py</code>），还会用 <code>sys.getsizeof</code> 数一数：append 一万次，list 底层其实只换了几十次内存。下面看它为什么这么省。</p>
+    recent_pages.append(page)
+    if len(recent_pages) &gt; 3:
+        del recent_pages[0]                  # 删开头要把后面全部左移，O(n)；这里 n = 3，无所谓
+print(recent_pages)                          # ['搜索', '商品', '购物车']</pre>
+<p>完整可运行的版本在 <code>examples/dynamic_array_in_practice.py</code>（<code>uv run examples/dynamic_array_in_practice.py</code>）。它还会用标准库的 <code>sys.getsizeof(对象)</code>（返回这个对象占了多少字节，list 的话包括预留的空格子）数一数：append 一万次，list 底层其实只换了几十次内存。下面看它为什么这么省。</p>
 
 <h2>为什么按下标取数是 O(1)</h2>
 <p>格子连续、大小一样，第 i 格的位置可以直接算出来：<code>起点 + i × 格子大小</code>。不用从头数。</p>
@@ -82,7 +85,7 @@ for page in ["首页", "搜索", "商品", "购物车"]:
   <tr><td>末尾 append / pop</td><td>均摊 O(1)</td></tr>
   <tr><td>中间 insert / remove</td><td>O(n)</td></tr>
 </table>
-<p>Python 的 <code>list</code> 就是这样实现的。所以 <code>list.insert(0, x)</code> 很慢，要在头部频繁增删，就用 <code>collections.deque</code>。</p>
+<p>Python 的 <code>list</code> 就是这样实现的。所以 <code>list.insert(0, x)</code> 很慢。要在头部频繁增删、数据又多，就得换一种结构，第 3 课会讲的 <code>collections.deque</code> 就是为此而生的，这里先不展开。</p>
 
 <h2>练习</h2>
 <p>补全 <code>dsa/dynamic_array.py</code> 里的 <code>DynamicArray</code>，写完它就能像 list 一样用：<code>arr[-1]</code>、<code>del arr[0]</code>、<code>x in arr</code>、<code>for x in arr</code>。规则写在文件顶部，最重要的一条：<code>_data</code> 只能用下标读写，<b>不许</b>对它调用 append。</p>

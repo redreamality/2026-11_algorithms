@@ -2,7 +2,7 @@
 
 没人专门写 Stack / Queue 类，直接用现成的：
 1. 栈 → list：append 压栈，pop 弹栈，[-1] 看栈顶，都是 O(1)。
-2. 单线程里的队列 → collections.deque：append 进队尾，popleft 取队头，都是 O(1)。
+2. 单线程里的队列 → collections.deque（用法见讲解页）：append 进队尾，popleft 取队头，都是 O(1)。
    别用 list.pop(0)，它是 O(n)。
 3. 多线程之间传任务 → 标准库 queue.Queue（自带锁，get 可以阻塞等待）。
 
@@ -64,7 +64,12 @@ def process_in_order(jobs: list[str]) -> list[str]:
 
 
 def run_with_worker_thread(jobs: list[str]) -> list[str]:
-    """多线程：主线程往 queue.Queue 里放任务，工作线程取出来处理。None 表示收工。"""
+    """多线程：主线程往 queue.Queue 里放任务，工作线程取出来处理。None 表示收工。
+
+    多线程不是这门课的内容，只需看懂：threading.Thread(target=worker) 造一个线程，start() 让它和主程序
+    同时跑，join() 等它跑完；queue.Queue 的 put 放队尾、get 取队头，队列空时 get 会停下来等。
+    worker 里的 while (job := tasks.get()) is not None 用了海象运算符：取一个任务，同时判断是不是 None。
+    """
     tasks: queue.Queue[str | None] = queue.Queue()
     results: list[str] = []
 

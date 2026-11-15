@@ -101,7 +101,7 @@ def from_dict(data: dict | None) -> TreeNode | None:
 
 
 if __name__ == "__main__":
-    import json
+    import json  # json.dumps 把嵌套 dict 变成 JSON 字符串、json.loads 再解析回来，这里用来验证转换结果能存盘
 
     def show(title, compute, expected):
         """运行一个例子，打印期望和实际结果。compute 是一个不带参数的函数。"""

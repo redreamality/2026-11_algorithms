@@ -26,6 +26,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 35 课 · 网格搜索</h1>
 <p class="one-line">二维网格就是一张<b>没有明着画出来的图</b>：每个格子是一个点，和上下左右四个格子之间有边。所以第 13 课的 DFS 和 BFS 可以原封不动地搬过来，只是“找邻居”变成了“往四个方向各走一步”。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#closure">嵌套函数（闭包）</a>、<a href="python-basics.html#unpack">解包（<code>for row_step, col_step in ...</code>、<code>*next_cell</code>）</a>、<a href="python-basics.html#comprehension">推导式（建二维表）</a>、<a href="python-basics.html#loop-tools">切片倒序 <code>[::-1]</code></a>、<a href="python-basics.html#type-hints">类型标注（<code>X | None</code>）</a>；前面的课 —— <a href="03-stack-queue.html">第 3 课 · 栈与队列（<code>deque</code>）</a>、<a href="05-recursion.html">第 5 课 · 递归</a>、<a href="13-graph-traversal.html">第 13 课 · 图的 BFS 与 DFS</a>。</p>
 
 <h2>网格是隐式的图</h2>
 <p>第 13 课里，图要先用邻接表存好：每个点对应一个列表，写着它和哪些点相连。网格不需要这一步。格子 <code>(row, col)</code> 的邻居永远是这四个：</p>

@@ -86,7 +86,7 @@
       prev = cur;
       cur = st.nodes[cur].next;
     }
-    if (cur === null) return fr.push(snap(`走到 None 也没找到 ${v}，返回 False。`, { ptrs: { prev, cur } }));
+    if (cur === null) return fr.push(snap(`走到 None 也没找到 ${v}，抛 ValueError（和 list.remove 一样）。`, { ptrs: { prev, cur } }));
     fr.push(snap(`找到 ${v}！要删它，得站在它前一个节点上。`, { ptrs: { prev, cur } }));
     if (prev === null) {
       st.head = st.nodes[cur].next;
@@ -100,7 +100,7 @@
       fr.push(snap("删的正好是尾巴：tail 退回 prev。", { ptrs: { prev }, fade: [cur] }));
     }
     st.order = st.order.filter(id => id !== cur);
-    fr.push(snap("删完了，返回 True。"));
+    fr.push(snap("删完了。"));
   }
 
   function reverse(fr) {

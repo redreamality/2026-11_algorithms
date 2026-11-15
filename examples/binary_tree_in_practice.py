@@ -30,6 +30,7 @@ def flatten(config, prefix: str = "") -> Iterator[tuple[str, object]]:
 
 def max_depth(config) -> int:
     """嵌套有几层：和二叉树的 height 是同一个递归，只是孩子不止两个。"""
+    # max(生成器, default=0)：序列为空时返回 0（比如叶子没有孩子），而不是报错
     if isinstance(config, dict):
         return 1 + max((max_depth(child) for child in config.values()), default=0)
     if isinstance(config, list):
@@ -87,7 +88,7 @@ def main() -> None:
     assert max_depth(config) == 3
     print("拍平后的配置：", flat)
 
-    tree = ast.parse(SOURCE)
+    tree = ast.parse(SOURCE)  # 把源代码字符串解析成语法树；ast 是标准库，用法见本文件开头的说明
     collector = CallCollector()
     collector.visit(tree)
     assert collector.calls_by_function == {"load": ["read", "parse"], "main": ["load", "print", "validate"]}

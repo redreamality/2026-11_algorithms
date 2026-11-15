@@ -20,6 +20,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 19 课 · 动态规划（一）：从递归到记忆化</h1>
 <p class="one-line">动态规划 = <b>递归 + 不做重复的事</b>。同一个子问题只算一次，把答案记下来，下次直接查。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#decorator">装饰器与 functools.cache</a>（怎么<b>写</b>一个装饰器见下方说明）、<a href="python-basics.html#closure">闭包与 nonlocal</a>（写装饰器、记命中次数都要用）、<a href="python-basics.html#unpack">*args 解包</a>、<a href="python-basics.html#dict-tools">dict 当缓存</a>、<a href="python-basics.html#numbers">math.inf</a>、<a href="python-basics.html#comprehension">二维表推导式</a>、<a href="python-basics.html#class">NamedTuple</a>、<a href="python-basics.html#type-hints">类型标注</a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归与分治</a>（DP 就是递归加记忆）、<a href="18-greedy.html">第 18 课 · 贪心</a>（找零的对比）、<a href="00-complexity.html">第 0 课 · 复杂度</a>。</p>
 
 <h2>实战里怎么写：一行装饰器</h2>
 <p>Python 项目里几乎没人手写 memo 字典，标准库 <code>functools</code> 已经做好了：</p>
@@ -67,6 +68,7 @@ total([1, 2, 3])           # TypeError: unhashable type: 'list'：参数必须�
 
 fibonacci(80, {})</pre>
 <p>递归的写法几乎没变，只多了“先查、再存”两行。每个 n 只真正算一次：O(n)。<code>@cache</code> 做的就是这件事：把“先查、再存”包在一个装饰器里，键是参数，所以参数必须可哈希。练习里你会自己写一个同样用法的 <code>memoize</code>。</p>
+<p>预备课只讲了怎么<b>用</b>装饰器，这里补上<b>写</b>一个要用到的几个写法。装饰器本身就是一个“收一个函数、返回一个新函数”的普通函数，新函数靠<b>闭包</b>（<a href="python-basics.html#closure">预备课第 15 节</a>）记住缓存用的数据；<code>def wrapper(*args, **kwargs)</code> 里的 <code>*args</code> 把位置参数收成一个元组（第 4 节），<code>**kwargs</code> 同理把关键字参数收成一个 dict，调用时再写 <code>function(*args, **kwargs)</code> 原样摊开传回去；函数也是对象，可以往上挂属性，写完 <code>wrapper.cache_info = 某个函数</code> 之后，就能像 <code>fibonacci.cache_info()</code> 那样调。另外 <code>from functools import wraps</code> 后，在 <code>def wrapper</code> 的上一行加 <code>@wraps(function)</code>，会把原函数的名字和 docstring 抄到包装函数上，报错信息更好认。</p>
 
 <h2>办法二：填表（自底向上）</h2>
 <p>反过来想：既然 fib(n) 只依赖更小的数，就从小往大，一格一格填满一张表。</p>
@@ -111,7 +113,7 @@ fibonacci(80, {})</pre>
 </ul>
 
 <h2>练习</h2>
-<p>补全 <code>dsa/dp_memo.py</code>。建议顺序：<code>memoize</code>（自己写一个带 <code>cache_info()</code> / <code>cache_clear()</code> 的装饰器，用法和 <code>@functools.cache</code> 一样）→ <code>fibonacci_memo</code>（用你的 <code>@memoize</code>）→ <code>fibonacci_table</code> → <code>climb_stairs</code> → <code>unique_paths</code>（网格里可以有堵住的格子）→ <code>min_coins</code>（返回用了哪些面值的 <code>Counter</code>，不只是张数）。每题先写下三问的答案再动手。</p>
+<p>补全 <code>dsa/dp_memo.py</code>。建议顺序：<code>memoize</code>（自己写一个带 <code>cache_info()</code> / <code>cache_clear()</code> 的装饰器，用法和 <code>@functools.cache</code> 一样）→ <code>fibonacci_memo</code>（用你的 <code>@memoize</code>）→ <code>fibonacci_table</code> → <code>climb_stairs</code> → <code>unique_paths</code>（网格里可以有堵住的格子）→ <code>min_coins</code>（返回用了哪些面值的 <code>Counter</code>，不只是张数）。每题先写下三问的答案再动手。<code>unique_paths</code> 的 <code>blocked</code> 参数是 <code>frozenset</code>：它就是<b>不可变的 set</b>，<code>in</code> 判断、遍历都和 set 一样，好处是能当 dict 的键、被缓存（实战里的词典也用它传，所以切词函数只有一个 int 参数）。</p>
 <pre>uv run dsa/dp_memo.py               # 汇率缓存、代币凑数、机器人走网格的端到端例子
 uv run pytest tests/test_dp_memo.py</pre>
 

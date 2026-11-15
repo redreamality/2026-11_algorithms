@@ -20,6 +20,8 @@
 <h1>第 31 课 · 二叉树高频题</h1>
 <p class="one-line">面试里的二叉树题，大多数都是同一个套路：<b>先想清楚“递归函数返回什么”，再在后序位置（左右子树都算完之后）用左右两边的结果拼出当前节点的结果</b>。</p>
 
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#closure">嵌套函数与 nonlocal</a>、<a href="python-basics.html#comprehension">生成器表达式</a>、<a href="python-basics.html#type-hints">类型标注（X | None、引号前向引用）</a>、<a href="python-basics.html#numbers">float("inf")</a>、<a href="python-basics.html#lambda-key">lambda</a>、<a href="python-basics.html#exceptions">try/except</a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归与分治</a>、<a href="10-binary-tree.html">第 10 课 · 二叉树与遍历（后序、层序）</a>、<a href="11-bst.html">第 11 课 · 二叉搜索树</a>、<a href="03-stack-queue.html">第 3 课 · 栈与队列（deque、显式栈）</a>。</p>
+
 <p>这一课默认你已经学过第 10 课（二叉树与递归遍历）和第 11 课（二叉搜索树）。树节点的写法和第 10 课一样：</p>
 <pre>class TreeNode:
     def __init__(self, val, left=None, right=None):
@@ -83,6 +85,7 @@ def lowest_common_manager(first_person, second_person, manager_of):
     while second_person not in ancestors_of_first:
         second_person = manager_of[second_person]
     return second_person</pre>
+<p>两处 Python 细节：<code>max()</code> 遇到空的序列会抛 <code>ValueError</code>，<code>max(生成器, default=0)</code> 里的 <code>default=0</code> 表示“一个孩子都没有时按 0 算”（叶子节点的深度是 1，不是 1 + 0 之外的东西）；递归上限那一行说的 <code>RecursionError</code>，就是函数嵌套调用太深（默认约 1000 层）时 Python 抛的异常。</p>
 <p>完整可运行的版本在 <code>examples/tree_patterns_in_practice.py</code>（<code>uv run examples/tree_patterns_in_practice.py</code>），还有一个“每条评论下有多少回复”的后序汇总。下面的题目是 LeetCode 的二叉树版本：只有父亲指向孩子、没有父指针，所以最近公共祖先要用题五的递归做法。</p>
 
 <h2>怎么认出这类题</h2>

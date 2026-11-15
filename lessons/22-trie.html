@@ -19,6 +19,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 22 课 · 选修 · Trie（字典树）</h1>
 <p class="one-line">Trie 把单词<b>一个字母一个节点</b>地挂在树上，开头相同的词共用同一段路。查一个词只要顺着字母往下走，走几步只看<b>词有多长</b>，和存了多少词无关。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#dict-tools">setdefault 与 get</a>、<a href="python-basics.html#dunder">魔法方法</a>（<code>__contains__</code> / <code>__len__</code> / <code>__iter__</code> / <code>__delitem__</code> / <code>__repr__</code>）、<a href="python-basics.html#generator">生成器</a>、<a href="python-basics.html#type-hints">Iterable / Iterator 标注与引号前向引用</a>；前面的课 —— <a href="04-hash-table.html">第 4 课 · 哈希表</a>（每个节点的孩子就是一个 dict）、<a href="10-binary-tree.html">第 10 课 · 二叉树</a>（顺着引用往下走）、<a href="13-graph-traversal.html">第 13 课 · DFS</a>（深度优先遍历子树，递归 + yield）、<a href="06-binary-search.html">第 6 课 · bisect</a>（实战里的对比方案）、<a href="12-heap.html">第 12 课 · 堆</a>（<code>complete</code> 的提示用 heapq.nsmallest）。</p>
 
 <h2>实战里怎么写：多数时候用不着 Trie</h2>
 <p>Python 标准库里没有 Trie。实际项目里按场景选：</p>
@@ -81,6 +82,7 @@ def add(self, word, times=1):
 def __contains__(self, word):                                     # word in trie
     node = self._walk(word)
     return node is not None and node.count &gt; 0</pre>
+<p>（<code>setdefault(character, TrieNode())</code> 是<a href="python-basics.html#dict-tools">预备课</a>讲过的写法：键已经在就原样返回对应的值，不在就先把新节点存进去、再返回它，一行完成“有路就走、没路就建”。）</p>
 <p>列出某前缀下的所有词：先 <code>_walk(prefix)</code> 走到前缀节点，再用生成器深度优先走它的子树，孩子按字母顺序走，产出的词自然是字典序。</p>
 
 <h2>复杂度（L = 单词长度）</h2>

@@ -37,6 +37,7 @@ def build_linked_list(values: list) -> ListNode | None:
 def linked_list_to_list(head: ListNode | None, max_length: int = 10_000) -> list:
     """把链表 1 → 2 → 3 变回 [1, 2, 3]。
 
+    max_length 里的 10_000 就是 10000，数字中间的下划线只是分位、方便读，没有别的含义。
     如果走了 max_length 步还没走到 None，说明链表可能有环，抛 ValueError，免得死循环。
     """
     values = []

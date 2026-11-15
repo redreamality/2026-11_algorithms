@@ -18,6 +18,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 12 课 · 堆与优先队列</h1>
 <p class="one-line">堆是一棵<b>“父亲总比孩子小”</b>的二叉树，所以最小值永远在顶上。它其实就存在一个普通数组里。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#numbers">// 与 %（算父亲孩子的下标）</a>、<a href="python-basics.html#dunder">魔法方法（<code>__len__</code>、<code>__bool__</code>）</a>、<a href="python-basics.html#lambda-key">lambda 与 key=</a>、<a href="python-basics.html#unpack">解包</a>、<a href="python-basics.html#exceptions">异常约定（IndexError）</a>、<a href="python-basics.html#generator">生成器（merge 是生成器）</a>；前面的课 —— <a href="10-binary-tree.html">第 10 课 · 二叉树</a>、<a href="08-merge-sort.html">第 8 课 · 归并排序（merge 的思路）</a></p>
 
 <h2>实战里怎么写：标准库 heapq</h2>
 <p>业务代码里没人手写堆，Python 标准库 <code>heapq</code> 直接把普通 <code>list</code> 当堆用。按场景选：</p>
@@ -32,7 +33,8 @@
 from itertools import count
 
 heap = []
-sequence = count()                 # 序号：同优先级先进先出，也避免去比较任务本身
+sequence = count()                 # count() 产出 0、1、2……，每次 next() 拿下一个数，永远数不完
+                                   # 用它当序号：同优先级先进先出，也避免去比较任务本身
 heapq.heappush(heap, (run_at, next(sequence), "生成日报"))
 
 while heap and heap[0][0] &lt;= now:  # heap[0] 就是最早到期的，看一眼 O(1)

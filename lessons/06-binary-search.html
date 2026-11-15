@@ -9,6 +9,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 6 课 · 二分查找</h1>
 <p class="one-line">在<b>排好序</b>的数组里找东西：每次看正中间那个，就能扔掉一半。100 万个数，最多看 20 次。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#lambda-key">lambda 与 key=</a>、<a href="python-basics.html#loop-tools">切片（左闭右开）</a>、<a href="python-basics.html#type-hints">类型标注（Callable、Sequence、X | None）</a>、<a href="python-basics.html#class">@dataclass</a>、<a href="python-basics.html#comprehension">列表推导式</a>、<a href="python-basics.html#fstring">f-string 的 !r</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>（O(log n)）。</p>
 
 <h2>实战里怎么写：用标准库 bisect</h2>
 <p>业务代码里几乎没人手写二分，标准库 <code>bisect</code> 就是它，3.10 起还支持 <code>key=</code>：</p>

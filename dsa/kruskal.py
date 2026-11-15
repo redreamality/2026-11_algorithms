@@ -17,6 +17,7 @@
 
 from collections.abc import Hashable, Iterable
 
+# 类型别名：写 Edge 就等于写 tuple[Hashable, Hashable, float]，也就是一条边 (u, v, 权)。
 Edge = tuple[Hashable, Hashable, float]
 
 

@@ -20,6 +20,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 24 课 · 选修 · 平衡树思路（AVL 旋转）</h1>
 <p class="one-line">AVL 树就是一棵<b>会自己扶正</b>的二叉搜索树：每插入一个值，沿路往回看，哪里歪了就<b>转一下</b>，树高始终是 O(log n)。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#abc">继承 MutableMapping</a>（<code>update</code> / <code>items</code> 都是白送的）、<a href="python-basics.html#class">@classmethod</a>、<a href="python-basics.html#generator">生成器</a>（<code>__iter__</code> 用 yield 中序产出、<code>next(iter(orders))</code>）、<a href="python-basics.html#type-hints">X | None 与引号前向引用</a>、<a href="python-basics.html#sortedcontainers">sortedcontainers 用法</a>（实战当黑盒）；前面的课 —— <a href="11-bst.html">第 11 课 · 二叉搜索树</a>（本课直接在它上面改：退化问题、递归插入改父指针、删除的三种情况都来自那里）、<a href="05-recursion.html">第 5 课 · 递归与分治</a>、<a href="06-binary-search.html">第 6 课 · bisect</a>（实战里的对比方案）。</p>
 
 <h2>实战里怎么写：sortedcontainers</h2>
 <p>Python 标准库没有平衡树，业务代码里也没人手写 AVL。需要“边改边保持有序”时：</p>

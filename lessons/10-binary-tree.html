@@ -16,6 +16,7 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 10 课 · 二叉树与递归遍历</h1>
 <p class="one-line">二叉树就是每个节点最多有<b>两个孩子</b>的链表。处理一棵树 = 处理根 + 处理左子树 + 处理右子树，所以几乎所有树的代码都是<b>递归</b>。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器（yield）</a>、<a href="python-basics.html#yield-from">yield from</a>、<a href="python-basics.html#class">@dataclass 与 isinstance</a>、<a href="python-basics.html#type-hints">类型标注（<code>X | None</code>、引号前向引用）</a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归与分治</a>、<a href="03-stack-queue.html">第 3 课 · 队列（层序要用 deque）</a></p>
 
 <h2>长什么样</h2>
 <div class="row" style="justify-content:center;max-width:300px"><span class="box">1</span></div>
@@ -115,7 +116,7 @@ list(level_order(root))       # [[1], [2, 3], [4, 5, 6]]</pre>
 </ul>
 
 <h2>练习</h2>
-<p>补全 <code>dsa/binary_tree.py</code>。<code>TreeNode</code> 是 dataclass，两棵树结构和值都一样时 <code>==</code> 为 True，测试靠它比较。除了遍历，还要写两种<b>序列化</b>：层序列表（LeetCode 的写法，<code>build_from_list</code> / <code>to_list</code>）和可以直接 <code>json.dumps</code> 的嵌套 dict（<code>to_dict</code> / <code>from_dict</code>），都要能来回转换。</p>
+<p>补全 <code>dsa/binary_tree.py</code>。<code>TreeNode</code> 是 dataclass，两棵树结构和值都一样时 <code>==</code> 为 True，测试靠它比较。除了遍历，还要写两种<b>序列化</b>：层序列表（LeetCode 的写法，<code>build_from_list</code> / <code>to_list</code>）和可以直接 <code>json.dumps</code> 的嵌套 dict（<code>to_dict</code> / <code>from_dict</code>），都要能来回转换。<code>json.dumps(对象)</code> 把嵌套 dict/list 变成 JSON 字符串，<code>json.loads(字符串)</code> 再解析回来——这里只用它验证转换结果是能存盘、能走网络的普通数据。</p>
 <p>建议顺序：<code>preorder</code> → <code>inorder</code> → <code>postorder</code> → <code>count_nodes</code> → <code>height</code> → <code>level_order</code> → <code>to_dict</code> / <code>from_dict</code> → <code>build_from_list</code> → <code>to_list</code>。</p>
 <pre>uv run dsa/binary_tree.py       # 公司汇报关系的端到端例子，逐条打印期望和实际
 uv run pytest tests/test_binary_tree.py</pre>

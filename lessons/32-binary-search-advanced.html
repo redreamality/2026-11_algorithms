@@ -17,6 +17,8 @@
 <h1>第 32 课 · 二分进阶</h1>
 <p class="one-line">二分不只是“在有序数组里找一个数”。只要每一步都能判断出<b>答案在左半边还是右半边</b>，就能二分。最常见的形式是：在一串 <span class="truth">False … False True … True</span> 里，找<b>第一个 True</b>。</p>
 
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#lambda-key">lambda 与 key=</a>、<a href="python-basics.html#closure">嵌套函数（闭包）</a>、<a href="python-basics.html#type-hints">类型标注（X | None）</a>、<a href="python-basics.html#numbers">// 与 %、math.inf</a>、<a href="python-basics.html#class">@dataclass</a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="06-binary-search.html">第 6 课 · 二分查找（bisect、lower_bound）</a>、<a href="18-greedy.html">第 18 课 · 贪心（题四检查函数里的贪心）</a>。</p>
+
 <p>这一课默认你已经学过第 6 课（二分查找）。第 6 课的 <code>lower_bound</code> 找的是“第一个 ≥ target 的位置”，这一课会把它推广成一个通用模板，然后用它解决四类题。</p>
 
 <h2>通用模板：找第一个满足条件的位置</h2>

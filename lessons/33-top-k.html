@@ -20,6 +20,8 @@
 <h1>第 33 课 · 堆与 Top K</h1>
 <p class="one-line">“最大的 K 个”“第 K 大”“出现最多的 K 个”这类问题，核心技巧是：<b>用一个只装 K 个元素的堆当“候选名单”</b>，新元素来了只和名单里最差的那个（堆顶）比较。找最大的 K 个要用<b>小顶堆</b>，方向和直觉相反。</p>
 
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#dict-tools">Counter 与 most_common</a>、<a href="python-basics.html#lambda-key">lambda 与 key=</a>、<a href="python-basics.html#class">@dataclass</a>、<a href="python-basics.html#unpack">*args（实战里的 heapq.merge(*logs)）</a>、<a href="python-basics.html#generator">生成器</a>、<a href="python-basics.html#type-hints">类型标注（引号前向引用）</a>；前面的课 —— <a href="12-heap.html">第 12 课 · 堆与优先队列（heapq 的用法）</a>、<a href="29-linked-list-patterns.html">第 29 课 · 链表高频技巧（哑节点，题三用）</a>。</p>
+
 <p>这一课默认你已经学过第 12 课（堆与优先队列）。第 12 课手写过堆，这一课直接用 Python 标准库 <code>heapq</code>：</p>
 <table>
   <tr><th>写法</th><th>作用</th><th>时间</th></tr>
