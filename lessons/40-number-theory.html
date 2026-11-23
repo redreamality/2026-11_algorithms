@@ -21,6 +21,11 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 40 课 · 数论模板</h1>
 <p class="one-line">笔试里的“数学题”翻来覆去就是几块模板：<b>辗转相除求最大公约数</b>、<b>试除和筛法找质数</b>、<b>边算边取模</b>、<b>快速幂</b>、<b>用逆元代替除法</b>、<b>预处理阶乘算组合数</b>。这一课用一道抽奖题把它们串起来。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#numbers">整数运算（<code>//</code>、<code>%</code>、大整数不溢出）</a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#loop-tools"><code>enumerate</code></a>、<a href="python-basics.html#class">类</a>、<a href="python-basics.html#exceptions">异常（<code>raise ValueError</code>）</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>、<a href="05-recursion.html">第 5 课 · 递归与分治（递归快速幂）</a>、<a href="39-bit-manipulation.html">第 39 课 · 位运算（<code>&amp; 1</code>、<code>&gt;&gt;</code>）</a>。本课用到的数学名词（质数、同余、组合数……）都在下面第一节先定义。</p>
 
 <h2>主线题目：幸运卡</h2>
@@ -50,7 +55,7 @@
 </table>
 <p><a href="21-backtracking.html">第 21 课</a>用回溯把组合一个个<b>列出来</b>；这一课只<b>数</b>有多少个，用公式，不用列。</p>
 
-<h2>实战里怎么写：标准库全都有</h2>
+<h2>应用场景：标准库全都有</h2>
 <p>真实项目里这一课的东西几乎不用手写，Python 标准库都包好了。质数判断是例外，标准库没有，要自己写几行。</p>
 <table>
   <tr><th>想做什么</th><th>用什么</th><th>代价</th></tr>
