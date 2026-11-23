@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 33 课 · 堆与 Top K</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.problem { border-left: 4px solid #ffcc80; padding-left: 14px; margin: 12px 0; }
+.halves { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+.half { display: flex; flex-direction: column; }
+.half .row { min-height: 58px; margin: 4px 0; }
+.divider { font-size: 40px; color: #999; line-height: 58px; }
+.box.top { border-width: 3px; border-color: #0b62c4; }
+.box.moving { background: #ffe0b2; }
+.incoming { min-height: 40px; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 33 课 · 堆与 Top K</h1>
+<p class="one-line">“最大的 K 个”“第 K 大”“出现最多的 K 个”这类问题，核心技巧是：<b>用一个只装 K 个元素的堆当“候选名单”</b>，新元素来了只和名单里最差的那个（堆顶）比较。找最大的 K 个要用<b>小顶堆</b>，方向和直觉相反。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
+
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#dict-tools">Counter 与 most_common</a>、<a href="python-basics.html#lambda-key">lambda 与 key=</a>、<a href="python-basics.html#class">@dataclass</a>、<a href="python-basics.html#unpack">*args（实战里的 heapq.merge(*logs)）</a>、<a href="python-basics.html#generator">生成器</a>、<a href="python-basics.html#type-hints">类型标注（引号前向引用）</a>；前面的课 —— <a href="12-heap.html">第 12 课 · 堆与优先队列（heapq 的用法）</a>、<a href="29-linked-list-patterns.html">第 29 课 · 链表高频技巧（哑节点，题三用）</a>。</p>
+
+<p>这一课默认你已经学过第 12 课（堆与优先队列）。第 12 课手写过堆，这一课直接用 Python 标准库 <code>heapq</code>：</p>
+<table>
+  <tr><th>写法</th><th>作用</th><th>时间</th></tr>
+  <tr><td><code>heapq.heappush(heap, item)</code></td><td>放进一个元素</td><td>O(log n)</td></tr>
+  <tr><td><code>heapq.heappop(heap)</code></td><td>弹出并返回最小的元素</td><td>O(log n)</td></tr>
+  <tr><td><code>heap[0]</code></td><td>看一眼最小的元素，不弹出</td><td>O(1)</td></tr>
+  <tr><td><code>heapq.heapify(items)</code></td><td>把一个列表原地变成堆</td><td>O(n)</td></tr>
+</table>
+<p><code>heapq</code> 只有<b>最小堆</b>（小顶堆）。要用最大堆时，放进去的是相反数 <code>-num</code>，取出来再取反：最小的相反数，对应的就是最大的原数。堆里也可以放元组，例如 <code>(出现次数, 数)</code>，元组按第一项比较，第一项相等再比第二项。</p>
+
+<h2>应用场景：标准库已经包好了</h2>
+<p>业务代码里很少自己维护“大小为 k 的堆”。下面这些标准库函数内部用的就是本课的技巧，直接调用即可：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>出现次数最多的 k 个（热门接口、高频词）</td><td><code>collections.Counter(...).most_common(k)</code></td><td>统计 O(n)，取前 k 个 O(m log k)</td></tr>
+  <tr><td>按某个字段最大 / 最小的 k 个（最慢的请求、最便宜的商品）</td><td><code>heapq.nlargest(k, items, key=...)</code> / <code>heapq.nsmallest</code></td><td>O(n log k)，可以直接吃生成器，不用全部装进内存</td></tr>
+  <tr><td>几份各自有序的日志 / 分片合并成一条有序流</td><td><code>heapq.merge(*iterables, key=...)</code></td><td>O(N log k)，懒惰地一条一条产出</td></tr>
+  <tr><td>k 接近 n，或者本来就要全部排好序</td><td><code>sorted(items, key=...)[:k]</code></td><td>O(n log n)，此时反而更快更清楚</td></tr>
+</table>
+<pre>import heapq
+from collections import Counter
+
+# 两台服务器的访问日志，各自按时间排好序：合并成一条时间线，不需要拼起来再整体排序
+timeline = list(heapq.merge(server_a_log, server_b_log, key=lambda request: request.timestamp))
+
+# 访问次数最多的 2 个接口：[('/api/orders', 4), ('/api/users', 2)]
+busiest_paths = Counter(request.path for request in timeline).most_common(2)
+
+# 最慢的 3 个请求，从慢到快
+slowest_requests = heapq.nlargest(3, timeline, key=lambda request: request.latency_ms)</pre>
+<p>完整可运行的版本在 <code>examples/top_k_in_practice.py</code>（<code>uv run examples/top_k_in_practice.py</code>）。数据流中位数标准库没有现成的：<code>statistics.median</code> 每次都要整体排序；要在不断加入数据的同时随时查询，还是要用本课题四的双堆。下面的练习就是把这些函数背后的堆自己写一遍。</p>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li>题目里有“<b>第 K 大 / 第 K 小</b>”“<b>前 K 个</b>”“<b>最大的 K 个</b>”“<b>最接近的 K 个</b>”“出现频率最高的 K 个”：大小为 K 的堆。</li>
+  <li>有“<b>合并 K 个有序</b>的……”：把每一路的当前最小值放进堆，每次取出全局最小的那个。</li>
+  <li>有“<b>数据流</b>”“动态地不断加入”，同时要随时回答“目前的最大 / 最小 / 中位数”：堆，中位数用两个堆。</li>
+  <li>暴力做法是“全部排序再取前 K 个”，而 K 远小于 n：可以用堆把 O(n log n) 降到 O(n log k)。</li>
+</ul>
+
+<h2 id="kth-largest">题一：数组中的第 K 个最大元素（LeetCode 215）</h2>
+<div class="problem">
+<p><b>题意：</b>返回数组从大到小数的第 k 个数，重复的数分别计数。例如 <code>[3, 2, 1, 5, 6, 4]</code>，k = 2：从大到小是 6, 5, 4, 3, 2, 1，第 2 个是 5。</p>
+<p><b>暴力做法：</b>排序后取 <code>nums[len(nums) - k]</code>，时间 O(n log n)。它是对的，但做了很多没必要的事：我们只关心最大的 k 个，其余 n − k 个数之间谁大谁小根本不重要。</p>
+<p><b>关键观察：</b>只要一直维护“<b>目前见过的最大的 k 个数</b>”这份名单，扫完整个数组后，名单里最小的那个就是第 k 大。</p>
+<p><b>为什么用小顶堆：</b>新来一个数时，要决定它能不能进名单。它要挤掉的是名单里<b>最小</b>的那个，所以我们需要随时拿到名单里的最小值——这正是小顶堆的堆顶。用大顶堆的话，堆顶是名单里最大的数，对“谁该被淘汰”没有帮助。</p>
+<p><b>做法：</b>名单叫 <code>min_heap_of_k_largest</code>。每来一个数 num：先 <code>heappush</code> 进去；如果堆里超过了 k 个，就 <code>heappop</code> 一次，弹出这 k + 1 个里最小的。扫完后返回 <code>min_heap_of_k_largest[0]</code>。</p>
+<p><b>为什么对：</b>每一步之后，堆里都恰好是“目前见过的数里最大的 k 个”（不足 k 个时就是全部）：新数进来后，k + 1 个候选里最小的那个不可能属于最大的 k 个，弹出它就对了。</p>
+<p><b>复杂度：</b>每个数最多一次 push、一次 pop，每次 O(log k)，总时间 O(n log k)；堆只占 O(k) 空间。k 很小时，比排序快得多，而且数据可以一边读一边处理，不需要全部装进内存。</p>
+<p><b>补充：</b>这题还有一种平均 O(n) 的“快速选择”做法，就是第 9 课快速排序的分区，只递归进答案所在的那一边。面试里两种都常见，堆的写法更不容易出错。</p>
+</div>
+
+<h2 id="top-k-frequent">题二：前 K 个高频元素（LeetCode 347）</h2>
+<div class="problem">
+<p><b>题意：</b>返回出现次数最多的 k 个数，顺序随意。例如 <code>[1, 1, 1, 2, 2, 3]</code>，k = 2：1 出现 3 次，2 出现 2 次，3 出现 1 次，答案是 <code>[1, 2]</code>。</p>
+<p><b>暴力做法：</b>统计次数后，按次数把所有不同的数排序，取前 k 个。设不同的数有 m 个，时间 O(n + m log m)。</p>
+<p><b>关键观察：</b>统计完次数之后，问题就变成了“在 m 个（数, 次数）里找次数最大的 k 个”，和题一是同一个问题，只是比较的是次数。</p>
+<p><b>做法：</b>① 用字典 <code>count_of_number</code> 统计每个数出现几次；② 遍历字典，把 <code>(次数, 数)</code> 放进大小为 k 的小顶堆，超过 k 个就弹出次数最少的；③ 堆里剩下的 k 个元组，取出其中的数就是答案。把次数放在元组的第一项，堆才会按次数比较。</p>
+<p><b>复杂度：</b>统计 O(n)，堆的部分 O(m log k)，总共 O(n log k) 以内；字典占 O(m) 空间。</p>
+<p><b>补充：</b>还有一种 O(n) 的“桶”做法：次数最多是 n，开 n + 1 个桶，第 c 个桶放出现了 c 次的数，从最大的桶往回收集 k 个。</p>
+</div>
+
+<h2 id="merge-k-lists">题三：合并 K 个升序链表（LeetCode 23）</h2>
+<div class="problem">
+<p><b>题意：</b>给 k 个各自升序的链表，合并成一个升序链表。例如 <code>1→4→5</code>、<code>1→3→4</code>、<code>2→6</code> 合并成 <code>1→1→2→3→4→4→5→6</code>。设所有链表一共有 N 个节点。</p>
+<p><b>暴力做法：</b>把所有值收集起来排序再建链表，O(N log N)。或者像第 8 课归并排序那样，拿第一个链表依次和后面每个链表两两合并：结果链表越来越长，每次合并都要把它从头走一遍，最坏 O(N · k)。</p>
+<p><b>关键观察：</b>结果链表的下一个节点，一定是<b>某个链表的当前头节点</b>（每个链表自己是升序的，头节点就是它剩下部分的最小值）。所以只需要在这 k 个头节点里找最小的——这正是堆擅长的：最多 k 个元素，反复取最小值。</p>
+<p><b>做法：</b>先把每个非空链表的头节点放进小顶堆。然后反复：弹出值最小的节点，接到结果链表的末尾；如果它后面还有节点，把那个节点放进堆，补上这个链表的位置。堆空了就合并完了。结果链表用一个哑节点 <code>dummy_head</code> 开头，省得单独处理“第一个节点”。</p>
+<p><b>一个 Python 的坑：</b>堆里不能直接放 <code>(节点值, 节点)</code>。两个节点值相等时，元组会接着比较第二项，而 <code>ListNode</code> 之间没有定义大小，会报 <code>TypeError</code>。解决办法是在中间加一个链表编号：<code>(节点值, 链表编号, 节点)</code>。值相等时比较编号，编号互不相同，就永远不会比较到节点本身。</p>
+<p><b>复杂度：</b>每个节点进出堆各一次，堆里最多 k 个元素，总时间 O(N log k)，额外空间 O(k)。</p>
+</div>
+
+<h2 id="median-finder">题四：数据流的中位数（LeetCode 295）——本课重点</h2>
+<div class="problem">
+<p><b>题意：</b>数一个一个地到来，要随时回答“目前所有数的中位数”。中位数是排好序后正中间的数；个数为偶数时，取中间两个数的平均值。例如依次加入 5、15、1：加入 5 后中位数是 5；加入 15 后是 (5 + 15) / 2 = 10；加入 1 后排好序是 1, 5, 15，中位数是 5。</p>
+<p><b>暴力做法为什么慢：</b>每次查询都把所有数排序，一次 O(n log n)。改进一点：维护一个有序列表，每来一个数用二分找到位置插进去。找位置是 O(log n)，但在 Python 列表中间插入要把后面的元素整体往后挪，是 O(n)。</p>
+<p><b>关键观察：</b>中位数只关心“正中间”的一两个数，不需要整体有序。把所有数分成<b>较小的一半</b>和<b>较大的一半</b>，那么中位数只和两个数有关：<b>较小一半里的最大值</b>，和<b>较大一半里的最小值</b>。“随时拿到最大值 / 最小值”正是堆做的事。</p>
+<p><b>两个堆：</b></p>
+<ul>
+  <li><code>max_heap_of_smaller_half</code>：放较小的一半，是<b>大顶堆</b>（heapq 里存相反数），堆顶是这一半的最大值。</li>
+  <li><code>min_heap_of_larger_half</code>：放较大的一半，是<b>小顶堆</b>，堆顶是这一半的最小值。</li>
+</ul>
+<p>任何时候都要保持两个条件：</p>
+<ol>
+  <li><b>有序：</b>较小一半里的每个数都 ≤ 较大一半里的每个数。（只要比较两个堆顶就能确认。）</li>
+  <li><b>平衡：</b>较小一半的个数等于较大一半，或者正好多 1 个。</li>
+</ol>
+<p>有了这两个条件，中位数就很简单：总数是奇数时，较小一半多 1 个，它的堆顶就是正中间的数；总数是偶数时，两边一样多，中位数是两个堆顶的平均值。都是 O(1)。</p>
+<p><b>加入一个数 num 的三步：</b></p>
+<ol>
+  <li>先把 num 放进较小的一半。</li>
+  <li>把较小一半的最大值弹出来，放进较大的一半。<br>为什么：num 可能比较大一半里的某些数还大，直接留在较小一半会破坏“有序”。这一步送走的，是“原来的较小一半加上 num”里最大的数，所以留下的数都 ≤ 它。留下的数也都 ≤ 原来较大一半的每个数：原来较小一半的数本来就满足；如果 num 被留下了，说明 num ≤ 被送走的那个原有的数，而那个数 ≤ 较大一半的每个数。所以有序条件重新成立。</li>
+  <li>如果这时较大的一半比较小的一半多了，把较大一半的最小值弹出来，放回较小的一半。<br>为什么：第 2 步总是往较大一半送一个数，可能让它变多，破坏“平衡”。送回去的是较大一半的最小值，它 ≥ 较小一半的所有数，放到较小一半里成为新的最大值，有序条件不受影响。</li>
+</ol>
+<p>三步里每次 push / pop 都是 O(log n)，所以加入一个数是 O(log n)，查询中位数 O(1)。下面的动画一步步演示这三步。</p>
+</div>
+
+<h2>动手玩</h2>
+<p>点<b>播放示例数据流</b>，依次加入 5, 15, 1, 3, 8, 7, 9, 10。左边是较小的一半（大顶堆），右边是较大的一半（小顶堆），蓝色粗框是两个堆顶。为了好看，每一半都画成了排好序的样子，堆顶紧挨着中间的竖线；真实的堆内部并不是完全排好序的，只保证堆顶是最大 / 最小值。橙色是这一步正在移动的数。也可以自己输入一个值，点<b>加入</b>。</p>
+<div class="demo" id="two-heaps"></div>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>题</th><th>堆里放什么</th><th>堆的大小</th><th>时间</th></tr>
+  <tr><td>第 K 大</td><td>目前最大的 k 个数（小顶堆）</td><td>k</td><td>O(n log k)</td></tr>
+  <tr><td>前 K 个高频</td><td>(次数, 数)，次数最多的 k 个（小顶堆）</td><td>k</td><td>O(n log k)</td></tr>
+  <tr><td>合并 K 个链表</td><td>(值, 链表编号, 节点)，每个链表的当前头</td><td>k</td><td>O(N log k)，N 是节点总数</td></tr>
+  <tr><td>数据流中位数</td><td>较小一半（大顶堆）+ 较大一半（小顶堆）</td><td>各约 n / 2</td><td>加入 O(log n)，查询 O(1)</td></tr>
+</table>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>堆的方向反了：</b>找最大的 k 个用<b>小顶堆</b>（堆顶是名单里最容易被淘汰的那个）；找最小的 k 个用大顶堆。</li>
+  <li><b>先 push 再判断大小：</b>先放进去，超过 k 个再弹出。如果先拿新数和堆顶比较再决定要不要放，也可以，但要处理“堆还不满 k 个”的情况，更容易漏。</li>
+  <li><b>最大堆忘了取反：</b>放进去是 <code>-num</code>，取出来、看堆顶时都要再取反一次。</li>
+  <li><b>堆里放了不能比较的对象：</b>合并链表时元组中间要加编号。</li>
+  <li><b>中位数是整数还是小数：</b>偶数个时要除以 2，用 <code>/</code> 不要用 <code>//</code>，否则 (5 + 4) // 2 得到 4 而不是 4.5。</li>
+</ul>
+
+<h2>LeetCode 题单</h2>
+<table>
+  <tr><th>题号</th><th>题名</th><th>说明</th></tr>
+  <tr><td>215</td><td>数组中的第K个最大元素</td><td>本课题一</td></tr>
+  <tr><td>347</td><td>前 K 个高频元素</td><td>本课题二</td></tr>
+  <tr><td>23</td><td>合并 K 个升序链表</td><td>本课题三</td></tr>
+  <tr><td>295</td><td>数据流的中位数</td><td>本课题四</td></tr>
+  <tr><td>703</td><td>数据流中的第 K 大元素</td><td>热身：题一改成类，堆一直保留着</td></tr>
+  <tr><td>973</td><td>最接近原点的 K 个点</td><td>找“最小的 k 个”，用大顶堆（存相反的距离）</td></tr>
+  <tr><td>692</td><td>前K个高频单词</td><td>进阶：次数相同时还要按字典序比较</td></tr>
+  <tr><td>378</td><td>有序矩阵中第 K 小的元素</td><td>进阶：和合并 K 个链表是同一个思路，每一行是一条有序链</td></tr>
+  <tr><td>373</td><td>查找和最小的 K 对数字</td><td>进阶：同上</td></tr>
+  <tr><td>480</td><td>滑动窗口中位数</td><td>进阶：双堆 + 删除过期元素</td></tr>
+</table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-215"><summary>LeetCode 215 · 数组中的第K个最大元素</summary>
+<p><b>题意</b>：给定整数数组 <code>nums</code> 和整数 <code>k</code>，返回数组排序后的第 <code>k</code> 个最大的元素（重复元素分别计数，不是第 k 个不同的元素）；要求设计时间复杂度为 O(n) 的算法。完整讲解见 <a href="#kth-largest">正文第 1 题</a>。</p>
+</details>
+<details id="lc-347"><summary>LeetCode 347 · 前 K 个高频元素</summary>
+<p><b>题意</b>：给定整数数组 <code>nums</code> 和整数 <code>k</code>，返回出现频率前 <code>k</code> 高的元素，可以按任意顺序返回；进阶要求时间复杂度优于 O(n log n)。完整讲解见 <a href="#top-k-frequent">正文第 2 题</a>。</p>
+</details>
+<details id="lc-23"><summary>LeetCode 23 · 合并 K 个升序链表</summary>
+<p><b>题意</b>：给定一个链表数组 <code>lists</code>，每个链表都已按升序排列，把所有链表合并成一个升序链表并返回其头节点。完整讲解见 <a href="#merge-k-lists">正文第 3 题</a>。</p>
+</details>
+<details id="lc-295"><summary>LeetCode 295 · 数据流的中位数</summary>
+<p><b>题意</b>：实现 <code>MedianFinder</code> 类：<code>MedianFinder()</code> 初始化对象，<code>addNum(num)</code> 把数据流中的整数 <code>num</code> 加入结构，<code>findMedian()</code> 返回目前所有元素的中位数（元素个数为偶数时取中间两个数的平均值）。完整讲解见 <a href="#median-finder">正文第 4 题</a>。</p>
+</details>
+<details id="lc-703"><summary>LeetCode 703 · 数据流中的第 K 大元素</summary>
+<p><b>题意</b>：设计一个类，找出数据流中第 <code>k</code> 大的元素（是排序后的第 k 大，不是第 k 个不同的元素）。实现 <code>KthLargest</code> 类：</p>
+<ul>
+  <li><code>KthLargest(k, nums)</code>：用整数 <code>k</code> 和初始整数数组 <code>nums</code> 初始化对象。</li>
+  <li><code>add(val)</code>：把 <code>val</code> 加入数据流，返回当前数据流中第 <code>k</code> 大的元素。</li>
+</ul>
+<p><b>例子</b>：<code>KthLargest(3, [4, 5, 8, 2])</code> 之后，依次调用 <code>add(3)</code>、<code>add(5)</code>、<code>add(10)</code>、<code>add(9)</code>、<code>add(4)</code>，返回值依次是 <code>4</code>、<code>5</code>、<code>5</code>、<code>8</code>、<code>8</code>。例如 <code>add(10)</code> 后数据流是 2、3、4、5、5、8、10，从大往小数第 3 个是 5。</p>
+<p><b>数据范围</b>：0 ≤ nums.length ≤ 10<sup>4</sup>，1 ≤ k ≤ nums.length + 1，-10<sup>4</sup> ≤ 值 ≤ 10<sup>4</sup>，<code>add</code> 最多调用 10<sup>4</sup> 次；保证每次查找时数据流中至少有 <code>k</code> 个元素。</p>
+</details>
+<details id="lc-973"><summary>LeetCode 973 · 最接近原点的 K 个点</summary>
+<p><b>题意</b>：给定数组 <code>points</code>，其中 <code>points[i] = [x<sub>i</sub>, y<sub>i</sub>]</code> 是平面上的一个点，再给定整数 <code>k</code>，返回离原点 <code>(0, 0)</code> 最近的 <code>k</code> 个点。距离是欧几里得距离。答案可以按任意顺序返回，并且保证答案唯一（与顺序无关）。</p>
+<p><b>例子</b>：输入 <code>points = [[1, 3], [-2, 2]]</code>，<code>k = 1</code>，输出 <code>[[-2, 2]]</code>。两个点到原点距离的平方分别是 10 和 8，8 更小。</p>
+<p><b>数据范围</b>：1 ≤ k ≤ points.length ≤ 10<sup>4</sup>，-10<sup>4</sup> ≤ x<sub>i</sub>, y<sub>i</sub> ≤ 10<sup>4</sup>，坐标可以是负数。</p>
+</details>
+<details id="lc-692"><summary>LeetCode 692 · 前K个高频单词</summary>
+<p><b>题意</b>：给定单词列表 <code>words</code> 和整数 <code>k</code>，返回出现次数前 <code>k</code> 多的单词。返回的列表按出现次数从高到低排序；出现次数相同的单词按字典序从小到大排序。进阶要求时间复杂度 O(n log k)。</p>
+<p><b>例子</b>：输入 <code>words = ["i", "love", "leetcode", "i", "love", "coding"]</code>，<code>k = 2</code>，输出 <code>["i", "love"]</code>。"i" 和 "love" 都出现 2 次，是最多的两个；次数相同，按字典序 "i" 排在前面。</p>
+<p><b>数据范围</b>：1 ≤ words.length ≤ 500，每个单词长度 1～10，只含小写字母；k 在 [1, 不同单词的个数] 之间。</p>
+</details>
+<details id="lc-378"><summary>LeetCode 378 · 有序矩阵中第 K 小的元素</summary>
+<p><b>题意</b>：给定 n × n 矩阵 <code>matrix</code>，每一行和每一列都按升序排列，返回矩阵中第 <code>k</code> 小的元素（排序后的第 k 小，不是第 k 个不同的元素）。要求内存复杂度优于 O(n<sup>2</sup>)。</p>
+<p><b>例子</b>：输入 <code>matrix = [[1, 5, 9], [10, 11, 13], [12, 13, 15]]</code>，<code>k = 8</code>，输出 <code>13</code>。全部元素从小到大是 1、5、9、10、11、12、13、13、15，第 8 个是 13。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 300，-10<sup>9</sup> ≤ matrix[i][j] ≤ 10<sup>9</sup>，1 ≤ k ≤ n<sup>2</sup>。</p>
+</details>
+<details id="lc-373"><summary>LeetCode 373 · 查找和最小的 K 对数字</summary>
+<p><b>题意</b>：给定两个按非递减顺序排列的整数数组 <code>nums1</code>、<code>nums2</code> 和整数 <code>k</code>。一个数对 <code>(u, v)</code> 由 <code>nums1</code> 中的一个元素 <code>u</code> 和 <code>nums2</code> 中的一个元素 <code>v</code> 组成。返回和最小的 <code>k</code> 个数对。</p>
+<p><b>例子</b>：输入 <code>nums1 = [1, 7, 11]</code>，<code>nums2 = [2, 4, 6]</code>，<code>k = 3</code>，输出 <code>[[1, 2], [1, 4], [1, 6]]</code>。和最小的三个数对的和是 3、5、7；其余数对的和至少是 7 + 2 = 9。</p>
+<p><b>数据范围</b>：1 ≤ nums1.length, nums2.length ≤ 10<sup>5</sup>，-10<sup>9</sup> ≤ 元素 ≤ 10<sup>9</sup>，1 ≤ k ≤ 10<sup>4</sup>，k ≤ nums1.length × nums2.length；数对总数可达 10<sup>10</sup>，不能全部列出。</p>
+</details>
+<details id="lc-480"><summary>LeetCode 480 · 滑动窗口中位数</summary>
+<p><b>题意</b>：实现函数 <code>medianSlidingWindow(nums, k)</code>：一个大小为 <code>k</code> 的窗口从数组 <code>nums</code> 的最左端滑到最右端，每次右移一位，返回每个窗口中元素的中位数组成的数组（k 为偶数时中位数是中间两个数的平均值）。与真实值误差在 10<sup>-5</sup> 以内的答案都算正确。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 3, -1, -3, 5, 3, 6, 7]</code>，<code>k = 3</code>，输出 <code>[1, -1, -1, 3, 5, 6]</code>。例如第一个窗口 <code>[1, 3, -1]</code> 排序后是 -1、1、3，中位数是 1；第二个窗口 <code>[3, -1, -3]</code> 的中位数是 -1。</p>
+<p><b>数据范围</b>：1 ≤ k ≤ nums.length ≤ 10<sup>5</sup>，-2<sup>31</sup> ≤ nums[i] ≤ 2<sup>31</sup> − 1。</p>
+</details>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/top_k.py</code>。建议顺序：<code>kth_largest</code> → <code>top_k_frequent</code> → <code>merge_k_sorted_lists</code> → <code>MedianFinder</code>。建链表、打印链表的工具函数已经写好，不用动。写完一题就运行一次，看打印出来的「输入、期望、实际」是否一致：</p>
+<pre>uv run dsa/top_k.py</pre>
+
+<h2>自测</h2>
+<details><summary>1. 找最大的 k 个数，为什么用小顶堆而不是大顶堆？</summary>
+堆里装的是“目前最大的 k 个”这份名单。新数来了，要和名单里<b>最小</b>的那个比，决定谁被淘汰。小顶堆的堆顶正好是名单里最小的，O(1) 就能看到，O(log k) 就能淘汰。大顶堆的堆顶是名单里最大的，对淘汰没有帮助。</details>
+<details><summary>2. 数据流中位数里，为什么加入一个数时要先放进较小一半，再把它的最大值挪到较大一半，而不是直接判断该放哪边？</summary>
+直接判断也可以：和较小一半的堆顶比，小于等于就放左边，否则放右边，然后再平衡个数。“先放左边再挪一个过去”的写法不需要分情况，也不用担心堆是空的，三步固定执行，不容易写错。代价只是多做一两次 O(log n) 的堆操作。</details>
+<details><summary>3. 合并 K 个链表时，如果改成“依次两两合并”，为什么会慢？有没有不用堆、同样 O(N log k) 的办法？</summary>
+依次两两合并时，结果链表越来越长，每合并一次都要把它从头走一遍，最坏 O(N · k)。不用堆的办法是<b>分治</b>：像归并排序一样，先两两配对合并（第 1 和第 2、第 3 和第 4……），再把结果两两合并，一共 log k 轮，每轮所有节点各走一次，也是 O(N log k)。</details>
+
+<div class="nav"><a href="32-binary-search-advanced.html">← 上一课：二分进阶</a><a href="34-intervals.html">下一课：区间问题 →</a></div>
+<script src="anim.js"></script>
+<script src="js/33-top-k.js"></script>
+</body>
+</html>
