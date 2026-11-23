@@ -18,6 +18,11 @@ table.dp td.off { background: #f0f0f0; }
 <p><a href="index.html">← 目录</a></p>
 <h1>第 43 课 · 区间 DP</h1>
 <p class="one-line">区间 DP 的表格里，每一格代表<b>一段连续的区间</b>。大区间的答案由它里面的小区间拼出来，所以<b>按区间长度从短到长</b>填表。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#comprehension">推导式（二维表）</a>、<a href="python-basics.html#itertools"><code>itertools.accumulate</code></a>、<a href="python-basics.html#numbers"><code>math.inf</code></a>、<a href="python-basics.html#decorator"><code>functools.cache</code></a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="19-dp-memo.html">第 19 课 · DP（一）记忆化</a>、<a href="27-prefix-sum.html">第 27 课 · 前缀和</a>（O(1) 求区间总和）、<a href="37-dp-1d.html">第 37 课 · 一维 DP（四步法）</a>、<a href="38-dp-2d.html">第 38 课 · 二维 DP（最长回文子串按长度填表）</a>。</p>
 
 <p>第 38 课的最长回文子串已经见过一次“区间”类的表：<code>is_palindrome[i][j]</code> 看的是子串 <code>text[i..j]</code>，而且必须按长度从短到长填。这一课把这种写法单独拿出来讲透。笔试第 3 题常考它，因为它的遍历顺序和前面的 DP 都不一样，写错一点就全错。</p>
@@ -36,7 +41,7 @@ table.dp td.off { background: #f0f0f0; }
         dp[i][j] = 用更短的区间算出来</pre>
 <p>为什么不能像网格题那样一行行从上往下填？因为 <code>dp[i][j]</code> 要用 <code>dp[k + 1][j]</code>，它在<b>下面</b>的行，从上往下填时还没算。按长度填就没有这个问题：所有更短的区间在上一轮外层循环里都已经填好了。</p>
 
-<h2>实战里怎么写：functools.cache 写 best(i, j)</h2>
+<h2>应用场景：functools.cache 写 best(i, j)</h2>
 <p>业务里碰到“只能动相邻的东西”的最优化，基本都是区间 DP：</p>
 <table>
   <tr><th>场景</th><th>区间代表什么</th><th>最后一步</th></tr>
