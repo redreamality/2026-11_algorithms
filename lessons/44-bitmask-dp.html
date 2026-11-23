@@ -19,6 +19,11 @@ table.dp td.off { background: #f0f0f0; }
 <p><a href="index.html">← 目录</a></p>
 <h1>第 44 课 · 状压 DP</h1>
 <p class="one-line">当 DP 的状态里要记住“<b>哪些东西已经用过</b>”，而东西只有十几个时，就把这个集合<b>压缩成一个整数</b>（位掩码），整数直接当数组下标。这就是状态压缩 DP，简称状压 DP。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#numbers"><code>math.inf</code></a>、<a href="python-basics.html#comprehension">推导式（二维表）</a>、<a href="python-basics.html#itertools"><code>itertools.permutations</code></a>、<a href="python-basics.html#decorator"><code>functools.cache</code></a>；前面的课 —— <a href="39-bit-manipulation.html">第 39 课 · 位运算技巧（位掩码、<code>bit_count</code>）</a>、<a href="21-backtracking.html">第 21 课 · 回溯（枚举排列）</a>、<a href="19-dp-memo.html">第 19 课 · DP（一）记忆化</a>、<a href="37-dp-1d.html">第 37 课 · 一维 DP（四步法）</a>。</p>
 
 <p>本课一条主线：一个配送站，先给 3 个骑手分 3 单（题 1，热身），再给 1 个骑手规划跑 4 个点的路线（题 2，旅行商问题）。两题的状态里都有一个“已经处理过的集合”。</p>
@@ -39,7 +44,7 @@ table.dp td.off { background: #f0f0f0; }
 </table>
 <p>还有一个关键性质：<b>往集合里加元素，整数一定变大；去掉元素，整数一定变小</b>（多了一个 1，少了一个 1）。所以只要 mask 从小到大循环，用到的“少一个元素的集合”一定已经算好。这就是状压 DP 的遍历顺序。</p>
 
-<h2>实战里怎么写：先看 n 有多大</h2>
+<h2>应用场景：先看 n 有多大</h2>
 <table>
   <tr><th>n</th><th>用什么</th><th>为什么</th></tr>
   <tr><td>≤ 8</td><td><code>itertools.permutations</code> 枚举所有顺序</td><td>8! = 40320，最不容易写错</td></tr>
