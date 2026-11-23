@@ -19,11 +19,16 @@ table.dp td.best { background: #ffcdd2; font-weight: bold; }
 <p><a href="index.html">← 目录</a></p>
 <h1>第 37 课 · 一维 DP 高频题</h1>
 <p class="one-line">一维 DP 的题，状态都是“走到第 i 个位置时的最好结果”。答案不是猜出来的，是按<b>四步法</b>一步步推出来的：定义状态 → 写转移 → 定初始值 → 定遍历顺序。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#decorator">装饰器与 <code>functools.cache</code></a>、<a href="python-basics.html#closure">嵌套函数</a>、<a href="python-basics.html#comprehension">生成器表达式（<code>min(...)</code>、<code>any(...)</code>）</a>、<a href="python-basics.html#unpack">解包（<code>(word, *rest)</code>）</a>、<a href="python-basics.html#loop-tools">切片与 <code>range</code> 倒序</a>；前面的课 —— <a href="06-binary-search.html">第 6 课 · 二分查找（<code>bisect</code>）</a>、<a href="19-dp-memo.html">第 19 课 · DP（一）记忆化</a>、<a href="20-dp-knapsack.html">第 20 课 · DP（二）背包与序列</a>。</p>
 
 <p>第 19 课讲了记忆化和爬楼梯、凑零钱（最少枚数），第 20 课讲了 0/1 背包和最长递增子序列的 O(n²) 写法。这一课不重复它们，而是用五道面试里出现最多的题，把四步法练熟。</p>
 
-<h2>实战里怎么写：functools.cache + 倒推方案</h2>
+<h2>应用场景：functools.cache + 倒推方案</h2>
 <p>业务里的一维 DP 很常见，只是不叫这个名字：买哪几张会员卡最省钱、不能相邻的广告位怎么排收入最高、没有空格的话题标签怎么切成词。和面试题比，有两点不同：</p>
 <ul>
   <li><b>写法</b>：多数时候先用 <code>functools.cache</code> 把题意直接写成递归函数，cache 自动记住算过的结果，代码最像题意。状态很多、递归会超过 Python 默认的 1000 层时，再改成一个列表从前往后填。</li>
