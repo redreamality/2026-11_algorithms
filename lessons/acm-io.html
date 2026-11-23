@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>预备课 · ACM 模式输入输出</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.stdin-text { font-family: Consolas, monospace; background: #f5f5f5; border-radius: 4px; padding: 6px 12px; margin: 6px 0; white-space: pre; line-height: 1.5; }
+.stdin-text .newline { color: #c62828; }
+.box.token { min-width: 22px; padding: 2px 6px; font-size: 14px; }
+.box.token.used { opacity: .35; }
+.box.token.hot { background: #ffe0b2; opacity: 1; }
+.vars, .adjacency, .output { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
+.box.var, .box.adj, .box.out { min-width: 0; padding: 2px 8px; font-size: 14px; }
+.box.var.hot, .box.adj.hot { background: #ffe0b2; }
+.box.out { background: #c8e6c9; border-color: #2e7d32; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>预备课 · ACM 模式输入输出</h1>
+<p class="one-line">笔试（牛客、各家公司的在线笔试）大多是 <b>ACM 模式</b>：你的程序自己从标准输入读数据、把答案打印到标准输出，判题机逐行比对。输入输出写错，算法再对也是 0 分。本课只讲一件事：<b>一次读完、切成 token、用迭代器一个个取；答案攒起来、一次打印</b>。</p>
+
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#main"><code>uv run</code> 与 <code>if __name__ == "__main__"</code></a>、<a href="python-basics.html#fstring">f-string 的 <code>{x:.2f}</code></a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#unpack">解包</a>、<a href="python-basics.html#generator"><code>iter()</code> 与 <code>next()</code></a>、<a href="python-basics.html#exceptions"><code>try</code>/<code>except</code></a>。不依赖任何一课算法课，学完预备课就能看；建议在开始刷笔试题之前看。</p>
+
+<h2>两种出题方式</h2>
+<p>先把几个词说清楚：</p>
+<ul>
+  <li><b>标准输入（stdin）</b>：程序启动后，默认从这里读数据。在终端里直接运行时它连着键盘；判题机运行你的程序时，会把测试数据文件接到这里。Python 里对应 <code>sys.stdin</code>，<code>input()</code> 也是从它读。</li>
+  <li><b>标准输出（stdout）</b>：<code>print</code> 默认写到这里。判题机收集它，和标准答案比对。对应 <code>sys.stdout</code>。</li>
+  <li><b>标准错误（stderr）</b>：另一条输出通道，专门放报错和调试信息（Traceback 就打在这里）。判题机一般不比对它。对应 <code>sys.stderr</code>。</li>
+  <li><b>EOF（end of file，输入结束）</b>：stdin 里的数据全部读完了。数据文件读到末尾就是 EOF；在键盘上手动输入时，Windows 按 <code>Ctrl+Z</code> 再回车、Linux/macOS 按 <code>Ctrl+D</code> 表示 EOF。</li>
+</ul>
+<table>
+  <tr><th></th><th>核心代码模式（LeetCode、本课程的练习）</th><th>ACM 模式（多数笔试）</th></tr>
+  <tr><td>你写什么</td><td>补全一个函数，比如 <code>def two_sum(numbers, target)</code></td><td>一个完整程序</td></tr>
+  <tr><td>数据怎么来</td><td>平台调用你的函数，直接传参数</td><td>你自己从 stdin 读文本、自己转成 int</td></tr>
+  <tr><td>答案怎么交</td><td><code>return</code></td><td>按题目规定的格式打印到 stdout</td></tr>
+  <tr><td>怎么判对错</td><td>比较返回值</td><td>逐行比较你的输出文本和标准答案</td></tr>
+</table>
+<p>一个类比：判题机从门缝塞进来一张写满数字的纸条（stdin），你读完、算完，把答案写在另一张纸条上从另一道门缝递出去（stdout），对方拿着标准答案逐行对。纸条上多写一句“我算到第 3 步了”，就对不上了。</p>
+
+<h2 id="main-problem">主线题目：图的度数</h2>
+<p>整课都用这一道题，只换输入的组织方式。先定义两个词：<b>度数</b>是一个点连着几条边（无向图里就是它有几个邻居）；<b>邻接表</b>是“每个点 → 它的邻居列表”，用 list 套 list 存（第 13 课会细讲，这里只用它记邻居）。</p>
+<p><b>题意</b>：给一张无向图，n 个点（编号 1～n）、m 条边，没有自环和重边。输出两行：第一行是 1～n 号点各自的度数，用空格隔开；第二行是平均度数，保留两位小数。</p>
+<table>
+  <tr><th>输入</th><th>输出</th></tr>
+  <tr><td><pre>4 3
+1 2
+2 3
+2 4</pre></td><td><pre>1 3 1 1
+1.50</pre></td></tr>
+</table>
+<p>第一行 <code>4 3</code> 是 n 和 m；后面 3 行每行一条边。2 号点连着 1、3、4，度数 3；其他点度数都是 1。平均度数 = (1 + 3 + 1 + 1) / 4 = 1.50。</p>
+
+<h2 id="read-all">读：一次读完，切成 token，用 next 一个个取</h2>
+<p><b>为什么不用 <code>input()</code></b>：<code>input()</code> 每调用一次读一行，每次都要走一遍函数调用、先刷新输出缓冲区再读，这些固定开销乘上行数就很可观。笔试数据常有 10<sup>5</sup>～10<sup>6</sup> 行，逐行 <code>input()</code> 会明显变慢；Python 本来就比 C++ 慢，时间限制又按 C++ 定得很紧，光读入就可能超时。另一个麻烦是：<code>input()</code> 是按行读的，题目里的数如果没有按你预想的方式分行（一行一个，或者全挤在一行），就得改代码。</p>
+<p><b>做法</b>：用 <code>sys.stdin.read()</code> 把 stdin 里的全部内容一次读成一个字符串，再用不带参数的 <code>split()</code> 切开。不带参数的 <code>split()</code> 把<b>任意多个空白字符</b>（空格、换行 <code>\n</code>、制表符 <code>\t</code>、Windows 换行里的 <code>\r</code>）都当作分隔符，并且丢掉首尾空白。切出来的每一段叫一个 <b>token</b>（记号），就是一个不含空白的字符串，比如 <code>"4"</code>、<code>"3"</code>。</p>
+<div class="stdin-text">4 3<span class="newline">\n</span>1 2<span class="newline">\n</span>2 3<span class="newline">\n</span>2 4<span class="newline">\n</span></div>
+<div class="row"><span class="label">split() 之后：</span><span class="box token">4</span><span class="box token">3</span><span class="box token">1</span><span class="box token">2</span><span class="box token">2</span><span class="box token">3</span><span class="box token">2</span><span class="box token">4</span></div>
+<p>换行没了，所有数排成一排。这正是我们想要的：<b>数据怎么分行不再重要</b>，只要按题目说的顺序一个个往后取就行。“一个个往后取”用迭代器：<code>iter(列表)</code> 得到一个迭代器，每次 <code>next(迭代器)</code> 取出下一个元素、并记住取到哪了（见<a href="python-basics.html#generator">预备课第 13 节</a>）。取完了再 <code>next</code>，会抛 <code>StopIteration</code>。</p>
+<p>代码最后两行用到两个还没讲过的工具，「写」一节会细讲：<code>map(函数, 可迭代对象)</code> 对每个元素调用一次函数，逐个产出结果（和生成器表达式 <code>(函数(x) for x in ...)</code> 等价），比如 <code>map(str, [1, 3])</code> 产出 <code>"1"</code>、<code>"3"</code>；<code>"分隔符".join(一串字符串)</code> 用分隔符把它们连成一个字符串，比如 <code>" ".join(["1", "3"])</code> 是 <code>"1 3"</code>。</p>
+<pre>import sys
+
+def main():
+    tokens = iter(sys.stdin.read().split())   # 一次读完，切成 token，做成迭代器
+    node_count = int(next(tokens))           # 取第 1 个 token：n
+    edge_count = int(next(tokens))           # 取第 2 个：m
+    adjacency = [[] for _ in range(node_count + 1)]   # 点从 1 编号，开 n + 1 格，下标 0 不用
+    for _ in range(edge_count):
+        u = int(next(tokens))
+        v = int(next(tokens))
+        adjacency[u].append(v)               # 无向图，两头都记
+        adjacency[v].append(u)
+    degrees = [len(neighbors) for neighbors in adjacency[1:]]
+    print(" ".join(map(str, degrees)))
+    print(f"{sum(degrees) / node_count:.2f}")
+
+main()</pre>
+<p>几个细节：</p>
+<ul>
+  <li>token 是字符串，参与计算前要 <code>int(...)</code>。小数用 <code>float(...)</code>。</li>
+  <li><code>[[] for _ in range(n + 1)]</code> 不能写成 <code>[[]] * (n + 1)</code>：后者是同一个空 list 被引用了 n + 1 次，往一个里 append，所有格子一起变。</li>
+  <li>把代码放进 <code>main()</code> 再调用，比直接写在文件顶层略快：函数里的变量是局部变量，查找比全局变量快。</li>
+  <li>数据特别大（10<sup>6</sup> 个以上）时可以换成 <code>sys.stdin.buffer.read().split()</code>：读成字节串（bytes）、省掉解码，切出来的 token 是 <code>b"4"</code> 这样的 bytes，<code>int(b"4")</code> 照样能用；但要当字符串输出时得先 <code>.decode()</code>。</li>
+</ul>
+
+<h2>动手玩</h2>
+<p>三个按钮演示同一个迭代器怎么被一路往后取：<b>单组</b>就是上面的例子；<b>先读 T 组</b>在最前面多一个 T = 2，后面跟两张图；<b>读到 EOF</b> 是同样两张图，但不告诉有几张。灰色的 token 已经被取走，橙色是这一步 <code>next</code> 刚取到的。</p>
+<div class="demo" id="acm-io"></div>
+
+<h2 id="input-shapes">常见输入形态</h2>
+<p>题目的“输入描述”通常是下面几种之一。左边是题面上的说法，右边是读法。都基于同一个 <code>tokens</code> 迭代器，最后两种例外。</p>
+<table>
+  <tr><th>题面怎么说</th><th>怎么读</th></tr>
+  <tr><td>单组：第一行 n m，接下来……</td><td>直接 <code>next</code> 往下取</td></tr>
+  <tr><td>第一行一个整数 T，表示有 T 组数据</td><td><code>for _ in range(int(next(tokens))):</code> 每轮读一组</td></tr>
+  <tr><td>输入包含多组数据，读到文件结束</td><td><code>for first_token in tokens:</code> 每轮取到的是这组的第一个数，取不到就结束</td></tr>
+  <tr><td>先给 n，再给 n 行，每行一个数</td><td><code>[int(next(tokens)) for _ in range(n)]</code></td></tr>
+  <tr><td>n 行 m 列的矩阵</td><td><code>[[int(next(tokens)) for _ in range(m)] for _ in range(n)]</code></td></tr>
+  <tr><td>m 行，每行一条边 u v</td><td>建邻接表，见上一节</td></tr>
+  <tr><td>一行字符串，可能含空格</td><td>不能用 <code>split()</code> 切；改成 <code>text.splitlines()</code> 按行读</td></tr>
+</table>
+<p>下面用主线题目逐个演示。为了方便测试，每种写法都写成 <code>solve(text: str) -&gt; str</code>：参数是整份 stdin 的文本，返回整份 stdout 的文本。考场上只要再加一行 <code>sys.stdout.write(solve(sys.stdin.read()) + "\n")</code>。公共部分先抽成两个函数，后面每种写法都复用它们：</p>
+<pre>from collections.abc import Iterator
+
+def read_graph(node_count: int, tokens: Iterator[str]) -&gt; list[list[int]]:
+    """n 已经被调用方取走；接着读 m 和 m 条边。读完正好停在下一组的开头。"""
+    edge_count = int(next(tokens))
+    adjacency = [[] for _ in range(node_count + 1)]
+    for _ in range(edge_count):
+        u = int(next(tokens))
+        v = int(next(tokens))
+        adjacency[u].append(v)
+        adjacency[v].append(u)
+    return adjacency
+
+def degree_report(adjacency: list[list[int]]) -&gt; list[str]:
+    """一张图的两行输出。"""
+    degrees = [len(neighbors) for neighbors in adjacency[1:]]
+    return [" ".join(map(str, degrees)), f"{sum(degrees) / len(degrees):.2f}"]</pre>
+<p>为什么 <code>read_graph</code> 不自己读 n：读到 EOF 的写法里，n 是由 <code>for</code> 循环取出来的（见下面第 3 种），交给调用方读，三种写法就能共用同一个 <code>read_graph</code>。</p>
+
+<h3>1. 单组</h3>
+<pre>def solve_single_case(text: str) -&gt; str:
+    tokens = iter(text.split())
+    adjacency = read_graph(int(next(tokens)), tokens)
+    return "\n".join(degree_report(adjacency))</pre>
+
+<h3>2. 先读 T，再读 T 组</h3>
+<p>输入在最前面多一个 T。每组的输出按顺序接在一起，题目没说就不加空行：</p>
+<table>
+  <tr><th>输入</th><th>输出</th></tr>
+  <tr><td><pre>2
+4 3
+1 2
+2 3
+2 4
+3 1
+1 3</pre></td><td><pre>1 3 1 1
+1.50
+1 0 1
+0.67</pre></td></tr>
+</table>
+<pre>def solve_test_cases(text: str) -&gt; str:
+    tokens = iter(text.split())
+    output_lines = []
+    for _ in range(int(next(tokens))):           # range() 只在开头求一次值，T 只读一次
+        adjacency = read_graph(int(next(tokens)), tokens)
+        output_lines.extend(degree_report(adjacency))
+    return "\n".join(output_lines)</pre>
+<p>第二组 <code>3 1 / 1 3</code>：3 个点，1 条边连着 1 和 3，度数 1 0 1，平均 2 / 3 ≈ 0.67。</p>
+
+<h3>3. 读到 EOF</h3>
+<p>同样两组数据，但去掉开头的 T，题面写“输入包含多组测试数据，处理到文件结束”。不知道有几组，就一直读到没有 token 为止：</p>
+<pre>def solve_until_eof(text: str) -&gt; str:
+    tokens = iter(text.split())
+    output_lines = []
+    for node_count_token in tokens:              # 每轮取一个 token，就是这一组的 n
+        adjacency = read_graph(int(node_count_token), tokens)   # 接着从同一个迭代器往后取
+        output_lines.extend(degree_report(adjacency))
+    return "\n".join(output_lines)</pre>
+<p><b>为什么这样写是对的</b>：<code>for</code> 循环每一轮对迭代器调用一次 <code>next</code>。循环体里的 <code>read_graph</code> 也在对<b>同一个</b>迭代器调用 <code>next</code>，一口气取走这一组剩下的 token。所以下一轮 <code>for</code> 取到的，正好是下一组的 n。取不到时 <code>for</code> 自己吞掉 <code>StopIteration</code>、结束循环，不用写 <code>try</code>。输入是空的也没问题：一轮都不执行，输出空串。</p>
+<p>如果不想用这个技巧，也可以记下标：<code>data = text.split()</code>，用 <code>position</code> 记读到第几个，<code>while position &lt; len(data):</code>。两种都对，迭代器的写法不用手动维护下标，更不容易写错。</p>
+
+<h3>4. 读矩阵（先读 n，再读 n 行）</h3>
+<p>同一张图换成邻接矩阵给出：第一行 n，接下来 n 行、每行 n 个 0 或 1，第 i 行第 j 个是 1 表示 i、j 之间有边。一般的矩阵是 n 行 m 列，这里正好 n = m。</p>
+<table>
+  <tr><th>输入</th><th>输出</th></tr>
+  <tr><td><pre>4
+0 1 0 0
+1 0 1 1
+0 1 0 0
+0 1 0 0</pre></td><td><pre>1 3 1 1
+1.50</pre></td></tr>
+</table>
+<pre>def solve_adjacency_matrix(text: str) -&gt; str:
+    tokens = iter(text.split())
+    node_count = int(next(tokens))
+    matrix = [[int(next(tokens)) for _ in range(node_count)] for _ in range(node_count)]
+    adjacency = [[]] + [
+        [column + 1 for column in range(node_count) if matrix[row][column] == 1]
+        for row in range(node_count)
+    ]
+    return "\n".join(degree_report(adjacency))</pre>
+<p>嵌套推导式的执行顺序是：外层每转一圈（一行），里层取 n 个数。因为 token 是按行从左到右排的，取出来的正好是一行。“先读 n、再读 n 个数”是这个的一维版本：<code>[int(next(tokens)) for _ in range(n)]</code>。</p>
+
+<h3>5. 一行字符串（含空格）</h3>
+<p>给点起名字：第一行 n m；接下来 n 行，第 i 行是 i 号城市的名字，名字里可能有空格；再接下来 m 行是边。输出每个城市的名字和度数。</p>
+<table>
+  <tr><th>输入</th><th>输出</th></tr>
+  <tr><td><pre>3 2
+New York
+Los Angeles
+Chicago
+1 2
+1 3</pre></td><td><pre>New York 2
+Los Angeles 1
+Chicago 1</pre></td></tr>
+</table>
+<p>这时整份 <code>split()</code> 会把 <code>New York</code> 拆成两个 token，后面全乱套。<b>只要输入里有“整行才有意义”的东西，就按行读</b>：<code>text.splitlines()</code> 把文本按换行切成一行行（同时去掉 <code>\n</code> 和 <code>\r\n</code>），数字行再自己 <code>split()</code>。</p>
+<pre>def solve_named_cities(text: str) -&gt; str:
+    lines = iter(text.splitlines())                       # 迭代器里装的是“行”，不是 token
+    node_count, edge_count = map(int, next(lines).split())
+    names = [next(lines).strip() for _ in range(node_count)]   # strip() 去掉首尾空白，中间的空格保留
+    adjacency = [[] for _ in range(node_count + 1)]
+    for _ in range(edge_count):
+        u, v = map(int, next(lines).split())
+        adjacency[u].append(v)
+        adjacency[v].append(u)
+    return "\n".join(f"{names[index]} {len(adjacency[index + 1])}" for index in range(node_count))</pre>
+<p>按行读要小心空行：有的数据在末尾或中间多一个空行，<code>next(lines)</code> 就会拿到 <code>""</code>。数字部分仍然想用 token 的话，常见做法是先按行读出字符串，再把剩下的所有行拼起来 <code>split()</code>。</p>
+
+<h2 id="write">写：拼成字符串，攒起来一次输出</h2>
+<ul>
+  <li><b>一行多个数，空格隔开</b>：<code>" ".join(map(str, degrees))</code>。<code>join</code> 只接受字符串，直接 <code>" ".join(degrees)</code> 会报 <code>TypeError</code>，所以先用 <code>map(str, ...)</code> 转一遍。另一种写法是 <code>print(*degrees)</code>：<code>*</code> 把列表解包成多个参数，<code>print</code> 默认用一个空格隔开它们（见<a href="python-basics.html#unpack">预备课第 4 节</a>）。</li>
+  <li><b>多行输出，一次性写出</b>：把每行先放进 <code>output_lines</code> 列表，最后 <code>sys.stdout.write("\n".join(output_lines) + "\n")</code>，或者 <code>print("\n".join(output_lines))</code>。输出有 10<sup>5</sup> 行时，调 10<sup>5</sup> 次 <code>print</code> 比拼好一次写出慢得多。</li>
+  <li><b>浮点数保留几位</b>：<code>f"{average:.2f}"</code>，结果是字符串 <code>"1.50"</code>，不够的位数补 0。<b>不要用</b> <code>round(average, 2)</code>：它返回的是数，打印出来是 <code>1.5</code>，少了一位，判题机认为不对。老写法 <code>"%.2f" % average</code> 效果一样。</li>
+  <li><b>整数除法</b>：<code>/</code> 的结果永远是 float，<code>6 / 3</code> 打印成 <code>2.0</code>。题目要整数就用 <code>//</code>（见<a href="python-basics.html#numbers">预备课第 18 节</a>）。</li>
+  <li><b>布尔、None</b>：题目要 <code>YES</code>/<code>NO</code> 或 <code>Yes</code>/<code>No</code>，照抄大小写；不要把 Python 的 <code>True</code> 直接打出去。</li>
+</ul>
+
+<h2 id="pitfalls">最容易错的地方</h2>
+<ul>
+  <li><b>调试信息混进 stdout</b>。<code>print("debug", x)</code> 会成为输出的一部分，直接判错。要看中间值就写到 stderr：<code>print("debug", x, file=sys.stderr)</code>，<code>file=</code> 参数指定 print 写到哪个通道。大多数判题机不看 stderr，但为保险，交之前全删掉。</li>
+  <li><b>行尾多一个空格、末尾多一个换行</b>：绝大多数判题机比对前会忽略行尾空白和最后的空行，一般没事。但<b>多一行、少一行、分隔符不对</b>（题目要逗号你打空格）一定是错。少数题目写明“严格比对”，那就一个字符都不能差。</li>
+  <li><b>点从 1 编号</b>：邻接表、数组要开 n + 1 格，或者读进来时统一减 1。开成 n 格，读到 n 号点就 <code>IndexError</code>。</li>
+  <li><b>混用 <code>input()</code> 和 <code>sys.stdin.read()</code></b>：<code>read()</code> 已经把剩下的全读走了，之后的 <code>input()</code> 会报 <code>EOFError</code>。选一种用到底。</li>
+  <li><b>深递归</b>：Python 默认最多递归约 1000 层，超过抛 <code>RecursionError</code>。笔试里 n 常到 10<sup>5</sup>，递归写的 DFS（第 5 课讲递归、第 13 课讲 DFS）在一条长链上就会超。开头加 <code>sys.setrecursionlimit(1 &lt;&lt; 20)</code> 把上限调到约一百万层。如果调了还是闪退（进程直接退出，连 Traceback 都没有），说明真把底层的调用栈用完了，在较老的 Python 版本上更常见：改成用显式栈的非递归写法（第 13 课），或者在一个开了大栈的线程里跑，写法见下面的模板。</li>
+  <li><b>考场的 Python 版本可能较旧</b>：<code>list[int]</code> 这种类型标注要 3.9 以上，<code>match</code> 语句要 3.10 以上。以考场的环境说明为准；不确定就不写类型标注。</li>
+</ul>
+
+<h2 id="local-test">在本机（Windows）怎么测</h2>
+<p>把样例输入存成 <code>input.txt</code>，然后用<b>重定向</b>或<b>管道</b>接到程序的 stdin 上。重定向 <code>&lt; 文件</code> 的意思是“把这个文件当作 stdin”；管道 <code>命令A | 命令B</code> 的意思是“A 的 stdout 接到 B 的 stdin”。</p>
+<table>
+  <tr><th>终端</th><th>命令</th></tr>
+  <tr><td>Git Bash、cmd</td><td><code>uv run main.py &lt; input.txt</code></td></tr>
+  <tr><td>PowerShell（不支持 <code>&lt;</code>）</td><td><code>Get-Content input.txt | uv run main.py</code></td></tr>
+  <tr><td>Git Bash，不建文件</td><td><code>printf '4 3\n1 2\n2 3\n2 4\n' | uv run main.py</code></td></tr>
+  <tr><td>手敲</td><td><code>uv run main.py</code>，粘贴样例，Windows 上 <code>Ctrl+Z</code> 回车结束输入（Linux/macOS 是 <code>Ctrl+D</code>）。忘了按，程序会一直停在 <code>read()</code> 等输入</td></tr>
+</table>
+<p>本课程的考场版参考程序可以这样试：<code>uv run examples/acm_io_in_practice.py --stdin &lt; input.txt</code>。</p>
+<p>还有一个调试时省事的办法：在代码里用 <code>io.StringIO</code> 冒充 stdin。<code>io.StringIO(字符串)</code> 造一个“内容就是这个字符串”的文件对象，有 <code>read()</code> 方法，和 <code>sys.stdin</code> 用法一样：</p>
+<pre>import io
+import sys
+sys.stdin = io.StringIO("4 3\n1 2\n2 3\n2 4\n")   # 调试用，交之前删掉这一行</pre>
+<p>最省事的是像本课这样，把逻辑写成 <code>solve(text) -&gt; str</code>，直接 <code>assert solve(样例输入) == 样例输出</code>。<code>examples/acm_io_in_practice.py</code> 里三种测法都有：直接调 <code>solve</code>、用 <code>StringIO</code>、用 <code>subprocess</code> 起一个子进程并把输入从管道喂进去（判题机就是这么干的）。</p>
+
+<h2 id="template">考场万能模板</h2>
+<p>下面这份可以背下来，考场上先默写它，再按题意改 <code>solve</code> 中间那段。为了兼容较老的 Python，模板里不写类型标注。</p>
+<pre>import sys
+
+
+def solve(text):
+    tokens = iter(text.split())
+    output_lines = []
+
+    # ===== 按题意改这一段。下面是主线题目、读到 EOF 的写法 =====
+    for node_count_token in tokens:              # 单组：去掉 for，直接 next(tokens)；T 组：for _ in range(int(next(tokens)))
+        node_count = int(node_count_token)
+        edge_count = int(next(tokens))
+        adjacency = [[] for _ in range(node_count + 1)]
+        for _ in range(edge_count):
+            u = int(next(tokens))
+            v = int(next(tokens))
+            adjacency[u].append(v)
+            adjacency[v].append(u)
+        degrees = [len(neighbors) for neighbors in adjacency[1:]]
+        output_lines.append(" ".join(map(str, degrees)))
+        output_lines.append(f"{sum(degrees) / node_count:.2f}")
+    # ===== 改到这里 =====
+
+    return "\n".join(output_lines)
+
+
+def main():
+    sys.setrecursionlimit(1 &lt;&lt; 20)
+    sys.stdout.write(solve(sys.stdin.read()) + "\n")
+
+
+if __name__ == "__main__":
+    main()</pre>
+<p>如果递归很深、调了上限还闪退，把最后两行换成在大栈线程里跑。<code>threading.stack_size</code> 设定之后新建线程的栈大小（这里 256 MB），<code>Thread(target=main)</code> 新建一个线程去执行 <code>main</code>，<code>start()</code> 启动它：</p>
+<pre>if __name__ == "__main__":
+    import threading
+    threading.stack_size(1 &lt;&lt; 28)
+    threading.Thread(target=main).start()</pre>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/acm_io.py</code>。建议顺序：<code>read_graph</code> → <code>degree_report</code> → <code>solve_single_case</code> → <code>solve_test_cases</code> → <code>solve_until_eof</code> → <code>solve_adjacency_matrix</code> → <code>solve_named_cities</code>。讲解里每种都给了代码，<b>先合上讲解自己默写</b>，写不出来再看。每写完一个，运行：</p>
+<pre>uv run dsa/acm_io.py
+uv run pytest tests/test_acm_io.py</pre>
+<p><code>tests/test_acm_io.py</code> 的最后一组测试会起一个子进程、用管道把输入喂给 <code>examples/acm_io_in_practice.py</code>，这组一开始就是绿的，可以对照着看判题机是怎么测程序的。</p>
+<p>都通过之后：新建一个空文件，<b>不看讲解</b>默写一遍万能模板，用上面的 <code>&lt; input.txt</code> 跑通主线样例。然后去牛客的「OJ在线编程常见输入输出练习场」把每种输入形态各做一道。</p>
+
+<h2>自测</h2>
+<details><summary>1. 同一份数据，出题人把 m 条边都写在一行里，而不是一行一条。基于 <code>split()</code> 的写法要改吗？逐行 <code>input()</code> 的写法呢？</summary>
+<code>split()</code> 的写法不用改：它不区分空格和换行，token 的顺序没变，按顺序 <code>next</code> 取到的还是同样的数。逐行 <code>input()</code> 的写法要改，因为它假设了“一行一条边”。这就是一次读完再切 token 的第二个好处。</details>
+<details><summary>2. 读到 EOF 的写法里，如果 <code>read_graph</code> 少读了一个 token（比如忘了读 m），会发生什么？</summary>
+它这一组少取一个 token，于是本该属于这一组的最后一个数被留在迭代器里，下一轮 <code>for</code> 会把它当成下一组的 n。之后整串数据都错位，输出全错，甚至因为 <code>next</code> 取空抛 <code>StopIteration</code>、或者下标越界抛 <code>IndexError</code>。多组数据时，“每组恰好取走自己的 token”是正确性的前提。</details>
+<details><summary>3. 平均度数是 1.5，题目要求保留两位小数。<code>print(round(1.5, 2))</code> 输出什么？应该怎么写？</summary>
+输出 <code>1.5</code>，因为 <code>round</code> 返回的是数 1.5，打印时不会补 0。要写 <code>print(f"{1.5:.2f}")</code>，输出字符串 <code>1.50</code>。</details>
+<details><summary>4. 程序在本机运行后一直没反应，也不报错。最可能是什么原因？</summary>
+程序停在 <code>sys.stdin.read()</code> 等输入：直接 <code>uv run main.py</code> 时 stdin 连着键盘，<code>read()</code> 要等到 EOF 才返回。要么用 <code>&lt; input.txt</code> 或管道喂输入，要么粘贴完样例后按 <code>Ctrl+Z</code> 回车（Windows）。</details>
+
+<div class="nav"><a href="python-basics.html">← 预备课 · Python 基础</a><a href="00-complexity.html">第 0 课 · 复杂度 →</a></div>
+<script src="anim.js"></script>
+<script src="js/acm-io.js"></script>
+</body>
+</html>

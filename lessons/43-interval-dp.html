@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 43 课 · 区间 DP</title>
+<link rel="stylesheet" href="style.css">
+<style>
+table.dp td { font-family: Consolas, monospace; text-align: center; min-width: 30px; }
+table.dp td.cur { background: #ffe0b2; font-weight: bold; }
+table.dp td.dep { background: #bbdefb; }
+table.dp td.best { background: #ffcdd2; font-weight: bold; }
+table.dp td.off { background: #f0f0f0; }
+.box.dep { background: #bbdefb; border-color: #1565c0; }
+.steps li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 43 课 · 区间 DP</h1>
+<p class="one-line">区间 DP 的表格里，每一格代表<b>一段连续的区间</b>。大区间的答案由它里面的小区间拼出来，所以<b>按区间长度从短到长</b>填表。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#comprehension">推导式（二维表）</a>、<a href="python-basics.html#itertools"><code>itertools.accumulate</code></a>、<a href="python-basics.html#numbers"><code>math.inf</code></a>、<a href="python-basics.html#decorator"><code>functools.cache</code></a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="19-dp-memo.html">第 19 课 · DP（一）记忆化</a>、<a href="27-prefix-sum.html">第 27 课 · 前缀和</a>（O(1) 求区间总和）、<a href="37-dp-1d.html">第 37 课 · 一维 DP（四步法）</a>、<a href="38-dp-2d.html">第 38 课 · 二维 DP（最长回文子串按长度填表）</a>。</p>
+
+<p>第 38 课的最长回文子串已经见过一次“区间”类的表：<code>is_palindrome[i][j]</code> 看的是子串 <code>text[i..j]</code>，而且必须按长度从短到长填。这一课把这种写法单独拿出来讲透。笔试第 3 题常考它，因为它的遍历顺序和前面的 DP 都不一样，写错一点就全错。</p>
+
+<h2>先定义几个词</h2>
+<ul>
+  <li><b>区间</b> <code>i..j</code>：数组里下标从 i 到 j 的这一段，<b>两端都含</b>，要求 i ≤ j。</li>
+  <li><b>区间长度</b>：<code>length = j - i + 1</code>。长度为 1 的区间只有一个元素（i == j）。</li>
+  <li><b>分割点</b> k：把区间 i..j 切成左右两块 <code>i..k</code> 和 <code>k+1..j</code>，k 可以取 i 到 j - 1。长度为 L 的区间一共有 L - 1 个分割点。</li>
+  <li><b>区间 DP</b>：状态 <code>dp[i][j]</code> 定义成“区间 i..j 的最优结果”，转移时只用到<b>比它短</b>的区间。表只用到对角线（i == j）和它右上方的一半，左下方 i &gt; j 的格子没有意义。</li>
+</ul>
+<p>区间 DP 的四步法（第 37 课）里，前三步因题而异，<b>第 4 步几乎总是同一个写法</b>：</p>
+<pre>for length in range(2, n + 1):          # 区间长度从短到长（长度 1 是初始值）
+    for i in range(n - length + 1):     # 左端点
+        j = i + length - 1              # 右端点
+        dp[i][j] = 用更短的区间算出来</pre>
+<p>为什么不能像网格题那样一行行从上往下填？因为 <code>dp[i][j]</code> 要用 <code>dp[k + 1][j]</code>，它在<b>下面</b>的行，从上往下填时还没算。按长度填就没有这个问题：所有更短的区间在上一轮外层循环里都已经填好了。</p>
+
+<h2>实战里怎么写：functools.cache 写 best(i, j)</h2>
+<p>业务里碰到“只能动相邻的东西”的最优化，基本都是区间 DP：</p>
+<table>
+  <tr><th>场景</th><th>区间代表什么</th><th>最后一步</th></tr>
+  <tr><td>合并相邻的日志分段 / 视频切片，每次合并要重写合出来的整块</td><td>第 i 段到第 j 段</td><td>左边一块和右边一块合并</td></tr>
+  <tr><td>矩阵连乘 A×B×C×D 怎么加括号乘法最少（numpy 的 <code>numpy.linalg.multi_dot</code> 内部就这么算）</td><td>第 i 个到第 j 个矩阵</td><td>左边的乘积乘右边的乘积</td></tr>
+  <tr><td>最少插入几个字符，把字符串补成回文</td><td>子串 text[i..j]</td><td>两端配对，或者在一端补一个字符</td></tr>
+</table>
+<p>真实代码里不写表格，而是把“区间 i..j 的最优值”直接写成递归函数，让 <code>functools.cache</code>（第 19 课）记住算过的区间。区间只有 n² 个，n 到几百都很快：</p>
+<pre>from functools import cache
+from itertools import accumulate
+
+def min_rewrite_cost(segment_sizes):            # 合并相邻分段，最少重写多少 MB
+    prefix_total = list(accumulate(segment_sizes, initial=0))
+
+    @cache
+    def rewrite_cost(i, j):                     # 把第 i..j 段合成一个文件的最少代价
+        if i == j:
+            return 0
+        range_total = prefix_total[j + 1] - prefix_total[i]
+        return min(rewrite_cost(i, k) + rewrite_cost(k + 1, j) for k in range(i, j)) + range_total
+
+    return rewrite_cost(0, len(segment_sizes) - 1)
+
+min_rewrite_cost([300, 400, 200, 400])    # 2600</pre>
+<p>完整可运行的版本在 <code>examples/interval_dp_in_practice.py</code>（<code>uv run examples/interval_dp_in_practice.py</code>），还会倒推出合并方案、矩阵连乘的括号和补好的回文串。下面用填表的写法把原理讲清楚。</p>
+
+<h2 id="stone-merge">题 1：石子合并（本课主线）</h2>
+<p><b>题意</b>：一排 n 堆石子，<code>piles[i]</code> 是第 i 堆的石子数。每次只能把<b>相邻</b>的两堆合成一堆，这一次的代价是新堆的石子数。合到只剩一堆，最少总代价是多少？</p>
+<p><b>例子</b>：<code>piles = [3, 4, 2, 4]</code>。</p>
+<div class="row"><span class="box">3</span><span class="box">4</span><span class="box">2</span><span class="box">4</span><span class="label">← 先合 3 + 4（代价 7），再合 2 + 4（代价 6）</span></div>
+<div class="row"><span class="box">7</span><span class="box">6</span><span class="label">← 最后合 7 + 6（代价 13）。总代价 7 + 6 + 13 = 26，这是最少的</span></div>
+<p><b>贪心为什么不对</b>：直觉是“每次合最小的相邻两堆”。这里相邻两堆的和是 7、6、6，贪心先合 4 + 2 = 6，剩下 [3, 6, 4]；再合 3 + 6 = 9，剩下 [9, 4]；最后 13。总代价 6 + 9 + 13 = 28，比 26 多。问题在于：4 + 2 合出来的 6 后来又被合了两次，它的石子被重复计了很多遍。眼前最便宜的一步，不一定让后面也便宜。</p>
+<p><b>暴力做法为什么慢</b>：把每种合并顺序都试一遍。第一步有 n - 1 对相邻的可以选，第二步有 n - 2 对……一共 (n - 1)! 种顺序，n = 20 时已经超过 10<sup>17</sup>。</p>
+<p><b>关键观察</b>：不管前面怎么合，<b>最后一次合并</b>一定是把“左边一块”和“右边一块”合在一起。左边那块是由第 0 堆到第 k 堆合成的，右边是第 k + 1 堆到第 n - 1 堆，k 就是分割点。</p>
+<ul>
+  <li>左右两块在最后一步之前<b>互不影响</b>：左边怎么合，跟右边无关。所以左边应该用“把 0..k 合成一堆”的最优方案，右边同理。</li>
+  <li>最后一次合并的代价是两块的石子数之和，也就是<b>整个区间的石子总数</b>，跟 k 选哪个无关。</li>
+  <li>“把 0..k 合成一堆”和原题是同一类问题，只是区间更短。于是问题变成：对每个区间 i..j，求合成一堆的最少代价。</li>
+</ul>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>merge_cost[i][j]</code> = 把第 i 堆到第 j 堆（两端都含）合成一堆的最少代价。</li>
+  <li>转移：枚举分割点 k（i ≤ k &lt; j），
+<pre>merge_cost[i][j] = min(merge_cost[i][k] + merge_cost[k + 1][j] for k in range(i, j)) + range_total(i, j)</pre>
+    其中 <code>range_total(i, j)</code> 是第 i 堆到第 j 堆的石子总数，用前缀和 O(1) 求出：<code>prefix_total[j + 1] - prefix_total[i]</code>（第 27 课）。</li>
+  <li>初始值：<code>merge_cost[i][i] = 0</code>，一堆不用合。</li>
+  <li>遍历顺序：按区间长度从 2 到 n。答案在右上角 <code>merge_cost[0][n - 1]</code>。</li>
+</ol>
+<pre>from itertools import accumulate
+
+def merge_stones_min_cost(piles):
+    n = len(piles)
+    if n &lt;= 1:
+        return 0
+    prefix_total = list(accumulate(piles, initial=0))
+    merge_cost = [[0] * n for _ in range(n)]            # 长度 1 的区间是 0，正好是初始值
+    for length in range(2, n + 1):
+        for i in range(n - length + 1):
+            j = i + length - 1
+            range_total = prefix_total[j + 1] - prefix_total[i]
+            merge_cost[i][j] = min(merge_cost[i][k] + merge_cost[k + 1][j] for k in range(i, j)) + range_total
+    return merge_cost[0][n - 1]
+
+merge_stones_min_cost([3, 4, 2, 4])    # 26</pre>
+<p><b>为什么对</b>：任何一种合并方案都有最后一步，最后一步一定对应某个分割点 k；对每个 k，左右两块用的都是各自的最优方案（换成更差的只会更贵）。把所有 k 都比较一遍，最优方案不会被漏掉。</p>
+<p><b>复杂度</b>：区间有 n(n + 1) / 2 个，每个区间枚举不超过 n 个分割点，所以 O(n³) 时间、O(n²) 空间。n = 200 时约 130 万次，Python 一秒内跑完；n 到 1000 就要换思路了（笔试里这类题的 n 一般给到几百）。</p>
+<p><b>要方案不只要代价</b>：填表时顺手记下每个区间最好的分割点 <code>best_split[i][j]</code>，最后从 0..n-1 开始按分割点递归拆开，就得到 <code>((3, 4), (2, 4))</code>。骨架里的选做题 <code>merge_plan</code> 就是这个。</p>
+
+<h2>动手玩</h2>
+<p>两个按钮各演示一道题。表格的行是左端点 i，列是右端点 j，<b>灰色</b>是 i &gt; j 没有意义的格子。<b>橙色</b>是正在填的格子，<b>蓝色</b>是它用到的格子（石子合并里是最好的那个分割点的左右两块），<b>红色</b>是最终答案。注意填表的顺序：先填对角线右边一条斜线（长度 2），再往右上一条条推，最后才是右上角。</p>
+<div class="demo" id="interval-dp"></div>
+
+<h2 id="longest-palindromic-subsequence">题 2：最长回文子序列（LeetCode 516）</h2>
+<p><b>题意</b>：从字符串 text 里按原来的顺序挑出一些字符（<b>可以不连续</b>，这叫子序列，第 20 课讲过），组成一个回文串（正着读和反着读一样）。最长能有多长？</p>
+<p><b>例子</b>：<code>text = "bbbab"</code>，挑出第 0、1、2、4 个字符 "bbbb"，返回 4。<code>"cbbd"</code> 返回 2（"bb"）。</p>
+<p><b>和第 38 课的最长回文子串比</b>：子串必须连续，所以两端不相同时整段直接不是回文；子序列可以跳过字符，两端不相同时还可以扔掉一端继续找。</p>
+<p><b>暴力做法为什么慢</b>：长度为 n 的串有 2<sup>n</sup> 个子序列，每个再花 O(n) 判断是不是回文。</p>
+<p><b>关键观察</b>：只看区间 <code>text[i..j]</code> 的两个端点：</p>
+<ul>
+  <li><b>两端相同</b>（<code>text[i] == text[j]</code>）：把它们配成一对，放在回文的最外层，里面放 <code>text[i+1..j-1]</code> 的最长回文子序列。长度 + 2。</li>
+  <li><b>两端不同</b>：它们不可能同时出现在答案的最外层，所以至少有一端用不上。扔掉左端，问题变成 <code>text[i+1..j]</code>；扔掉右端，变成 <code>text[i..j-1]</code>。取大的。</li>
+</ul>
+<p>这次的转移不是枚举分割点，而是<b>去掉一端或两端</b>。用到的区间仍然比 i..j 短，所以照样按长度填。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>longest[i][j]</code> = <code>text[i..j]</code> 里最长回文子序列的长度。</li>
+  <li>转移：两端相同时 <code>longest[i][j] = longest[i + 1][j - 1] + 2</code>；不同时 <code>longest[i][j] = max(longest[i + 1][j], longest[i][j - 1])</code>。</li>
+  <li>初始值：<code>longest[i][i] = 1</code>，单个字符本身就是回文。长度为 2 且两端相同时，中间是空串，<code>longest[i + 1][j - 1]</code> 落在 i &gt; j 的那一半里，那一半填 0 就正好对。</li>
+  <li>遍历顺序：按区间长度从 2 到 n。答案在 <code>longest[0][n - 1]</code>。</li>
+</ol>
+<pre>def longest_palindromic_subsequence(text):
+    n = len(text)
+    if n == 0:
+        return 0
+    longest = [[0] * n for _ in range(n)]          # i &gt; j 的格子保持 0，代表空串
+    for i in range(n):
+        longest[i][i] = 1
+    for length in range(2, n + 1):
+        for i in range(n - length + 1):
+            j = i + length - 1
+            if text[i] == text[j]:
+                longest[i][j] = longest[i + 1][j - 1] + 2
+            else:
+                longest[i][j] = max(longest[i + 1][j], longest[i][j - 1])
+    return longest[0][n - 1]
+
+longest_palindromic_subsequence("bbbab")    # 4</pre>
+<p><b>为什么对</b>：设最优的回文子序列是 P。如果 text[i] 和 text[j] 都在 P 里，它们一定分别是 P 的第一个和最后一个字符，所以必须相同，这是第一种情况；否则至少一端不在 P 里，P 完全落在 i+1..j 或 i..j-1 里，第二种情况取了两者的最大值。</p>
+<p><b>复杂度</b>：O(n²) 时间和空间，每格 O(1)。</p>
+<p><b>用上它：最少插入几次变成回文（LeetCode 1312）</b>。最长回文子序列里的字符不用动，其余每个字符都要在对称的位置补一个，所以答案是 <code>len(text) - longest_palindromic_subsequence(text)</code>。"mbadm" 的最长回文子序列是 "mam"（长度 3），答案 5 - 3 = 2。</p>
+
+<h2 id="burst-balloons">选做：戳气球（LeetCode 312）</h2>
+<p><b>题意</b>：一排气球上写着数字。戳破一个气球能得到“左邻 × 自己 × 右邻”枚硬币，左邻、右邻指的是<b>还没戳破</b>的相邻气球，越界时当成 1。全部戳完，最多拿多少？<code>[3, 1, 5, 8]</code> 的答案是 167。</p>
+<p><b>难点</b>：如果枚举“第一个戳哪个”，戳完以后左右两边的气球变成了邻居，两边不再独立，拆不成两个小区间。</p>
+<p><b>反过来想</b>：在两端各补一个 1，枚举区间里<b>最后一个</b>被戳破的气球 last。它最后才戳，所以在它之前，左右两边各自被戳光，互不影响；它被戳的那一刻，左右邻正好是区间两端外面的那两个气球。这样又变回了“分割点”的形状，和石子合并一样按长度填。骨架里有完整的提示（<code>max_coins_bursting_balloons</code>）。</p>
+<p>区间 DP 的一个通用技巧就在这里：<b>想不通“第一步”时，换成想“最后一步”</b>。最后一步把区间分成互不影响的两半，才能用上更短区间的结果。</p>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>题</th><th>每格代表</th><th>从哪些格子来</th><th>时间</th><th>空间</th></tr>
+  <tr><td>石子合并</td><td>区间 i..j 合成一堆的最少代价</td><td>所有分割点 k 的 (i, k) 和 (k + 1, j)</td><td>O(n³)</td><td>O(n²)</td></tr>
+  <tr><td>最长回文子序列</td><td>text[i..j] 的最长回文子序列长度</td><td>(i + 1, j - 1)、(i + 1, j)、(i, j - 1)</td><td>O(n²)</td><td>O(n²)</td></tr>
+  <tr><td>最少插入变回文</td><td>同上</td><td>同上</td><td>O(n²)</td><td>O(n²)</td></tr>
+  <tr><td>戳气球</td><td>两端之间的气球全戳破的最多硬币</td><td>所有“最后戳的”last</td><td>O(n³)</td><td>O(n²)</td></tr>
+</table>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li>题目里有“<b>相邻</b>的才能合并 / 相乘 / 消除”，问最少代价或最大收益：枚举分割点的区间 DP。</li>
+  <li>输入是<b>一个字符串</b>，问“回文”“两端”：去掉一端或两端的区间 DP。</li>
+  <li>数据范围 n ≤ 几百（O(n³) 能过），或者 n ≤ 几千（O(n²) 能过）。</li>
+  <li>想按“第一步做什么”递归时发现两边会互相影响：试试“最后一步做什么”。</li>
+</ul>
+
+<h2>LeetCode 对应题目</h2>
+<table>
+  <tr><th>题号</th><th>中文题名</th><th>本课对应</th></tr>
+  <tr><td>1000</td><td>合并石头的最低成本</td><td>题 1 的加强版：每次合并 K 堆（K = 2 时就是题 1）</td></tr>
+  <tr><td>516</td><td>最长回文子序列</td><td>题 2</td></tr>
+  <tr><td>1312</td><td>让字符串成为回文串的最少插入次数</td><td>题 2 的应用</td></tr>
+  <tr><td>312</td><td>戳气球</td><td>选做</td></tr>
+  <tr><td>1039</td><td>多边形三角剖分的最低得分</td><td>练手：和戳气球几乎一样，枚举和底边组成三角形的那个顶点</td></tr>
+  <tr><td>375</td><td>猜数字大小 II</td><td>练手：枚举第一次猜的数 k，取两边里更坏的那边</td></tr>
+</table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-1000"><summary>LeetCode 1000 · 合并石头的最低成本</summary>
+<p><b>题意</b>：n 堆石头排成一排，第 i 堆有 <code>stones[i]</code> 块。每次操作把<b>恰好 k 堆相邻</b>的石头合并成一堆，成本是这 k 堆的石头总数。返回把所有石头合并成一堆的最低成本；做不到就返回 <code>-1</code>。（k = 2 时就是 <a href="#stone-merge">正文题 1</a>。）</p>
+<p><b>例子</b>：输入 <code>stones = [3, 2, 4, 1]</code>，<code>k = 2</code>，输出 <code>20</code>。先合并 [3, 2] 成本 5，得到 [5, 4, 1]；再合并 [4, 1] 成本 5，得到 [5, 5]；最后合并成本 10，共 20。另外，<code>stones = [3, 2, 4, 1]</code>、<code>k = 3</code> 时输出 <code>-1</code>：合并一次剩 2 堆，就再也凑不出 3 堆。</p>
+<p><b>数据范围</b>：n ≤ 30，2 ≤ k ≤ 30，<code>stones[i]</code> ≤ 100。</p>
+</details>
+<details id="lc-516"><summary>LeetCode 516 · 最长回文子序列</summary>
+<p><b>题意</b>：给定字符串 <code>s</code>，返回其中最长回文子序列的长度（子序列可以删掉一些字符、不改变剩余字符的顺序，不要求连续）。完整讲解见 <a href="#longest-palindromic-subsequence">正文题 2</a>。</p>
+</details>
+<details id="lc-1312"><summary>LeetCode 1312 · 让字符串成为回文串的最少插入次数</summary>
+<p><b>题意</b>：给定字符串 <code>s</code>，每次操作可以在任意位置插入任意一个字符。返回让 <code>s</code> 成为回文串的最少操作次数。</p>
+<p><b>例子</b>：输入 <code>s = "zzazz"</code>，输出 <code>0</code>，它本身就是回文串。输入 <code>s = "mbadm"</code>，输出 <code>2</code>，可以变成 <code>"mbdadbm"</code> 或 <code>"mdbabdm"</code>。</p>
+<p><b>数据范围</b>：n ≤ 500，<code>s</code> 只含小写字母。</p>
+</details>
+<details id="lc-312"><summary>LeetCode 312 · 戳气球</summary>
+<p><b>题意</b>：n 个气球，第 i 个上写着 <code>nums[i]</code>；戳破气球 i 得到 <code>nums[i - 1] × nums[i] × nums[i + 1]</code> 枚硬币（左右邻指还没戳破的相邻气球，越界当成 1），返回戳破所有气球能得到的最多硬币数，n ≤ 300。完整讲解见 <a href="#burst-balloons">正文「选做：戳气球」</a>。</p>
+</details>
+<details id="lc-1039"><summary>LeetCode 1039 · 多边形三角剖分的最低得分</summary>
+<p><b>题意</b>：一个凸 n 边形，<code>values[i]</code> 是按顺时针顺序第 i 个顶点的值。把它剖分成 n − 2 个三角形（三角形的顶点都是多边形的顶点），每个三角形的值是三个顶点值的乘积，剖分的得分是所有三角形的值之和。返回所有剖分方式中的最低得分。</p>
+<p><b>例子</b>：输入 <code>values = [3, 7, 4, 5]</code>，输出 <code>144</code>。四边形只有两种剖分：沿对角线 7–5 切，得分 3 × 7 × 5 + 4 × 5 × 7 = 245；沿对角线 3–4 切，得分 3 × 7 × 4 + 3 × 4 × 5 = 144。</p>
+<p><b>数据范围</b>：3 ≤ n ≤ 50，<code>values[i]</code> ≤ 100。</p>
+</details>
+<details id="lc-375"><summary>LeetCode 375 · 猜数字大小 II</summary>
+<p><b>题意</b>：对方从 1 到 n 中选一个数，你来猜。每猜错一次数 x，就要付 x 元，并被告知要猜的数比 x 大还是小；钱付不起就输了。返回<b>无论对方选哪个数</b>都能保证赢所需的最少现金。</p>
+<p><b>例子</b>：输入 <code>n = 10</code>，输出 <code>16</code>（最优策略先猜 7，最坏情况下总共付 16 元）。小一点的例子：<code>n = 1</code> 输出 <code>0</code>；<code>n = 2</code> 输出 <code>1</code>：先猜 1，猜错付 1 元，就知道答案是 2。</p>
+<p><b>数据范围</b>：n ≤ 200。</p>
+</details>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>按行从上往下填</b>：<code>dp[k + 1][j]</code> 在下面的行，还没算。外层必须是区间长度。</li>
+  <li><b>分割点范围写错</b>：k 从 i 到 j - 1，右半块是 <code>k + 1..j</code>。写成 <code>range(i, j + 1)</code> 会出现空的右半块。</li>
+  <li><b>区间总和每次重新求和</b>：<code>sum(piles[i:j + 1])</code> 又是 O(n)，总复杂度变成 O(n⁴)。用前缀和。</li>
+  <li><b>最长回文子序列长度为 2 时</b>：<code>longest[i + 1][j - 1]</code> 是 i &gt; j 的格子，要保证它是 0，不要填成别的初始值。</li>
+  <li>空列表、只有一个元素时直接返回，别让 <code>merge_cost[0][n - 1]</code> 越界。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/interval_dp.py</code>。建议顺序：<code>merge_stones_min_cost</code> → <code>longest_palindromic_subsequence</code> → <code>min_insertions_to_palindrome</code> →（选做）<code>merge_plan</code> →（选做）<code>max_coins_bursting_balloons</code>。动手前，先用一句话写下 dp[i][j] 代表什么、从哪些更短的区间推过来。</p>
+<pre>uv run dsa/interval_dp.py
+uv run pytest tests/test_interval_dp.py</pre>
+<p>测试会拿你的结果和“暴力枚举所有合并顺序”的结果比对，还会用 80 堆石子检查你的写法是不是 O(n³)。</p>
+
+<h2>自测</h2>
+<details><summary>1. 石子合并里，为什么最后一次合并的代价和分割点 k 无关？</summary>
+最后一次合并把左右两块合成整个区间，新堆的石子数就是整个区间 i..j 的石子总数。不管从哪里切开，总数都一样。所以转移里 range_total 放在 min 外面。</details>
+<details><summary>2. 区间 DP 为什么外层循环区间长度，而不是外层循环 i？</summary>
+dp[i][j] 用到的是更短的区间，例如 dp[k + 1][j]，它的左端点 k + 1 比 i 大，在表里更靠下。外层按 i 从小到大时，这些格子还没算。按长度从短到长时，所有更短的区间都在之前的轮次里填好了。（另一种等价写法是 i 从 n - 1 倒着循环到 0、j 从 i + 1 往右循环。）</details>
+<details><summary>3. 最长回文子序列两端不相同时，为什么不用再看 longest[i + 1][j - 1]？</summary>
+因为 longest[i + 1][j] 和 longest[i][j - 1] 都包含了区间 i+1..j-1，它们一定 ≥ longest[i + 1][j - 1]。“两端都扔掉”的情况已经被“扔掉一端”覆盖了。</details>
+
+<div class="nav"><a href="42-fenwick-tree.html">← 上一课：树状数组</a><a href="44-bitmask-dp.html">下一课：状压 DP →</a></div>
+<script src="anim.js"></script>
+<script src="js/43-interval-dp.js"></script>
+</body>
+</html>

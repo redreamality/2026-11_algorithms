@@ -67,7 +67,7 @@ return dummy_node.next           # 真正的头永远是 dummy_node.next</pre>
 <p>这样每个真实节点都有前一个节点，删头节点和删中间节点就是同一种写法。<b>注意最后要返回 <code>dummy_node.next</code>，而不是原来的 head</b>，因为原来的 head 可能已经被删掉或者换了位置。</p>
 <p><b>什么时候用</b>：只要头节点<b>可能被删掉、被换掉</b>，或者你要<b>从零开始拼出一条新链表</b>，就先放一个哑节点。</p>
 
-<h2>题 1：反转链表（LeetCode 206）</h2>
+<h2 id="reverse-list">题 1：反转链表（LeetCode 206）</h2>
 <p><b>题意</b>：给出单链表的头节点，把整条链表反转过来，返回新的头节点。</p>
 <p><b>例子</b>：<code>1 → 2 → 3 → 4 → 5</code> 变成 <code>5 → 4 → 3 → 2 → 1</code>。</p>
 <p><b>暴力做法的问题</b>：把所有值倒进 Python 列表，倒过来再建一条新链表。时间是 O(n)，但要 O(n) 的额外空间，而且等于绕开了链表本身。面试官要的是<b>原地反转</b>：不建新节点，只改每个节点的 next，额外空间 O(1)。</p>
@@ -86,7 +86,7 @@ return dummy_node.next           # 真正的头永远是 dummy_node.next</pre>
 <p>也可以用递归写：先把 <code>head.next</code> 之后的部分反转好，再让 <code>head.next.next = head</code>、<code>head.next = None</code>。但递归要用 O(n) 的调用栈空间，链表很长时会爆栈，面试时优先写循环版本。</p>
 <p><b>复杂度</b>：每个节点处理一次，时间 O(n)；只用了三个变量，额外空间 O(1)。</p>
 
-<h2>题 2：合并两个有序链表（LeetCode 21）</h2>
+<h2 id="merge-two-lists">题 2：合并两个有序链表（LeetCode 21）</h2>
 <p><b>题意</b>：两条链表都已经从小到大排好序，把它们合并成一条从小到大的链表。要求直接复用原来的节点。</p>
 <p><b>例子</b>：<code>1 → 2 → 4</code> 和 <code>1 → 3 → 4</code> 合并成 <code>1 → 1 → 2 → 3 → 4 → 4</code>。</p>
 <p><b>暴力做法的问题</b>：把两条链表的值都倒进列表、排序、再建新链表，时间 O((m+n) log(m+n))，还要额外空间，而且没用上“两条已经有序”这个条件。</p>
@@ -112,7 +112,7 @@ return dummy_node.next           # 真正的头永远是 dummy_node.next</pre>
 <h2>技巧：快慢指针</h2>
 <p>两个指针从 head 出发，<code>slow</code> 每次走 1 步，<code>fast</code> 每次走 2 步。它们之间的距离每走一轮就拉开 1 步。这个简单的设定能一次遍历解决三件事：找中点、判断有没有环、找入环点。</p>
 
-<h2>题 3：链表的中间节点（LeetCode 876）</h2>
+<h2 id="middle-node">题 3：链表的中间节点（LeetCode 876）</h2>
 <p><b>题意</b>：返回链表的中间节点；节点数是偶数时有两个中间节点，返回第二个。</p>
 <p><b>例子</b>：<code>1 → 2 → 3 → 4 → 5</code> 返回 3；<code>1 → 2 → 3 → 4 → 5 → 6</code> 返回 4。</p>
 <p><b>普通做法</b>：先走一遍数出长度 n，再从头走 n // 2 步。这也是 O(n)，没有错，只是要走两遍。快慢指针一遍就够，而且它是后面回文链表、链表排序等题的基本零件。</p>
@@ -129,7 +129,7 @@ return dummy_node.next           # 真正的头永远是 dummy_node.next</pre>
 </ul>
 <p>循环条件要同时检查 <code>fast</code> 和 <code>fast.next</code>：<code>fast.next.next</code> 要求 fast.next 不是 None，否则会报 <code>AttributeError</code>。</p>
 
-<h2>题 4：判断链表有没有环（LeetCode 141）</h2>
+<h2 id="has-cycle">题 4：判断链表有没有环（LeetCode 141）</h2>
 <p><b>题意</b>：链表最后一个节点的 next 可能不是 None，而是指回前面的某个节点，形成一个环。判断有没有环。</p>
 <p><b>例子</b>：<code>3 → 2 → 0 → -4 → (回到 2)</code> 有环；<code>1 → 2 → 3 → None</code> 没有环。</p>
 <p><b>暴力做法的问题</b>：用一个集合记录走过的节点，走到一个已经见过的节点就说明有环。时间 O(n)，但集合要 O(n) 的额外空间。</p>
@@ -145,7 +145,7 @@ return dummy_node.next           # 真正的头永远是 dummy_node.next</pre>
 <p><b>为什么一定会相遇，而不会“跳过去”</b>：等两个指针都进了环，看 fast 在 slow 后面还差几步（沿着环的方向数）。每一轮 slow 走 1 步、fast 走 2 步，这个差距<b>恰好减少 1</b>。差距是一个整数，每次减 1，一定会正好减到 0，不可能从 1 直接跳到 −1。差距最多是环长 L，所以 slow 进环后最多再走 L 轮就会相遇。</p>
 <p><b>复杂度</b>：时间 O(n)，额外空间 O(1)。</p>
 
-<h2>题 5：找入环点（LeetCode 142）</h2>
+<h2 id="cycle-entry">题 5：找入环点（LeetCode 142）</h2>
 <p><b>题意</b>：如果有环，返回开始进入环的第一个节点；没有环返回 None。</p>
 <p><b>例子</b>：<code>1 → 2 → 3 → 4 → 5 → 6 → (回到 3)</code>，入环点是 3。</p>
 <p><b>暴力做法的问题</b>：同样可以用集合，第一个被重复访问的节点就是入环点，但要 O(n) 空间。</p>
@@ -173,7 +173,7 @@ return dummy_node.next           # 真正的头永远是 dummy_node.next</pre>
 <p>我们并不知道 a 是多少，但不需要知道：让它们一起走，相遇就停。拿例子验证一下：a = 2，L = 4（环是 3、4、5、6）。第一阶段两指针在 5 相遇，此时 slow 走了 4 步，正是 L 的倍数。第二阶段 from_head 走 1 → 2 → 3，from_meeting 走 5 → 6 → 3，在 3 相遇。</p>
 <p><b>复杂度</b>：时间 O(n)，额外空间 O(1)。</p>
 
-<h2>题 6：删除链表的倒数第 N 个节点（LeetCode 19）</h2>
+<h2 id="remove-nth-from-end">题 6：删除链表的倒数第 N 个节点（LeetCode 19）</h2>
 <p><b>题意</b>：删除链表的倒数第 n 个节点，返回删除后的头节点。保证 n 不超过链表长度。</p>
 <p><b>例子</b>：<code>1 → 2 → 3 → 4 → 5</code>，n = 2，倒数第 2 个是 4，结果 <code>1 → 2 → 3 → 5</code>。<code>1 → 2</code>，n = 2，要删的是头节点，结果 <code>2</code>。</p>
 <p><b>普通做法</b>：先走一遍数出长度 L，倒数第 n 个就是正数第 L − n + 1 个，再走一遍找到它的前一个节点删掉。要遍历两遍。</p>
@@ -222,9 +222,80 @@ return dummy_node.next           # 真正的头永远是 dummy_node.next</pre>
   <tr><td>160</td><td>相交链表</td><td>两个指针走完自己的再走对方的</td></tr>
   <tr><td>23</td><td>合并 K 个升序链表</td><td>合并 + 堆（第 12 课）</td></tr>
   <tr><td>148</td><td>排序链表</td><td>找中点 + 合并 = 链表上的归并排序</td></tr>
-  <tr><td>203 / 82</td><td>移除链表元素 / 删除排序链表中的重复元素 II</td><td>哑节点</td></tr>
+  <tr><td>203</td><td>移除链表元素</td><td>哑节点</td></tr>
+  <tr><td>82</td><td>删除排序链表中的重复元素 II</td><td>哑节点</td></tr>
   <tr><td>287</td><td>寻找重复数</td><td>把数组看成链表，用找入环点的方法</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-206"><summary>LeetCode 206 · 反转链表</summary>
+<p><b>题意</b>：给出单链表的头节点 <code>head</code>，反转链表，返回反转后链表的头节点。完整讲解见 <a href="#reverse-list">正文第 1 题</a>。</p>
+</details>
+<details id="lc-21"><summary>LeetCode 21 · 合并两个有序链表</summary>
+<p><b>题意</b>：把两个升序链表合并成一个新的升序链表并返回，新链表由两个链表原有的节点拼接而成。完整讲解见 <a href="#merge-two-lists">正文第 2 题</a>。</p>
+</details>
+<details id="lc-876"><summary>LeetCode 876 · 链表的中间结点</summary>
+<p><b>题意</b>：返回单链表的中间节点；有两个中间节点时返回第二个。完整讲解见 <a href="#middle-node">正文第 3 题</a>。</p>
+</details>
+<details id="lc-141"><summary>LeetCode 141 · 环形链表</summary>
+<p><b>题意</b>：判断链表中是否有环（沿着 next 一直走，会再次回到某个已经走过的节点），有环返回 true，否则返回 false。完整讲解见 <a href="#has-cycle">正文第 4 题</a>。</p>
+</details>
+<details id="lc-142"><summary>LeetCode 142 · 环形链表 II</summary>
+<p><b>题意</b>：返回链表开始入环的第一个节点，无环返回 null；不允许修改链表。完整讲解见 <a href="#cycle-entry">正文第 5 题</a>。</p>
+</details>
+<details id="lc-19"><summary>LeetCode 19 · 删除链表的倒数第 N 个结点</summary>
+<p><b>题意</b>：删除链表的倒数第 n 个节点（1 ≤ n ≤ 链表长度），返回链表的头节点。完整讲解见 <a href="#remove-nth-from-end">正文第 6 题</a>。</p>
+</details>
+<details id="lc-234"><summary>LeetCode 234 · 回文链表</summary>
+<p><b>题意</b>：给出单链表的头节点 <code>head</code>，判断链表的值序列是不是回文（从前往后读和从后往前读一样），是返回 true，否则返回 false。进阶要求：时间 O(n)、额外空间 O(1)。</p>
+<p><b>例子</b>：<code>1 → 2 → 2 → 1</code> 返回 true；<code>1 → 2</code> 返回 false。</p>
+<p><b>数据范围</b>：节点数 1 ≤ n ≤ 10<sup>5</sup>，0 ≤ Node.val ≤ 9。</p>
+</details>
+<details id="lc-92"><summary>LeetCode 92 · 反转链表 II</summary>
+<p><b>题意</b>：给出单链表的头节点 <code>head</code> 和两个整数 <code>left ≤ right</code>（位置从 1 开始数），只反转从第 left 个到第 right 个节点的这一段，其余节点不动，返回反转后链表的头节点。进阶要求：只遍历一趟。</p>
+<p><b>例子</b>：<code>1 → 2 → 3 → 4 → 5</code>，left = 2，right = 4，输出 <code>1 → 4 → 3 → 2 → 5</code>：第 2～4 个节点 <code>2 → 3 → 4</code> 反转成 <code>4 → 3 → 2</code>。</p>
+<p><b>数据范围</b>：节点数 1 ≤ n ≤ 500，1 ≤ left ≤ right ≤ n；left 可以等于 1，此时头节点会变。</p>
+</details>
+<details id="lc-25"><summary>LeetCode 25 · K 个一组翻转链表</summary>
+<p><b>题意</b>：给出链表头节点 <code>head</code> 和正整数 <code>k</code>，从头开始每 k 个节点一组进行反转，返回修改后的链表。最后剩下不足 k 个的节点保持原有顺序。必须实际交换节点，不能只改节点里的值。进阶要求：额外空间 O(1)。</p>
+<p><b>例子</b>：<code>1 → 2 → 3 → 4 → 5</code>，k = 2，输出 <code>2 → 1 → 4 → 3 → 5</code>：<code>1 → 2</code> 和 <code>3 → 4</code> 各自反转，最后的 5 不足一组，不动。</p>
+<p><b>数据范围</b>：1 ≤ k ≤ n ≤ 5000。</p>
+</details>
+<details id="lc-143"><summary>LeetCode 143 · 重排链表</summary>
+<p><b>题意</b>：单链表是 <code>L0 → L1 → … → Ln-1 → Ln</code>，把它原地重排成 <code>L0 → Ln → L1 → Ln-1 → L2 → Ln-2 → …</code>。不能只改节点里的值，要实际调整节点；函数不返回值。</p>
+<p><b>例子</b>：<code>1 → 2 → 3 → 4</code> 变成 <code>1 → 4 → 2 → 3</code>；<code>1 → 2 → 3 → 4 → 5</code> 变成 <code>1 → 5 → 2 → 4 → 3</code>（首、尾、第二个、倒数第二个……交替取）。</p>
+<p><b>数据范围</b>：节点数 1 ≤ n ≤ 5 × 10<sup>4</sup>。</p>
+</details>
+<details id="lc-160"><summary>LeetCode 160 · 相交链表</summary>
+<p><b>题意</b>：给出两个单链表的头节点 <code>headA</code> 和 <code>headB</code>，返回两个链表相交的起始节点（从这个节点开始，两条链表共用同一批节点）；不相交返回 null。整个结构里没有环；函数返回后两条链表必须保持原来的结构。进阶要求：时间 O(m + n)、额外空间 O(1)。</p>
+<p><b>例子</b>：链表 A 是 <code>4 → 1 → 8 → 4 → 5</code>，链表 B 是 <code>5 → 6 → 1 → 8 → 4 → 5</code>，两条链表从值为 8 的节点开始共用，返回这个节点。注意两边值为 1 的节点是<b>不同的节点</b>，判断相交看的是节点本身，不是值。</p>
+<p><b>数据范围</b>：两条链表的长度 m, n ≤ 3 × 10<sup>4</sup>。</p>
+</details>
+<details id="lc-23"><summary>LeetCode 23 · 合并 K 个升序链表</summary>
+<p><b>题意</b>：给出一个链表数组 <code>lists</code>，每个链表都已按升序排列，把它们合并成一个升序链表并返回。</p>
+<p><b>例子</b>：<code>lists</code> 是 <code>1 → 4 → 5</code>、<code>1 → 3 → 4</code>、<code>2 → 6</code>，输出 <code>1 → 1 → 2 → 3 → 4 → 4 → 5 → 6</code>。</p>
+<p><b>数据范围</b>：链表个数 0 ≤ k ≤ 10<sup>4</sup>，每个链表长度 ≤ 500，节点总数 ≤ 10<sup>4</sup>；<code>lists</code> 可以为空，其中的链表也可以为空。</p>
+</details>
+<details id="lc-148"><summary>LeetCode 148 · 排序链表</summary>
+<p><b>题意</b>：给出链表头节点 <code>head</code>，把链表按升序排列，返回排序后的链表。进阶要求：时间 O(n log n)、额外空间 O(1)。</p>
+<p><b>例子</b>：<code>4 → 2 → 1 → 3</code> 输出 <code>1 → 2 → 3 → 4</code>。</p>
+<p><b>数据范围</b>：节点数 0 ≤ n ≤ 5 × 10<sup>4</sup>，−10<sup>5</sup> ≤ Node.val ≤ 10<sup>5</sup>；链表可以为空。</p>
+</details>
+<details id="lc-203"><summary>LeetCode 203 · 移除链表元素</summary>
+<p><b>题意</b>：给出链表头节点 <code>head</code> 和整数 <code>val</code>，删除所有满足 <code>Node.val == val</code> 的节点，返回新的头节点。</p>
+<p><b>例子</b>：<code>1 → 2 → 6 → 3 → 4 → 5 → 6</code>，val = 6，输出 <code>1 → 2 → 3 → 4 → 5</code>。再如 <code>7 → 7 → 7 → 7</code>，val = 7，所有节点都被删掉，返回空链表。</p>
+<p><b>数据范围</b>：节点数 0 ≤ n ≤ 10<sup>4</sup>，1 ≤ Node.val ≤ 50，0 ≤ val ≤ 50；头节点也可能被删。</p>
+</details>
+<details id="lc-82"><summary>LeetCode 82 · 删除排序链表中的重复元素 II</summary>
+<p><b>题意</b>：给出已按升序排列的链表头节点 <code>head</code>，删除所有<b>出现过重复的数字</b>对应的全部节点，只保留原链表中只出现一次的数字，返回仍然升序的链表。</p>
+<p><b>例子</b>：<code>1 → 2 → 3 → 3 → 4 → 4 → 5</code> 输出 <code>1 → 2 → 5</code>：3 和 4 都重复了，所有值为 3、4 的节点一个不留。再如 <code>1 → 1 → 1 → 2 → 3</code> 输出 <code>2 → 3</code>，头节点也被删掉了。</p>
+<p><b>数据范围</b>：节点数 0 ≤ n ≤ 300，−100 ≤ Node.val ≤ 100。</p>
+</details>
+<details id="lc-287"><summary>LeetCode 287 · 寻找重复数</summary>
+<p><b>题意</b>：数组 <code>nums</code> 有 n + 1 个整数，每个都在 [1, n] 范围内，其中<b>只有一个</b>数是重复的（它可能出现两次以上），返回这个数。要求不修改数组 <code>nums</code>，只用 O(1) 的额外空间。进阶要求：时间 O(n)。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 3, 4, 2, 2]</code>，输出 <code>2</code>。再如 <code>[3, 3, 3, 3, 3]</code> 输出 <code>3</code>。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 10<sup>5</sup>，nums.length == n + 1。</p>
+</details>
 
 <h2>复杂度汇总</h2>
 <table>

@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>计算机基础 第 6 课 · HTTP：请求、响应与状态码</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="cs.css">
+<style>
+/* 本课专用：报文原文、动画里的阶段名和状态码 */
+pre.msg { background: #fbfbf7; border: 1px solid #ddd; border-left: 4px solid #e65100; padding: 8px 12px; font-size: 14px; line-height: 1.5; }
+pre.msg.resp { border-left-color: #2e7d32; }
+pre.msg .hl { background: #ffe0b2; }
+.demo .phase { display: inline-block; font-weight: bold; color: #e65100; margin-right: 8px; }
+.demo .status-code { font-size: 22px; font-weight: bold; font-family: Consolas, monospace; padding: 0 8px; border-radius: 4px; }
+.demo .status-code.ok { background: #c8e6c9; color: #1b5e20; }
+.demo .status-code.redirect { background: #e3f2fd; color: #0b62c4; }
+.demo .status-code.bad { background: #ffcdd2; color: #b71c1c; }
+.demo .reason { margin-left: 8px; }
+.demo pre.msg { margin: 6px 0; font-size: 13px; }
+.demo .ops-bar button { margin: 2px; }
+.demo svg { max-width: 100%; height: auto; }
+.demo .msg-line { font-family: Consolas, monospace; font-size: 14px; }
+.demo .rendered { border: 1px solid #bbb; border-radius: 6px; padding: 6px 12px; background: #fff; max-width: 320px; }
+.demo .rendered .addr { font-size: 12px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+.demo .rendered h3 { margin: 6px 0; }
+</style>
+</head>
+<body>
+<!-- 全页共用的箭头。SVG 里写 marker-end="url(#arrow)" 即可 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+  <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0b62c4"/></marker>
+  <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c62828"/></marker>
+  <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e7d32"/></marker>
+</defs></svg>
+
+<p><a href="index.html">← 计算机基础目录</a></p>
+<h1>第 6 课 · HTTP：请求、响应与状态码</h1>
+<p class="one-line">浏览器和网店之间说的「话」就是 HTTP：浏览器发一份<b>请求报文</b>，服务器回一份<b>响应报文</b>，响应的第一行用一个三位数的<b>状态码</b>告诉浏览器结果如何。本课把这两份报文拆开看，再看每个常见状态码是谁、为什么返回的。</p>
+<p class="prereq">开始前要会：<a href="04-network-layers.html">第 4 课</a>（五层模型与封装、端口号 80 / 443、IP 地址、DNS 把域名解析成 IP）、<a href="05-tcp.html">第 5 课</a>（TCP 是面向连接的可靠字节流、三次握手、UDP 无连接）。</p>
+
+<p>还是那家小网店。顾客在家里的电脑（<code>192.168.1.23</code>）上打开浏览器，访问 <code>https://shop.example.com/products/42</code> 看一个商品（42 号商品「帆布托特包」，89 元），然后登录，再下单。第 4 课讲了数据怎么找到网店服务器（<code>198.51.100.80</code>），第 5 课讲了怎么建立一条可靠的 TCP 连接。这一课讲连接建好之后，浏览器和网店<b>具体说了什么</b>。全课就跟着这位顾客的这三件事走。</p>
+
+<p class="roadmap"><b>本课的路线</b>：从输入网址到看到页面（总览）→ URL 的结构 → 请求报文和响应报文 → 方法、安全与幂等 → GET 和 POST 的区别 → 无状态与 Cookie / Session → 网店的架构：反向代理 → 状态码五大类 → 301 与 302 → 304 与缓存 → 4xx：401 与 403 → 5xx：502 与 504 → HTTP 的版本 → HTTPS → 动画 → 题单怎么考。</p>
+
+<h2 id="overview">1. 总览：从输入网址到看到页面</h2>
+<p>先定几个名词：</p>
+<div class="term"><b>客户端与服务器</b>：主动发起请求的一方叫<b>客户端</b>（这里是顾客的浏览器），等着别人来请求、给出回复的一方叫<b>服务器</b>（这里是网店）。</div>
+<div class="term"><b>HTTP</b>（超文本传输协议）：浏览器和网站之间的应用层协议。它规定通信只有一种模式：<b>客户端发一个请求，服务器回一个响应</b>，一问一答。服务器不会主动给浏览器发东西。</div>
+<div class="term"><b>资源</b>：服务器上能用一个地址找到的东西：一个网页、一张图片、一条订单都是资源。<b>HTML</b> 是写网页用的标记语言，例如 <code>&lt;h1&gt;帆布托特包&lt;/h1&gt;</code> 表示一个大标题。浏览器把 HTML 画成你看到的页面，这一步叫<b>渲染</b>。</div>
+<p>顾客按下回车后，浏览器依次做这六件事：</p>
+
+<figure class="fig">
+<svg viewBox="0 0 640 175" width="640" role="img" aria-label="从输入网址到看到页面的六个阶段">
+  <rect x="9" y="40" width="92" height="44" rx="5" class="obj"/><text x="55" y="67" text-anchor="middle">① DNS 查询</text>
+  <rect x="115" y="40" width="92" height="44" rx="5" class="obj"/><text x="161" y="67" text-anchor="middle">② TCP 握手</text>
+  <rect x="221" y="40" width="92" height="44" rx="5" class="hot"/><text x="267" y="67" text-anchor="middle">③ TLS 握手</text>
+  <rect x="327" y="40" width="92" height="44" rx="5" class="hot"/><text x="373" y="67" text-anchor="middle">④ 发请求</text>
+  <rect x="433" y="40" width="92" height="44" rx="5" class="hot"/><text x="479" y="67" text-anchor="middle">⑤ 服务器处理</text>
+  <rect x="539" y="40" width="92" height="44" rx="5" class="ok"/><text x="585" y="67" text-anchor="middle">⑥ 渲染</text>
+  <line x1="102" y1="62" x2="112" y2="62" class="line" marker-end="url(#arrow)"/>
+  <line x1="208" y1="62" x2="218" y2="62" class="line" marker-end="url(#arrow)"/>
+  <line x1="314" y1="62" x2="324" y2="62" class="line" marker-end="url(#arrow)"/>
+  <line x1="420" y1="62" x2="430" y2="62" class="line" marker-end="url(#arrow)"/>
+  <line x1="526" y1="62" x2="536" y2="62" class="line" marker-end="url(#arrow)"/>
+  <text x="55" y="104" text-anchor="middle" class="small">域名 → IP</text>
+  <text x="55" y="120" text-anchor="middle" class="small">UDP 53</text>
+  <text x="161" y="104" text-anchor="middle" class="small">连 443 端口</text>
+  <text x="161" y="120" text-anchor="middle" class="small">三次握手</text>
+  <text x="267" y="104" text-anchor="middle" class="small">验证证书</text>
+  <text x="267" y="120" text-anchor="middle" class="small">商量出密钥</text>
+  <text x="373" y="104" text-anchor="middle" class="small">请求报文</text>
+  <text x="373" y="120" text-anchor="middle" class="small">GET /products/42</text>
+  <text x="479" y="104" text-anchor="middle" class="small">查数据库</text>
+  <text x="479" y="120" text-anchor="middle" class="small">回响应报文</text>
+  <text x="585" y="104" text-anchor="middle" class="small">解析 HTML</text>
+  <text x="585" y="120" text-anchor="middle" class="small">画出页面</text>
+  <line x1="12" y1="140" x2="98" y2="140" class="dash"/><text x="55" y="160" text-anchor="middle" class="small">第 4 课</text>
+  <line x1="118" y1="140" x2="204" y2="140" class="dash"/><text x="161" y="160" text-anchor="middle" class="small">第 5 课</text>
+  <line x1="224" y1="140" x2="628" y2="140" class="arrow-red"/><text x="426" y="160" text-anchor="middle" class="small">本课</text>
+  <text x="320" y="24" text-anchor="middle" class="small">顾客在地址栏输入 https://shop.example.com/products/42，按下回车</text>
+</svg>
+<figcaption>前两步是前两课的内容；橙色三步是本课的主角。第 15 节的动画会把每一步的报文都画出来</figcaption>
+</figure>
+<ol>
+  <li><b>DNS 查询</b>：浏览器只知道名字 <code>shop.example.com</code>，先问 DNS 服务器要到 IP <code>198.51.100.80</code>（第 4 课）。</li>
+  <li><b>TCP 三次握手</b>：网址开头是 <code>https</code>，默认端口是 443，于是浏览器和 <code>198.51.100.80:443</code> 建立 TCP 连接（第 5 课）。HTTP 跑在 TCP 上，因为它要求报文一个字节都不能错、不能少。</li>
+  <li><b>TLS 握手</b>：<b>TLS</b> 是夹在 HTTP 和 TCP 之间的一层加密协议。双方先验证网店的身份，再商量出一把只有它俩知道的密钥，之后的 HTTP 报文都加密传输（第 14 节）。网址是 <code>http</code> 开头时没有这一步。</li>
+  <li><b>发 HTTP 请求</b>：浏览器写一份请求报文：「我要 <code>/products/42</code> 这个资源」（第 3 节）。</li>
+  <li><b>服务器处理</b>：网店程序从数据库查出 42 号商品，拼成 HTML，写进响应报文发回（第 7 节讲网店内部的分工）。</li>
+  <li><b>渲染</b>：浏览器解析 HTML，发现里面还引用了图片、样式文件，就在<b>同一条连接</b>上继续请求它们（第 13 节），全部到齐后把页面画出来。</li>
+</ol>
+<p>先补一个衡量快慢的单位：<b>RTT</b>（往返时间）是一个小报文从浏览器到服务器、再回到浏览器所用的时间。上面 ①②③④ 各要等对方回话，每一步都至少花 1 个 RTT。后面讲 HTTP 版本时，会用 RTT 来比较谁快。</p>
+
+<h2 id="url">2. URL：一个网址由哪几部分组成</h2>
+<div class="term"><b>URL</b>（统一资源定位符）：资源的地址，也就是俗称的网址。它说清楚了三件事：用什么协议、找哪台机器上的哪个进程、要那个进程里的哪个资源。</div>
+<p>把网址写完整一点，就能看到所有的部分：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 125" width="640" role="img" aria-label="URL 拆成协议、主机、端口、路径、查询参数、片段">
+  <text x="62" y="24" text-anchor="middle" class="small">怎么说话</text>
+  <path d="M 104,34 L 104,28 L 300,28 L 300,34" class="line"/>
+  <text x="202" y="22" text-anchor="middle" class="small">找到服务器上的那个进程</text>
+  <path d="M 304,34 L 304,28 L 520,28 L 520,34" class="line"/>
+  <text x="412" y="22" text-anchor="middle" class="small">要进程里的哪份资源</text>
+  <text x="564" y="24" text-anchor="middle" class="small">只给浏览器用</text>
+  <rect x="20" y="40" width="82" height="34" class="hot"/><text x="61" y="62" text-anchor="middle" class="mono">https://</text>
+  <rect x="102" y="40" width="150" height="34" class="obj"/><text x="177" y="62" text-anchor="middle" class="mono">shop.example.com</text>
+  <rect x="252" y="40" width="50" height="34" class="muted"/><text x="277" y="62" text-anchor="middle" class="mono">:443</text>
+  <rect x="302" y="40" width="120" height="34" class="ok"/><text x="362" y="62" text-anchor="middle" class="mono">/products/42</text>
+  <rect x="422" y="40" width="100" height="34" class="plain"/><text x="472" y="62" text-anchor="middle" class="mono">?color=red</text>
+  <rect x="522" y="40" width="85" height="34" class="muted"/><text x="564" y="62" text-anchor="middle" class="mono">#reviews</text>
+  <text x="61" y="96" text-anchor="middle">协议</text>
+  <text x="177" y="96" text-anchor="middle">主机</text>
+  <text x="277" y="96" text-anchor="middle">端口</text>
+  <text x="362" y="96" text-anchor="middle">路径</text>
+  <text x="472" y="96" text-anchor="middle">查询参数</text>
+  <text x="564" y="96" text-anchor="middle">片段</text>
+  <text x="277" y="116" text-anchor="middle" class="small">常省略</text>
+</svg>
+<figcaption>顾客平时看到的 <code>https://shop.example.com/products/42</code> 只是省略了端口、查询参数和片段</figcaption>
+</figure>
+<table>
+  <tr><th>部分</th><th>例子</th><th>作用</th></tr>
+  <tr><td>协议（scheme）</td><td><code>https</code></td><td>用什么协议。它决定了默认端口：<code>http</code> 是 80，<code>https</code> 是 443</td></tr>
+  <tr><td>主机</td><td><code>shop.example.com</code></td><td>哪台机器。交给 DNS 解析成 IP</td></tr>
+  <tr><td>端口</td><td><code>:443</code></td><td>那台机器上的哪个进程。和协议默认端口一样时可以省略</td></tr>
+  <tr><td>路径</td><td><code>/products/42</code></td><td>服务器上的哪个资源。会原样写进请求报文的第一行</td></tr>
+  <tr><td>查询参数</td><td><code>?color=red</code></td><td>附加的参数，格式是 <code>名=值</code>，多个之间用 <code>&amp;</code> 连接，例如 <code>?color=red&amp;size=L</code></td></tr>
+  <tr><td>片段</td><td><code>#reviews</code></td><td>页面里的某个位置（例如跳到「评论」那一段）。<b>不会发给服务器</b>，只由浏览器自己处理</td></tr>
+</table>
+<p>URL 里只能直接写英文字母、数字和少数符号。中文、空格等要先转成 <code>%</code> 加十六进制字节的形式，叫 <b>URL 编码</b>，例如空格写成 <code>%20</code>。</p>
+
+<h2 id="message">3. 请求报文和响应报文</h2>
+<p>第 4 课说过，应用层的数据单位叫<b>报文</b>。HTTP/1.1 的报文是<b>纯文本</b>，人可以直接读。下面就是浏览器为了看 42 号商品发出的请求报文原文：</p>
+<pre class="msg">GET /products/42 HTTP/1.1
+Host: shop.example.com
+User-Agent: Mozilla/5.0
+Accept: text/html
+Accept-Language: zh-CN
+Connection: keep-alive
+
+</pre>
+<p>网店回的响应报文原文：</p>
+<pre class="msg resp">HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 84
+Cache-Control: max-age=60
+ETag: "p42-v3"
+Last-Modified: Sat, 21 Nov 2026 08:00:00 GMT
+
+&lt;!doctype html&gt;
+&lt;title&gt;帆布托特包&lt;/title&gt;
+&lt;h1&gt;帆布托特包&lt;/h1&gt;
+&lt;p&gt;¥89&lt;/p&gt;
+</pre>
+<p>两份报文的结构是一样的，都分成四部分：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 245" width="640" role="img" aria-label="请求报文和响应报文的四个部分">
+  <text x="160" y="24" text-anchor="middle" class="title">请求报文（浏览器 → 服务器）</text>
+  <text x="480" y="24" text-anchor="middle" class="title">响应报文（服务器 → 浏览器）</text>
+  <rect x="10" y="36" width="300" height="30" class="hot"/>
+  <text x="18" y="56" class="title">请求行</text><text x="80" y="56" class="mono">GET /products/42 HTTP/1.1</text>
+  <rect x="10" y="66" width="300" height="70" class="obj"/>
+  <text x="18" y="86" class="title">首部</text>
+  <text x="80" y="86" class="mono">Host: shop.example.com</text>
+  <text x="80" y="106" class="mono">Accept: text/html</text>
+  <text x="80" y="126" class="mono">……</text>
+  <rect x="10" y="136" width="300" height="26" class="muted"/>
+  <text x="18" y="154" class="title">空行</text><text x="80" y="154" class="small">只有一个回车换行</text>
+  <rect x="10" y="162" width="300" height="40" class="plain"/>
+  <text x="18" y="187" class="title">正文</text><text x="80" y="187" class="small">GET 请求通常没有正文</text>
+  <rect x="330" y="36" width="300" height="30" class="ok"/>
+  <text x="338" y="56" class="title">状态行</text><text x="400" y="56" class="mono">HTTP/1.1 200 OK</text>
+  <rect x="330" y="66" width="300" height="70" class="obj"/>
+  <text x="338" y="86" class="title">首部</text>
+  <text x="400" y="86" class="mono">Content-Type: text/html</text>
+  <text x="400" y="106" class="mono">Content-Length: 84</text>
+  <text x="400" y="126" class="mono">……</text>
+  <rect x="330" y="136" width="300" height="26" class="muted"/>
+  <text x="338" y="154" class="title">空行</text><text x="400" y="154" class="small">只有一个回车换行</text>
+  <rect x="330" y="162" width="300" height="40" class="plain"/>
+  <text x="338" y="187" class="title">正文</text><text x="400" y="187" class="mono">&lt;!doctype html&gt;…</text>
+  <text x="320" y="228" text-anchor="middle" class="small">每一行以回车换行（\r\n）结束；空行之后是正文，正文有多少字节由 Content-Length 说明</text>
+</svg>
+<figcaption>请求以「请求行」开头，响应以「状态行」开头；后面都是首部、空行、正文</figcaption>
+</figure>
+<div class="term"><b>请求行</b>：请求报文的第一行，由三项组成，用空格隔开：<b>方法</b>（要对资源做什么，这里 <code>GET</code> 表示「获取」，第 4 节细讲）、<b>路径</b>（<code>/products/42</code>）、<b>协议版本</b>（<code>HTTP/1.1</code>）。</div>
+<div class="term"><b>状态行</b>：响应报文的第一行，也是三项：协议版本、<b>状态码</b>（三位数字，<code>200</code>）、<b>原因短语</b>（给人看的说明，<code>OK</code>）。程序只看状态码，第 8 节起细讲。</div>
+<div class="term"><b>首部</b>（header，也叫头部）：若干行 <code>名字: 值</code>，补充说明这次请求或响应。名字不区分大小写。</div>
+<div class="term"><b>空行</b>和<b>正文</b>（body，也叫主体）：首部结束后是一个空行，空行之后就是正文，也就是真正要传的数据：网页、图片、表单内容等。</div>
+<p>为什么要有空行和 <code>Content-Length</code>？第 5 课讲过，TCP 是<b>字节流</b>，它只保证字节按顺序到达，不会替你标出「一份报文到哪里结束」。所以 HTTP 自己定规矩：读到空行，就知道首部结束了；再按 <code>Content-Length</code> 读够那么多字节，就知道正文结束了。</p>
+<p>注意 <code>Content-Length</code> 数的是<b>字节</b>，不是字符。上面的正文有 63 个字符，但按 UTF-8 编码，「帆布托特包」每个汉字占 3 个字节（出现了两次，共 10 个汉字），¥ 占 2 个字节，所以是 63 − 10 − 1 + 10 × 3 + 2 = <b>84</b> 字节。</p>
+<p>常考的首部：</p>
+<table>
+  <tr><th>首部</th><th>出现在</th><th>作用</th></tr>
+  <tr><td><code>Host</code></td><td>请求</td><td>要访问哪个域名。HTTP/1.1 里<b>必须有</b>：一台服务器（一个 IP）上可以同时放好几个网站，只看 IP 分不出你要哪个，要靠 Host 区分（这叫<b>虚拟主机</b>）</td></tr>
+  <tr><td><code>User-Agent</code></td><td>请求</td><td>客户端是什么软件（哪种浏览器）</td></tr>
+  <tr><td><code>Accept</code></td><td>请求</td><td>客户端能接受什么类型的内容</td></tr>
+  <tr><td><code>Content-Type</code></td><td>都有</td><td>正文是什么类型：<code>text/html</code>（网页）、<code>application/json</code>（JSON 数据）、<code>image/png</code> 等</td></tr>
+  <tr><td><code>Content-Length</code></td><td>都有</td><td>正文的字节数</td></tr>
+  <tr><td><code>Connection</code></td><td>都有</td><td><code>keep-alive</code> 表示响应完不要关 TCP 连接，<code>close</code> 表示关（第 13 节）</td></tr>
+  <tr><td><code>Cookie</code> / <code>Set-Cookie</code></td><td>请求 / 响应</td><td>第 6 节</td></tr>
+  <tr><td><code>Location</code></td><td>响应</td><td>让浏览器去哪个新地址（第 9 节）</td></tr>
+  <tr><td><code>Cache-Control</code>、<code>ETag</code>、<code>Last-Modified</code></td><td>响应</td><td>缓存用（第 10 节）</td></tr>
+</table>
+
+<h2 id="methods">4. 方法：要对资源做什么</h2>
+<p>请求行的第一项是<b>方法</b>。同一个路径，配不同的方法，意思就不一样。网店用到的五个：</p>
+<table>
+  <tr><th>方法</th><th>含义</th><th>网店里的例子</th></tr>
+  <tr><td><code>GET</code></td><td>获取资源</td><td><code>GET /products/42</code>：看 42 号商品</td></tr>
+  <tr><td><code>POST</code></td><td>提交数据，让服务器处理（常用来新建）</td><td><code>POST /orders</code>：下一个新订单</td></tr>
+  <tr><td><code>PUT</code></td><td>用请求里的内容<b>整个替换</b>资源（没有就新建）</td><td><code>PUT /products/42</code>，正文写价格 79：把 42 号商品改成 79 元</td></tr>
+  <tr><td><code>DELETE</code></td><td>删除资源</td><td><code>DELETE /orders/1001</code>：取消 1001 号订单</td></tr>
+  <tr><td><code>HEAD</code></td><td>和 GET 一样，但服务器只回状态行和首部，<b>不回正文</b></td><td>只想知道商品页多大、有没有改过，不想下载整页</td></tr>
+</table>
+<p>另外还有 <code>PATCH</code>（只改资源的一部分）和 <code>OPTIONS</code>（问服务器「这个资源支持哪些方法」），了解即可。</p>
+<p>判断方法有两个性质，笔试很爱考：</p>
+<div class="term"><b>安全</b>：这个方法<b>不会改变服务器上的数据</b>，只是读。GET、HEAD、OPTIONS 是安全的。</div>
+<div class="term"><b>幂等</b>：同一个请求执行 1 次和执行很多次，服务器上的最终结果<b>一样</b>。</div>
+<p>拿网店逐个看「连发三次」会怎样：</p>
+<table>
+  <tr><th>请求</th><th>发 3 次之后</th><th>安全？</th><th>幂等？</th></tr>
+  <tr><td><code>GET /products/42</code></td><td>什么都没改</td><td>是</td><td>是</td></tr>
+  <tr><td><code>PUT /products/42</code>（价格 79）</td><td>价格是 79，和发 1 次一样</td><td>否</td><td>是</td></tr>
+  <tr><td><code>DELETE /orders/1001</code></td><td>订单没了，和发 1 次一样（后两次会回「找不到」，但服务器上的数据没再变）</td><td>否</td><td>是</td></tr>
+  <tr><td><code>POST /orders</code></td><td><b>下了 3 个订单</b></td><td>否</td><td><b>否</b></td></tr>
+</table>
+<p>记住：<b>安全的一定幂等</b>（什么都不改，执行多少次都一样），反过来不成立。<b>POST 既不安全也不幂等</b>。这就是为什么刷新一个刚提交过订单的页面时，浏览器会弹窗问「要重新提交表单吗」：它知道 POST 重发可能会再下一单。网络出错时，浏览器和代理可以放心地自动重试幂等的请求，但不会自动重试 POST。</p>
+
+<h2 id="get-post">5. GET 和 POST 的区别</h2>
+<p>这是题单里最常见的一题。看两份真实的报文：顾客按颜色筛选商品用 GET，下单用 POST。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 228" width="640" role="img" aria-label="GET 的参数在 URL 里，POST 的参数在正文里">
+  <text x="160" y="20" text-anchor="middle" class="title">GET：查红色的商品</text>
+  <text x="480" y="20" text-anchor="middle" class="title">POST：下单</text>
+  <rect x="10" y="30" width="300" height="160" class="plain"/>
+  <rect x="120" y="40" width="78" height="20" class="hot"/>
+  <text x="20" y="55" class="mono">GET /products?color=red HTTP/1.1</text>
+  <text x="20" y="75" class="mono">Host: shop.example.com</text>
+  <text x="20" y="95" class="small">（空行）</text>
+  <text x="20" y="115" class="small">（没有正文）</text>
+  <rect x="330" y="30" width="300" height="160" class="plain"/>
+  <text x="340" y="55" class="mono">POST /orders HTTP/1.1</text>
+  <text x="340" y="75" class="mono">Host: shop.example.com</text>
+  <text x="340" y="95" class="mono">Cookie: sid=7f3a9c</text>
+  <text x="340" y="115" class="mono">Content-Type: application/json</text>
+  <text x="340" y="135" class="mono">Content-Length: 25</text>
+  <text x="340" y="155" class="small">（空行）</text>
+  <rect x="337" y="160" width="202" height="21" class="hot"/>
+  <text x="340" y="176" class="mono">{"product_id":42,"qty":1}</text>
+  <text x="160" y="212" text-anchor="middle" class="small">参数在 URL 里：会进历史记录、书签、日志</text>
+  <text x="480" y="212" text-anchor="middle" class="small">参数在正文里：地址栏里看不到</text>
+</svg>
+<figcaption>橙色是参数所在的位置。<code>Content-Length: 25</code> 正好是 <code>{"product_id":42,"qty":1}</code> 的字节数</figcaption>
+</figure>
+<p>区别按重要程度排：</p>
+<table>
+  <tr><th></th><th>GET</th><th>POST</th></tr>
+  <tr><td><b>语义</b>（根本区别）</td><td>获取资源</td><td>提交数据让服务器处理</td></tr>
+  <tr><td>安全 / 幂等</td><td>安全、幂等</td><td>都不是</td></tr>
+  <tr><td>参数放哪</td><td>通常放在 URL 的查询参数里</td><td>通常放在正文里</td></tr>
+  <tr><td>能不能缓存</td><td>默认可以被浏览器缓存（第 10 节）</td><td>默认不缓存</td></tr>
+  <tr><td>历史记录、书签</td><td>完整 URL 会留在历史记录里，可以收藏</td><td>正文不会留下；收藏的只是地址</td></tr>
+  <tr><td>刷新 / 后退</td><td>无害，直接重发</td><td>浏览器会提示「重新提交表单」</td></tr>
+  <tr><td>长度限制</td><td colspan="2">HTTP 协议<b>本身没有</b>限制。GET 的限制来自浏览器和服务器对 URL 长度的限制（常见几 KB 到几十 KB）；POST 的正文一般可以很大</td></tr>
+</table>
+<p>几个常见的<b>错误说法</b>，选择题里常拿来当干扰项：</p>
+<ul>
+  <li>「POST 比 GET 安全。」不对。参数在正文里只是<b>不显示在地址栏</b>，报文在网上传的时候一样是明文，抓包就能看到。真正防止被偷看要靠 HTTPS（第 14 节）。这里的「安全」也和第 4 节「安全方法」的意思不同，别混。</li>
+  <li>「GET 不能带正文，POST 不能带查询参数。」都不绝对。<code>POST /orders?from=app</code> 完全合法；GET 带正文协议没禁止，但没有规定它的意义，很多服务器会忽略，所以不要这么用。</li>
+  <li>「POST 一定发两个 TCP 报文段，GET 发一个。」不是协议规定，是个别客户端的实现细节。</li>
+</ul>
+
+<h2 id="cookie">6. 无状态，以及 Cookie 和 Session</h2>
+<div class="term"><b>无状态</b>：HTTP 协议本身不记得之前的请求。每个请求都是独立的，服务器处理第二个请求时，并不知道它和第一个请求来自同一个人。</div>
+<p>无状态让服务器简单：不用为每个顾客保存什么，任何一台服务器都能处理任何一个请求。但网店需要「记住」顾客：登录以后再下单，服务器得知道下单的是谁。解决办法是让浏览器每次都带上一个「号码牌」：</p>
+<div class="term"><b>Cookie</b>：服务器在响应里用 <code>Set-Cookie</code> 首部交给浏览器的一小段数据（名=值）。浏览器把它存下来，以后每次请求<b>同一个网站</b>时，都自动放进 <code>Cookie</code> 首部带回去。</div>
+<div class="term"><b>Session</b>（会话）：服务器为每个登录的顾客保存的一份数据（是谁、购物车里有什么等），存在<b>服务器上</b>。每份 session 有一个随机生成的编号，叫 <b>session ID</b>。服务器只把这个编号放进 Cookie 交给浏览器。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 275" width="640" role="img" aria-label="登录时服务器建会话并用 Set-Cookie 下发 sid，下单时浏览器带上 Cookie，服务器查表知道是 alice">
+  <rect x="30" y="10" width="100" height="28" rx="4" class="obj"/><text x="80" y="29" text-anchor="middle">浏览器</text>
+  <rect x="345" y="10" width="110" height="28" rx="4" class="obj"/><text x="400" y="29" text-anchor="middle" class="mono">shop-server</text>
+  <line x1="80" y1="38" x2="80" y2="268" class="dash"/>
+  <line x1="400" y1="38" x2="400" y2="268" class="dash"/>
+  <text x="240" y="62" text-anchor="middle" class="small">① POST /login　正文：user=alice&amp;pass=s3cret</text>
+  <line x1="82" y1="70" x2="396" y2="70" class="line" marker-end="url(#arrow)"/>
+  <rect x="470" y="52" width="160" height="50" rx="4" class="hot"/>
+  <text x="550" y="72" text-anchor="middle" class="small">② 新建会话</text>
+  <text x="550" y="92" text-anchor="middle" class="mono">sid=7f3a9c → alice</text>
+  <line x1="402" y1="77" x2="466" y2="77" class="dash" marker-end="url(#arrow)"/>
+  <text x="240" y="112" text-anchor="middle" class="small">③ 200 OK</text>
+  <text x="240" y="127" text-anchor="middle" class="small mono">Set-Cookie: sid=7f3a9c; HttpOnly; Secure</text>
+  <line x1="398" y1="135" x2="84" y2="135" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="90" y="162" class="small">④ 浏览器存下 sid=7f3a9c</text>
+  <text x="240" y="190" text-anchor="middle" class="small">⑤ POST /orders　首部 Cookie: sid=7f3a9c</text>
+  <line x1="82" y1="198" x2="396" y2="198" class="line" marker-end="url(#arrow)"/>
+  <rect x="470" y="180" width="160" height="40" rx="4" class="hot"/>
+  <text x="550" y="205" text-anchor="middle" class="small">⑥ 查会话表：是 alice</text>
+  <line x1="402" y1="202" x2="466" y2="202" class="dash" marker-end="url(#arrow)"/>
+  <text x="240" y="245" text-anchor="middle" class="small">⑦ 201 Created：alice 的订单建好了</text>
+  <line x1="398" y1="253" x2="84" y2="253" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+</svg>
+<figcaption>浏览器手里只有编号 7f3a9c；「它是 alice」这件事只记在服务器的会话表里</figcaption>
+</figure>
+<table>
+  <tr><th></th><th>Cookie</th><th>Session</th></tr>
+  <tr><td>存在哪</td><td>浏览器</td><td>服务器</td></tr>
+  <tr><td>大小</td><td>每个约 4 KB 以内</td><td>没有这个限制，由服务器决定</td></tr>
+  <tr><td>安全性</td><td>用户能看到、能改，不要放密码等敏感信息</td><td>用户看不到内容，只拿到一个随机编号</td></tr>
+  <tr><td>关系</td><td colspan="2">Session 通常<b>依赖</b> Cookie 来传递 session ID。如果浏览器禁用了 Cookie，可以把 session ID 写进 URL（<b>URL 重写</b>），但这样容易泄露</td></tr>
+</table>
+<p><code>Set-Cookie</code> 后面那几个属性：<code>HttpOnly</code> 表示网页里的脚本读不到这个 Cookie（防止被恶意脚本偷走）；<code>Secure</code> 表示只在 HTTPS 连接上发送；<code>Max-Age=3600</code> 或 <code>Expires=…</code> 规定多久后过期，不写就是关掉浏览器即失效。</p>
+
+<h2 id="proxy">7. 网店的架构：反向代理</h2>
+<p>到目前为止，我们把「网店服务器」当成一个整体。要看懂 5xx 状态码是谁返回的，得看清它里面的分工。网店服务器上跑着三个进程：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 170" width="640" role="img" aria-label="浏览器到 nginx 反向代理到 shop-server 应用到数据库">
+  <rect x="185" y="30" width="450" height="125" rx="8" fill="#fafafa" stroke="#999" stroke-dasharray="5 4"/>
+  <text x="195" y="48" class="small">网店服务器 198.51.100.80（三个进程在同一台机器上）</text>
+  <rect x="20" y="70" width="100" height="50" rx="5" class="plain"/>
+  <text x="70" y="91" text-anchor="middle">浏览器</text><text x="70" y="110" text-anchor="middle" class="small mono">192.168.1.23</text>
+  <rect x="200" y="70" width="120" height="50" rx="5" class="obj"/>
+  <text x="260" y="91" text-anchor="middle" class="mono">nginx</text><text x="260" y="110" text-anchor="middle" class="small">反向代理，端口 443</text>
+  <rect x="400" y="70" width="120" height="50" rx="5" class="obj"/>
+  <text x="460" y="91" text-anchor="middle" class="mono">shop-server</text><text x="460" y="110" text-anchor="middle" class="small">应用，端口 8080</text>
+  <rect x="560" y="70" width="70" height="50" rx="5" class="obj"/>
+  <text x="595" y="91" text-anchor="middle">数据库</text><text x="595" y="110" text-anchor="middle" class="small">端口 3306</text>
+  <line x1="124" y1="95" x2="196" y2="95" class="line" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="160" y="86" text-anchor="middle" class="small">HTTPS</text>
+  <line x1="324" y1="95" x2="396" y2="95" class="line" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="360" y="86" text-anchor="middle" class="small">HTTP</text>
+  <line x1="524" y1="95" x2="556" y2="95" class="line" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="540" y="86" text-anchor="middle" class="small">SQL</text>
+  <text x="260" y="142" text-anchor="middle" class="small">顾客只看得到它</text>
+  <text x="460" y="142" text-anchor="middle" class="small">它的上游</text>
+</svg>
+<figcaption>顾客的请求先到 nginx；nginx 转给 shop-server；shop-server 查数据库，把结果写成响应交回 nginx；nginx 再转回给浏览器</figcaption>
+</figure>
+<div class="term"><b>反向代理</b>：挡在应用前面的一台服务器。客户端以为自己在和网站说话，其实只连到了代理；代理再把请求转给后面真正干活的应用，把应用的响应转回给客户端。本课的反向代理是一个叫 <b>nginx</b> 的常用软件。</div>
+<div class="term"><b>上游</b>（upstream）：代理把请求转给的那个服务器，这里就是 <code>shop-server</code>。</div>
+<div class="term"><b>网关</b>：HTTP 状态码里说的「网关」，指的就是这种<b>替客户端去找上游要结果</b>的中间服务器。反向代理就是一种网关。</div>
+<p>为什么要多这一层？nginx 帮应用做了几件通用的事：</p>
+<ul>
+  <li><b>处理 HTTPS</b>：TLS 的加解密在 nginx 上做完，<code>shop-server</code> 收到的已经是普通 HTTP。</li>
+  <li><b>负载均衡</b>：可以在后面放好几个 <code>shop-server</code>，把请求轮流分给它们。</li>
+  <li><b>限流、缓存静态文件</b>：请求太多时直接挡掉一部分（第 12 节的 503）；图片、样式文件直接由 nginx 回，不打扰应用。</li>
+</ul>
+<p>与之相对的<b>正向代理</b>是替<b>客户端</b>出面的代理，例如公司网络里所有员工上网都经过的那台代理。正向代理隐藏的是客户端，反向代理隐藏的是服务器。</p>
+<p>记住这张图，后面每个状态码都会问一句：<b>是图上的哪一个返回的？</b></p>
+
+<h2 id="status-classes">8. 状态码的五大类</h2>
+<div class="term"><b>状态码</b>：响应状态行里的三位数字，告诉客户端这次请求的结果。<b>第一位数字决定大类</b>，后两位是这一类里的细分。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 150" width="640" role="img" aria-label="状态码五大类：1xx 信息、2xx 成功、3xx 重定向、4xx 客户端错误、5xx 服务器错误">
+  <rect x="8" y="20" width="116" height="56" rx="5" class="muted"/>
+  <text x="66" y="44" text-anchor="middle" class="title mono">1xx</text><text x="66" y="64" text-anchor="middle">信息</text>
+  <rect x="134" y="20" width="116" height="56" rx="5" class="ok"/>
+  <text x="192" y="44" text-anchor="middle" class="title mono">2xx</text><text x="192" y="64" text-anchor="middle">成功</text>
+  <rect x="260" y="20" width="116" height="56" rx="5" class="obj"/>
+  <text x="318" y="44" text-anchor="middle" class="title mono">3xx</text><text x="318" y="64" text-anchor="middle">重定向</text>
+  <rect x="386" y="20" width="116" height="56" rx="5" class="hot"/>
+  <text x="444" y="44" text-anchor="middle" class="title mono">4xx</text><text x="444" y="64" text-anchor="middle">客户端错误</text>
+  <rect x="512" y="20" width="120" height="56" rx="5" class="bad"/>
+  <text x="572" y="44" text-anchor="middle" class="title mono">5xx</text><text x="572" y="64" text-anchor="middle">服务器错误</text>
+  <text x="66" y="98" text-anchor="middle" class="small">收到了，接着发</text>
+  <text x="192" y="98" text-anchor="middle" class="small">办成了</text>
+  <text x="318" y="98" text-anchor="middle" class="small">要再走一步</text>
+  <text x="444" y="98" text-anchor="middle" class="small">请求本身有问题</text>
+  <text x="572" y="98" text-anchor="middle" class="small">请求没问题</text>
+  <text x="572" y="114" text-anchor="middle" class="small">服务器没办好</text>
+  <text x="444" y="138" text-anchor="middle" class="small">改请求才有用</text>
+  <text x="572" y="138" text-anchor="middle" class="small">原样重试可能就好了</text>
+</svg>
+<figcaption>判断 4xx 还是 5xx 只问一句：<b>是谁的错</b>？客户端发的请求不对是 4xx；请求对，服务器这边出了事是 5xx</figcaption>
+</figure>
+<p>常考的状态码（网店里的例子在动画里都能点出来）：</p>
+<table>
+  <tr><th>状态码</th><th>含义</th><th>网店里什么时候出现</th></tr>
+  <tr><td><code>100 Continue</code></td><td>首部收到了，可以接着发正文</td><td>上传大文件前先问一句（了解即可）</td></tr>
+  <tr><td><code>200 OK</code></td><td>成功</td><td>正常打开商品页</td></tr>
+  <tr><td><code>201 Created</code></td><td>成功，并<b>新建</b>了一个资源</td><td><code>POST /orders</code> 下单成功，首部 <code>Location: /orders/1001</code> 指向新订单</td></tr>
+  <tr><td><code>204 No Content</code></td><td>成功，但响应<b>没有正文</b></td><td><code>DELETE /orders/1001</code> 取消成功，没什么要回的</td></tr>
+  <tr><td><code>206 Partial Content</code></td><td>只返回了资源的<b>一部分</b></td><td>请求里带 <code>Range: bytes=0-1023</code>，只要商品视频的前 1024 字节（断点续传、视频拖动进度条）</td></tr>
+  <tr><td><code>301</code> / <code>302</code></td><td>永久 / 临时重定向</td><td>第 9 节</td></tr>
+  <tr><td><code>304 Not Modified</code></td><td>没改过，用你的缓存</td><td>第 10 节</td></tr>
+  <tr><td><code>400 Bad Request</code></td><td>请求格式不对，服务器看不懂</td><td>下单的 JSON 少了一个括号</td></tr>
+  <tr><td><code>401</code> / <code>403</code></td><td>没认证 / 没权限</td><td>第 11 节</td></tr>
+  <tr><td><code>404 Not Found</code></td><td>资源不存在</td><td>访问 <code>/products/999</code>，没有这个商品</td></tr>
+  <tr><td><code>405 Method Not Allowed</code></td><td>资源存在，但<b>不支持这个方法</b></td><td>用 GET 访问只收 POST 的 <code>/orders</code></td></tr>
+  <tr><td><code>500 Internal Server Error</code></td><td>服务器内部出错</td><td>shop-server 的代码抛了异常</td></tr>
+  <tr><td><code>502</code> / <code>503</code> / <code>504</code></td><td>网关错误 / 服务不可用 / 网关超时</td><td>第 12 节</td></tr>
+</table>
+
+<h2 id="redirect">9. 重定向：301 和 302</h2>
+<div class="term"><b>重定向</b>：服务器不直接给资源，而是告诉浏览器「去另一个地址拿」。响应的状态码是 3xx，新地址写在 <code>Location</code> 首部里。浏览器收到后<b>自动</b>向新地址再发一次请求，顾客只会看到地址栏变了。</div>
+<p>网店以前用的是 <code>/item.php?id=42</code> 这种网址，改版后统一换成 <code>/products/42</code>。可是搜索引擎、顾客的书签里还存着旧网址。nginx 上配一条规则，凡是旧网址，直接回：</p>
+<pre class="msg resp">HTTP/1.1 301 Moved Permanently
+Location: https://shop.example.com/products/42
+Content-Length: 0
+
+</pre>
+<figure class="fig">
+<svg viewBox="0 0 640 200" width="640" role="img" aria-label="浏览器请求旧网址，nginx 回 301 和 Location，浏览器自动请求新网址拿到 200">
+  <rect x="30" y="10" width="100" height="28" rx="4" class="plain"/><text x="80" y="29" text-anchor="middle">浏览器</text>
+  <rect x="400" y="10" width="100" height="28" rx="4" class="obj"/><text x="450" y="29" text-anchor="middle" class="mono">nginx</text>
+  <line x1="80" y1="38" x2="80" y2="192" class="dash"/>
+  <line x1="450" y1="38" x2="450" y2="192" class="dash"/>
+  <text x="265" y="60" text-anchor="middle" class="small">① GET /item.php?id=42</text>
+  <line x1="82" y1="68" x2="446" y2="68" class="line" marker-end="url(#arrow)"/>
+  <text x="265" y="94" text-anchor="middle" class="small">② 301　Location: /products/42</text>
+  <line x1="448" y1="102" x2="84" y2="102" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="265" y="130" text-anchor="middle" class="small">③ GET /products/42（浏览器自动发）</text>
+  <line x1="82" y1="138" x2="446" y2="138" class="line" marker-end="url(#arrow)"/>
+  <text x="265" y="166" text-anchor="middle" class="small">④ 200 OK　帆布托特包的页面</text>
+  <line x1="448" y1="174" x2="84" y2="174" class="arrow-green" marker-end="url(#arrow-green)"/>
+  <text x="510" y="98" class="small">是 nginx 回的：</text>
+  <text x="510" y="114" class="small">请求根本没转给</text>
+  <text x="510" y="130" class="small">shop-server</text>
+</svg>
+<figcaption>重定向多花了一个来回。④ 的 200 其实是 nginx 转给 shop-server 后拿回来的，这里省略了后面的两个进程</figcaption>
+</figure>
+<p>301 和 302 的流程完全一样，区别只在「这个搬家是不是永久的」，而这决定了<b>浏览器和搜索引擎以后怎么做</b>：</p>
+<table>
+  <tr><th></th><th><code>301 Moved Permanently</code>（永久）</th><th><code>302 Found</code>（临时）</th></tr>
+  <tr><td>意思</td><td>旧地址作废了，以后都去新地址</td><td>这次先去新地址，旧地址以后还用</td></tr>
+  <tr><td>浏览器</td><td>会<b>缓存</b>这个跳转：下次访问旧地址，不再问服务器，直接去新地址</td><td>不缓存，每次访问旧地址都要先问服务器</td></tr>
+  <tr><td>搜索引擎</td><td>把旧地址的排名、收录<b>转给新地址</b>，以后只收录新地址</td><td>继续收录旧地址</td></tr>
+  <tr><td>网店的例子</td><td>改版换网址；<code>http://</code> 统一跳到 <code>https://</code>；换域名</td><td>没登录就访问「我的订单」，先临时跳到登录页，登录后再跳回来；商品临时下架时跳到活动页</td></tr>
+</table>
+<p>如果把临时跳转错写成 301，浏览器记住了跳转，等你想恢复旧地址时，老顾客的浏览器还是会自己跳走，很难收回。所以<b>拿不准就用 302</b>。</p>
+<p>补充两个：<code>307</code> 和 <code>308</code> 分别是 302 和 301 的「严格版」。历史上很多浏览器收到 301 / 302 后，会把原来的 POST 改成 GET 去请求新地址；307 / 308 规定<b>方法和正文都不许变</b>，原来是 POST 就还是 POST。</p>
+
+<h2 id="cache">10. 304 与缓存</h2>
+<div class="term"><b>浏览器缓存</b>：浏览器把拿到过的响应存在本机，下次要同一个资源时，尽量不再从网上下载。</div>
+<p>第 3 节的响应里有三个首部就是为缓存准备的：</p>
+<ul>
+  <li><code>Cache-Control: max-age=60</code>：这份副本 60 秒内都是<b>新鲜</b>的。60 秒内再访问，浏览器直接用本机副本，<b>一个请求都不发</b>，这叫<b>强缓存</b>。</li>
+  <li><code>ETag: "p42-v3"</code>：服务器给这个版本的页面起的<b>版本标签</b>，内容一变，标签就变。</li>
+  <li><code>Last-Modified: Sat, 21 Nov 2026 08:00:00 GMT</code>：这个资源最后修改的时间。</li>
+</ul>
+<p>60 秒过了，副本不保证新鲜了，但多半没变。浏览器就带着版本标签去问一句「我手里这份还能用吗」，这叫<b>协商缓存</b>（也叫条件请求）：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 230" width="640" role="img" aria-label="浏览器带 If-None-Match 询问，没变则回 304 无正文，变了则回 200 带新正文">
+  <rect x="20" y="10" width="290" height="96" rx="5" class="plain"/>
+  <text x="30" y="30" class="title">浏览器发：</text>
+  <text x="30" y="52" class="mono">GET /products/42 HTTP/1.1</text>
+  <text x="30" y="72" class="mono">If-None-Match: "p42-v3"</text>
+  <text x="30" y="92" class="mono">If-Modified-Since: Sat, 21 Nov…</text>
+  <line x1="315" y1="58" x2="350" y2="58" class="line" marker-end="url(#arrow)"/>
+  <rect x="355" y="10" width="270" height="96" rx="5" class="hot"/>
+  <text x="365" y="30" class="title">shop-server 比一比：</text>
+  <text x="365" y="52">现在的版本标签还是 "p42-v3" 吗？</text>
+  <text x="365" y="72" class="small">（或：从那个时间以后改过没有？）</text>
+  <line x1="420" y1="108" x2="230" y2="142" class="line" marker-end="url(#arrow)"/>
+  <line x1="540" y1="108" x2="520" y2="142" class="line" marker-end="url(#arrow)"/>
+  <text x="300" y="126" class="small">没变</text>
+  <text x="540" y="132" class="small">变了</text>
+  <rect x="20" y="146" width="300" height="76" rx="5" class="ok"/>
+  <text x="30" y="168" class="mono title">HTTP/1.1 304 Not Modified</text>
+  <text x="30" y="190">没有正文，只有几行首部</text>
+  <text x="30" y="210" class="small">浏览器继续用本机那份，再新鲜 60 秒</text>
+  <rect x="340" y="146" width="285" height="76" rx="5" class="obj"/>
+  <text x="350" y="168" class="mono title">HTTP/1.1 200 OK</text>
+  <text x="350" y="190" class="mono">ETag: "p42-v4"</text>
+  <text x="350" y="210" class="small">带上新页面的完整正文</text>
+</svg>
+<figcaption>304 省的是正文：要是商品页有 200 KB，这一次只传了几百字节的首部</figcaption>
+</figure>
+<table>
+  <tr><th>服务器第一次给的</th><th>浏览器下次带回的</th><th>比较的是</th></tr>
+  <tr><td><code>Last-Modified</code></td><td><code>If-Modified-Since</code></td><td>修改时间。精度只到秒，一秒内改两次分不出；内容没变只是时间变了也会误判为「改过」</td></tr>
+  <tr><td><code>ETag</code></td><td><code>If-None-Match</code></td><td>版本标签。按内容算，更准；两个都有时<b>优先看 ETag</b></td></tr>
+</table>
+<p>要点：<b>304 是 3xx</b>，但它不是让你去别的地址，而是让你「回去用自己的缓存」，这种「重定向」指回本地。另外，强缓存命中时根本不发请求，浏览器的开发者工具里会显示 200（from cache），不是 304；只有发了条件请求、服务器确认没变，才是 304。</p>
+
+<h2 id="auth">11. 4xx：401 和 403</h2>
+<p>4xx 表示「请求本身有问题」。最容易混的是 401 和 403，先分清两个词：</p>
+<div class="term"><b>认证</b>（authentication）：确认「你是谁」。网店靠 Cookie 里的 session ID 认人（第 6 节）。</div>
+<div class="term"><b>授权</b>（authorization）：确认「你能不能做这件事」。知道你是 alice 以后，还要看这条订单是不是 alice 的。</div>
+<p>顾客看订单 <code>GET /orders/1002</code> 时，shop-server 依次过两关：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 215" width="640" role="img" aria-label="先认证再授权：认证失败回 401，授权失败回 403，都通过回 200">
+  <rect x="10" y="30" width="120" height="56" rx="5" class="plain"/>
+  <text x="70" y="52" text-anchor="middle">请求到达</text>
+  <text x="70" y="72" text-anchor="middle" class="small mono">GET /orders/1002</text>
+  <rect x="160" y="30" width="170" height="56" rx="5" class="obj"/>
+  <text x="245" y="52" text-anchor="middle">① 认证：你是谁？</text>
+  <text x="245" y="72" text-anchor="middle" class="small">Cookie 里有有效的 sid 吗</text>
+  <rect x="360" y="30" width="170" height="56" rx="5" class="obj"/>
+  <text x="445" y="52" text-anchor="middle">② 授权：你能看吗？</text>
+  <text x="445" y="72" text-anchor="middle" class="small">订单 1002 属于你吗</text>
+  <rect x="560" y="30" width="72" height="56" rx="5" class="ok"/>
+  <text x="596" y="63" text-anchor="middle" class="mono">200 OK</text>
+  <line x1="132" y1="58" x2="156" y2="58" class="line" marker-end="url(#arrow)"/>
+  <line x1="332" y1="58" x2="356" y2="58" class="line" marker-end="url(#arrow)"/>
+  <line x1="532" y1="58" x2="556" y2="58" class="line" marker-end="url(#arrow)"/>
+  <text x="344" y="50" text-anchor="middle" class="small">是</text>
+  <text x="544" y="50" text-anchor="middle" class="small">是</text>
+  <line x1="245" y1="88" x2="245" y2="126" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <line x1="445" y1="88" x2="445" y2="126" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="253" y="112" class="small">否</text>
+  <text x="453" y="112" class="small">否</text>
+  <rect x="160" y="130" width="170" height="50" rx="5" class="bad"/>
+  <text x="245" y="151" text-anchor="middle" class="mono title">401 Unauthorized</text>
+  <text x="245" y="170" text-anchor="middle" class="small">不知道你是谁：先登录</text>
+  <rect x="360" y="130" width="170" height="50" rx="5" class="bad"/>
+  <text x="445" y="151" text-anchor="middle" class="mono title">403 Forbidden</text>
+  <text x="445" y="170" text-anchor="middle" class="small">知道你是谁，但不让看</text>
+  <text x="320" y="204" text-anchor="middle" class="small">alice 看 1002 号（bob 的订单）：过了第一关，卡在第二关，所以是 403</text>
+</svg>
+<figcaption>两个都是 shop-server 返回的：只有应用知道 sid 对应谁、订单属于谁</figcaption>
+</figure>
+<table>
+  <tr><th></th><th><code>401 Unauthorized</code></th><th><code>403 Forbidden</code></th></tr>
+  <tr><td>卡在哪一关</td><td>认证：服务器不知道你是谁（没带凭证，或凭证过期、无效）</td><td>授权：服务器知道你是谁，但你没有权限</td></tr>
+  <tr><td>重试有没有用</td><td>有：登录拿到有效凭证再来，就可能成功</td><td>没有：换个凭证登录同一个账号也没用，除非管理员给你加权限</td></tr>
+  <tr><td>网店的例子</td><td>没登录（没带 Cookie）就请求 <code>/orders/1001</code></td><td>alice 登录了，却去看 bob 的 <code>/orders/1002</code></td></tr>
+  <tr><td>响应里的特征</td><td>协议要求带 <code>WWW-Authenticate</code> 首部，说明该怎么认证</td><td>无特殊首部</td></tr>
+</table>
+<p>名字有点误导：401 的原因短语叫 Unauthorized（未授权），但它说的其实是<b>未认证</b>。记法：<b>401 = 你是谁？403 = 我知道你是谁，但不行。</b></p>
+<p>两个实际中的变化：</p>
+<ul>
+  <li>顾客在浏览器里点「我的订单」时，网店通常不回 401，而是回 <b>302</b> 跳到登录页（第 9 节），对人更友好。给程序调用的接口（例如 App 请求 <code>/orders/1001</code>）才直接回 401。</li>
+  <li>有的网站对没权限的资源故意回 <b>404</b> 而不是 403，免得让人知道「这条订单是存在的」。</li>
+</ul>
+<p>再对比一下另外三个 4xx：<b>400</b> 是请求的格式坏了（服务器看不懂）；<b>404</b> 是路径对应的资源不存在；<b>405</b> 是资源存在，但不支持这个方法（响应会带 <code>Allow: POST</code> 首部说明它支持哪些）。</p>
+
+<h2 id="server-errors">12. 5xx：500、502、503、504</h2>
+<p>5xx 表示请求没问题，是服务器这边没办好。回到第 7 节的架构图，四个 5xx 恰好出在不同的位置：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 330" width="640" role="img" aria-label="500 出在 shop-server，502 是 nginx 连不上 shop-server，503 是 nginx 限流，504 是 nginx 等 shop-server 超时">
+  <text x="10" y="44" class="mono title">500</text><text x="10" y="62" class="small">内部错误</text>
+  <rect x="110" y="20" width="100" height="36" rx="5" class="obj"/><text x="160" y="43" text-anchor="middle" class="mono">nginx</text>
+  <rect x="300" y="20" width="120" height="36" rx="5" class="bad"/><text x="360" y="43" text-anchor="middle" class="mono">shop-server</text>
+  <rect x="510" y="20" width="90" height="36" rx="5" class="obj"/><text x="555" y="43" text-anchor="middle">数据库</text>
+  <line x1="214" y1="38" x2="296" y2="38" class="line" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <line x1="424" y1="38" x2="506" y2="38" class="line"/>
+  <text x="110" y="76" class="small">shop-server 的代码抛了异常，它自己回 500；nginx 原样转给浏览器</text>
+
+  <text x="10" y="124" class="mono title">502</text><text x="10" y="142" class="small">网关错误</text>
+  <rect x="110" y="100" width="100" height="36" rx="5" class="hot"/><text x="160" y="123" text-anchor="middle" class="mono">nginx</text>
+  <rect x="300" y="100" width="120" height="36" rx="5" class="muted"/><text x="360" y="123" text-anchor="middle" class="mono">shop-server</text>
+  <rect x="510" y="100" width="90" height="36" rx="5" class="muted"/><text x="555" y="123" text-anchor="middle">数据库</text>
+  <line x1="214" y1="118" x2="296" y2="118" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <line x1="248" y1="110" x2="262" y2="126" class="arrow-red"/><line x1="262" y1="110" x2="248" y2="126" class="arrow-red"/>
+  <text x="360" y="150" text-anchor="middle" class="small">进程挂了</text>
+  <text x="110" y="166" class="small">nginx 连 8080 端口，对方回 RST（没人在听）：连不上，立刻回 502</text>
+
+  <text x="10" y="204" class="mono title">503</text><text x="10" y="222" class="small">服务不可用</text>
+  <rect x="110" y="180" width="100" height="36" rx="5" class="bad"/><text x="160" y="203" text-anchor="middle" class="mono">nginx</text>
+  <rect x="300" y="180" width="120" height="36" rx="5" class="obj"/><text x="360" y="203" text-anchor="middle" class="mono">shop-server</text>
+  <rect x="510" y="180" width="90" height="36" rx="5" class="obj"/><text x="555" y="203" text-anchor="middle">数据库</text>
+  <line x1="214" y1="198" x2="296" y2="198" class="dash"/>
+  <line x1="424" y1="198" x2="506" y2="198" class="line"/>
+  <text x="110" y="246" class="small">秒杀时每秒来的请求超过上限，nginx 直接挡掉多出的部分，不转给应用</text>
+
+  <text x="10" y="284" class="mono title">504</text><text x="10" y="302" class="small">网关超时</text>
+  <rect x="110" y="260" width="100" height="36" rx="5" class="hot"/><text x="160" y="283" text-anchor="middle" class="mono">nginx</text>
+  <rect x="300" y="260" width="120" height="36" rx="5" class="hot"/><text x="360" y="283" text-anchor="middle" class="mono">shop-server</text>
+  <rect x="510" y="260" width="90" height="36" rx="5" class="hot"/><text x="555" y="283" text-anchor="middle">数据库</text>
+  <line x1="214" y1="278" x2="296" y2="278" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <line x1="424" y1="278" x2="506" y2="278" class="line" marker-end="url(#arrow)"/>
+  <text x="255" y="272" text-anchor="middle" class="small">等 60 秒</text>
+  <text x="465" y="272" text-anchor="middle" class="small">慢查询</text>
+  <text x="110" y="320" class="small">请求已经交给 shop-server，它还在等数据库；nginx 等满 60 秒没等到响应，回 504</text>
+</svg>
+<figcaption>红色是出问题的地方。只有 500 是应用自己回的；502、503、504 都是 nginx（网关）替应用回的</figcaption>
+</figure>
+<table>
+  <tr><th>状态码</th><th>谁返回</th><th>发生了什么</th><th>典型原因</th></tr>
+  <tr><td><code>500 Internal Server Error</code></td><td>shop-server</td><td>应用收到了请求，处理时自己出错</td><td>代码 bug、空指针、未处理的异常</td></tr>
+  <tr><td><code>502 Bad Gateway</code></td><td>nginx</td><td>nginx 从上游<b>拿不到合法的响应</b>：连不上，或者上游回了乱七八糟的东西、半路断了</td><td>shop-server 进程挂了或在重启；端口配错</td></tr>
+  <tr><td><code>503 Service Unavailable</code></td><td>nginx（或应用）</td><td>服务器<b>暂时</b>不能处理：太忙或在维护。可以带 <code>Retry-After: 30</code> 告诉客户端 30 秒后再来</td><td>过载限流、停机维护</td></tr>
+  <tr><td><code>504 Gateway Timeout</code></td><td>nginx</td><td>nginx 把请求转给了上游，但上游<b>在规定时间内没回响应</b></td><td>慢 SQL、应用卡死、调用的外部服务太慢</td></tr>
+</table>
+<p><b>502 和 504 怎么分</b>：两个都是网关在抱怨上游，区别在「上游有没有及时回话」。</p>
+<ul>
+  <li><b>502：上游回的话不对，或者根本连不上。</b>通常<b>很快</b>就出现：nginx 去连 8080，被 RST 拒绝（第 5 课：对方端口上没有进程在监听时，会回 RST），马上就知道不行了。</li>
+  <li><b>504：上游一直不回话。</b>一定是等满了超时时间才出现（nginx 默认等 60 秒）。连接是通的，请求也送到了，只是 shop-server 迟迟没有写回响应。</li>
+</ul>
+<p>排查时的思路因此也不同：看到 502，先查应用进程还在不在、端口对不对；看到 504，先查应用里什么操作慢（最常见的是数据库查询，第 8 课讲怎么用索引加速）。</p>
+<p><b>500 和 503 怎么分</b>：500 是应用出了 bug，原样重试多半还错；503 是暂时的，等一会儿再试就可能成功。</p>
+
+<h2 id="versions">13. HTTP 的版本：1.0、1.1、2、3</h2>
+<p>网店的商品页除了 HTML，还引用了 4 张商品图片，一共 5 个资源，浏览器要发 5 个请求。下面只数 RTT（不算 DNS、TLS 和传数据本身的时间），看各版本加载它们要多久：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 228" width="640" role="img" aria-label="加载 1 个 HTML 和 4 张图片：HTTP/1.0 要 10 个 RTT，HTTP/1.1 持久连接 6 个，HTTP/2 多路复用 3 个">
+  <text x="10" y="44" class="title">HTTP/1.0</text><text x="10" y="62" class="small">10 个 RTT</text>
+  <rect x="120" y="30" width="50" height="28" class="muted"/><text x="145" y="49" text-anchor="middle" class="small">握手</text>
+  <rect x="170" y="30" width="50" height="28" class="obj"/><text x="195" y="49" text-anchor="middle" class="small">HTML</text>
+  <rect x="220" y="30" width="50" height="28" class="muted"/><text x="245" y="49" text-anchor="middle" class="small">握手</text>
+  <rect x="270" y="30" width="50" height="28" class="hot"/><text x="295" y="49" text-anchor="middle" class="small">图 1</text>
+  <rect x="320" y="30" width="50" height="28" class="muted"/><text x="345" y="49" text-anchor="middle" class="small">握手</text>
+  <rect x="370" y="30" width="50" height="28" class="hot"/><text x="395" y="49" text-anchor="middle" class="small">图 2</text>
+  <rect x="420" y="30" width="50" height="28" class="muted"/><text x="445" y="49" text-anchor="middle" class="small">握手</text>
+  <rect x="470" y="30" width="50" height="28" class="hot"/><text x="495" y="49" text-anchor="middle" class="small">图 3</text>
+  <rect x="520" y="30" width="50" height="28" class="muted"/><text x="545" y="49" text-anchor="middle" class="small">握手</text>
+  <rect x="570" y="30" width="50" height="28" class="hot"/><text x="595" y="49" text-anchor="middle" class="small">图 4</text>
+  <text x="10" y="104" class="title">HTTP/1.1</text><text x="10" y="122" class="small">6 个 RTT</text>
+  <rect x="120" y="90" width="50" height="28" class="muted"/><text x="145" y="109" text-anchor="middle" class="small">握手</text>
+  <rect x="170" y="90" width="50" height="28" class="obj"/><text x="195" y="109" text-anchor="middle" class="small">HTML</text>
+  <rect x="220" y="90" width="50" height="28" class="hot"/><text x="245" y="109" text-anchor="middle" class="small">图 1</text>
+  <rect x="270" y="90" width="50" height="28" class="hot"/><text x="295" y="109" text-anchor="middle" class="small">图 2</text>
+  <rect x="320" y="90" width="50" height="28" class="hot"/><text x="345" y="109" text-anchor="middle" class="small">图 3</text>
+  <rect x="370" y="90" width="50" height="28" class="hot"/><text x="395" y="109" text-anchor="middle" class="small">图 4</text>
+  <text x="430" y="109" class="small">一条连接，一问一答排着来</text>
+  <text x="10" y="164" class="title">HTTP/2</text><text x="10" y="182" class="small">3 个 RTT</text>
+  <rect x="120" y="150" width="50" height="28" class="muted"/><text x="145" y="169" text-anchor="middle" class="small">握手</text>
+  <rect x="170" y="150" width="50" height="28" class="obj"/><text x="195" y="169" text-anchor="middle" class="small">HTML</text>
+  <rect x="220" y="150" width="50" height="7" class="hot"/><rect x="220" y="157" width="50" height="7" class="hot"/>
+  <rect x="220" y="164" width="50" height="7" class="hot"/><rect x="220" y="171" width="50" height="7" class="hot"/>
+  <text x="280" y="169" class="small">4 张图同时在一条连接上传</text>
+  <line x1="120" y1="196" x2="625" y2="196" class="line" marker-end="url(#arrow)"/>
+  <text x="120" y="214" text-anchor="middle" class="small">0</text><text x="220" y="214" text-anchor="middle" class="small">2</text>
+  <text x="270" y="214" text-anchor="middle" class="small">3</text><text x="420" y="214" text-anchor="middle" class="small">6</text>
+  <text x="620" y="214" text-anchor="middle" class="small">10 RTT</text>
+</svg>
+<figcaption>「握手」是 TCP 三次握手的那 1 个 RTT；每个资源的「请求 + 响应」也是 1 个 RTT。HTML 必须先到，浏览器读了它才知道要哪几张图</figcaption>
+</figure>
+<ul>
+  <li><b>HTTP/1.0</b>：默认<b>非持久连接</b>，每个请求单独建一条 TCP 连接，响应完就关。5 个资源 = 5 次握手 + 5 次请求 = <b>10 个 RTT</b>，还要建 5 条连接。</li>
+  <li><b>HTTP/1.1</b>：默认<b>持久连接</b>（长连接，<code>Connection: keep-alive</code>），一条 TCP 连接上可以接连发很多个请求。只握手 1 次：1 + 1 + 4 = <b>6 个 RTT</b>。<br>
+  1.1 还允许<b>管线化</b>（pipelining）：不等上一个响应回来就发下一个请求。但响应必须<b>按请求的顺序</b>回，前面一个慢，后面的全被堵住，这叫<b>队头阻塞</b>。这个缺点让浏览器基本都没有开启管线化，改成对同一个网站开 6 条左右的并行连接。</li>
+  <li><b>HTTP/2</b>：报文改成<b>二进制</b>格式，切成小块叫<b>帧</b>；每个请求-响应是一条<b>流</b>，有编号。不同流的帧可以在同一条连接上交错发送，接收方按编号重新拼起来，这叫<b>多路复用</b>。4 张图的请求一起发出，响应交错着回，谁也不用等谁：1 + 1 + 1 = <b>3 个 RTT</b>。另外还有<b>头部压缩</b>（HPACK：连续请求里重复的首部，例如那一长串 <code>User-Agent</code>，只传一次，之后用编号代替）和<b>服务器推送</b>（了解即可）。</li>
+  <li><b>HTTP/3</b>：HTTP/2 在 HTTP 这一层没有队头阻塞了，但底下的 TCP 还有：TCP 是一条字节流，丢了一个报文段，后面所有流的数据都要等它重传完才能交上去。HTTP/3 干脆不用 TCP，改用跑在 <b>UDP</b> 上的 <b>QUIC</b> 协议。QUIC 自己实现了可靠传输，并且每条流单独保证顺序，一条流丢包不影响别的流；它还把 TLS 合进了握手，建连更快；换网络（比如手机从 Wi-Fi 切到 4G）时连接不断。</li>
+</ul>
+<table>
+  <tr><th>版本</th><th>传输层</th><th>关键改进</th><th>遗留问题</th></tr>
+  <tr><td>HTTP/1.0</td><td>TCP</td><td>—</td><td>每个请求一条连接，握手开销大</td></tr>
+  <tr><td>HTTP/1.1</td><td>TCP</td><td>持久连接（默认）、管线化、<code>Host</code> 首部必填、断点续传（<code>Range</code> / 206）</td><td>HTTP 层的队头阻塞</td></tr>
+  <tr><td>HTTP/2</td><td>TCP</td><td>二进制分帧、多路复用、头部压缩、服务器推送</td><td>TCP 层的队头阻塞</td></tr>
+  <tr><td>HTTP/3</td><td><b>UDP</b>（QUIC）</td><td>没有队头阻塞、建连快、连接迁移</td><td>有的网络会拦 UDP</td></tr>
+</table>
+<p>注意，不管哪个版本，<b>方法、状态码、首部的含义都没变</b>，变的只是报文在线上怎么编码、怎么传。前面讲的内容对所有版本都成立。</p>
+
+<h2 id="https">14. HTTPS：HTTP + TLS</h2>
+<p>普通 HTTP 是明文。顾客的请求要经过家用路由器、运营商的好几台路由器（第 4 课），路上任何一台机器都能读到里面的 <code>Cookie: sid=7f3a9c</code>，拿去冒充 alice；还能偷偷改响应，比如把收款账号换掉。HTTPS 就是在 HTTP 和 TCP 之间加一层 <b>TLS</b>，解决三件事：</p>
+<ul>
+  <li><b>机密性</b>：别人截到了也看不懂（加密）。</li>
+  <li><b>完整性</b>：别人改了一个字节也会被发现。</li>
+  <li><b>身份认证</b>：确认对面真的是 <code>shop.example.com</code>，不是冒充的（证书）。</li>
+</ul>
+<p>默认端口也从 80 换成 <b>443</b>。加密用到两类方法：</p>
+<div class="term"><b>对称加密</b>：加密和解密用<b>同一把密钥</b>。速度快，适合加密大量数据。难点是：这把密钥怎么安全地交给对方？在网上明文传过去，就被偷看了。</div>
+<div class="term"><b>非对称加密</b>：每方有一对密钥：<b>公钥</b>公开给所有人，<b>私钥</b>只有自己有。用公钥加密的数据，只有对应的私钥能解开。不用事先共享秘密，但计算慢很多。</div>
+<p>HTTPS 两样一起用：<b>先用非对称加密，安全地商量出一把对称密钥（叫会话密钥）；之后的报文都用这把对称密钥加密</b>。慢的只做一次，快的用来干大量的活。</p>
+<p>还剩一个漏洞：浏览器收到一把公钥，怎么知道它真是网店的，而不是路上某台机器冒充网店塞过来的？这就是证书的作用：</p>
+<div class="term"><b>证书</b>：一份写着「<code>shop.example.com</code> 的公钥是这个」的文件，由<b>证书颁发机构（CA）</b>用 CA 自己的私钥签了名（<b>数字签名</b>：用私钥对内容的摘要做运算，任何人都能用对应的公钥验证「确实是它签的、内容没被改过」）。浏览器和操作系统里预装了可信 CA 的公钥，所以能验证签名。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 245" width="640" role="img" aria-label="TLS 握手简化：ClientHello、ServerHello 加证书、浏览器验证书、商量会话密钥、之后对称加密">
+  <rect x="100" y="8" width="100" height="28" rx="4" class="plain"/><text x="150" y="27" text-anchor="middle">浏览器</text>
+  <rect x="420" y="8" width="100" height="28" rx="4" class="obj"/><text x="470" y="27" text-anchor="middle" class="mono">nginx</text>
+  <line x1="150" y1="36" x2="150" y2="238" class="dash"/>
+  <line x1="470" y1="36" x2="470" y2="238" class="dash"/>
+  <text x="310" y="60" text-anchor="middle" class="small">① ClientHello：我支持哪些加密算法、一个随机数</text>
+  <line x1="152" y1="68" x2="466" y2="68" class="line" marker-end="url(#arrow)"/>
+  <text x="310" y="94" text-anchor="middle" class="small">② ServerHello + 证书（网店的公钥，CA 签过名）</text>
+  <line x1="468" y1="102" x2="154" y2="102" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <rect x="180" y="112" width="260" height="44" rx="4" class="hot"/>
+  <text x="310" y="130" text-anchor="middle" class="small">③ 浏览器验证书：是可信 CA 签的吗？</text>
+  <text x="310" y="148" text-anchor="middle" class="small">证书里的域名是 shop.example.com 吗？</text>
+  <text x="310" y="180" text-anchor="middle" class="small">④ 用非对称加密商量出同一把会话密钥</text>
+  <line x1="152" y1="188" x2="466" y2="188" class="line" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="310" y="214" text-anchor="middle" class="small">⑤ 之后的 HTTP 报文全用会话密钥加密（对称加密）</text>
+  <line x1="152" y1="222" x2="466" y2="222" class="arrow-green" marker-start="url(#arrow-green)" marker-end="url(#arrow-green)"/>
+  <text x="485" y="134" class="small">验证不过：浏览器</text>
+  <text x="485" y="150" class="small">显示「不安全」警告</text>
+</svg>
+<figcaption>TLS 握手的简化版（概念层面）。握手在 nginx 上完成，所以第 7 节说 nginx 负责 HTTPS</figcaption>
+</figure>
+<p>为什么证书能防冒充？冒充者能把网店的证书原样转给浏览器，但没有网店的<b>私钥</b>，后面就商量不出会话密钥；冒充者用自己的公钥做一张证书，又没有 CA 的签名，或者域名对不上，第 ③ 步就会被浏览器发现。</p>
+<p>几个常考的点：</p>
+<ul>
+  <li>HTTPS 不是一个新协议，<b>HTTP 报文本身一点没变</b>，只是交给 TLS 加密后再交给 TCP。所以请求行、首部、Cookie、正文都被加密了。</li>
+  <li>加密的是<b>内容</b>。路上的人仍然能看到双方的 IP 地址和端口（它们在 IP 和 TCP 首部里，不加密），通常也能看到访问的域名，但看不到路径、Cookie 和正文。</li>
+  <li>HTTPS 比 HTTP 多一次 TLS 握手（TLS 1.3 多 1 个 RTT），加解密也有计算开销，这是它比 HTTP 慢一点的原因。</li>
+</ul>
+
+<h2 id="demo">15. 动手玩：一次访问的全过程，以及每个状态码是谁回的</h2>
+<p><b>动画 1</b>：点「访问商品页」，看第 1 节那六步逐帧走一遍。每一帧上方橙色的字是当前阶段，架构图里蓝色箭头是请求方向，绿色箭头是响应方向；第 ④ 步和第 ⑥ 步会把请求报文、响应报文的原文画出来，和第 3 节一模一样。</p>
+<div class="demo" id="url-to-page"></div>
+<p><b>动画 2</b>：每个按钮是网店里的一个场景。看请求一路走到哪里、在哪里变红、最后是<b>谁</b>回的状态码。建议成对点：「没登录就看订单」和「看别人的订单」（401 vs 403），「应用进程挂了，代理连不上」和「应用处理太慢，代理等超时」（502 vs 504），注意 301、503 的请求根本没到 shop-server。</p>
+<div class="demo" id="status"></div>
+
+<h2 id="exam">题单怎么考</h2>
+<p>牛客「计算机网络专项」里和本课有关的题，基本是下面这几类：</p>
+<table class="qmap">
+  <tr><th>题型</th><th>怎么想</th><th>回看</th></tr>
+  <tr><td>输入网址到显示页面经历了什么、用到哪些协议</td><td>DNS（UDP）→ TCP → TLS → HTTP → 渲染；ARP、IP 在下层一直在用</td><td><a href="#overview">1</a>、<a href="#demo">动画 1</a></td></tr>
+  <tr><td>某状态码的含义、属于哪一类</td><td>看第一位：2 成功、3 重定向、4 客户端错、5 服务器错</td><td><a href="#status-classes">8</a></td></tr>
+  <tr><td>301 和 302 的区别</td><td>永久 vs 临时；301 会被浏览器缓存、搜索引擎转移权重</td><td><a href="#redirect">9</a></td></tr>
+  <tr><td>304 是什么、与哪些首部有关</td><td>协商缓存命中；If-None-Match ↔ ETag、If-Modified-Since ↔ Last-Modified</td><td><a href="#cache">10</a></td></tr>
+  <tr><td>401 和 403 的区别</td><td>没认证（你是谁）vs 没授权（知道你是谁但不行）</td><td><a href="#auth">11</a></td></tr>
+  <tr><td>502、503、504 的区别</td><td>都在网关；502 上游连不上 / 回错，503 暂时不可用，504 上游超时</td><td><a href="#server-errors">12</a>、<a href="#proxy">7</a></td></tr>
+  <tr><td>GET 和 POST 的区别</td><td>根本是语义；安全幂等、参数位置、缓存；「POST 更安全」是错的</td><td><a href="#get-post">5</a></td></tr>
+  <tr><td>哪些方法是幂等 / 安全的</td><td>GET、HEAD 安全且幂等；PUT、DELETE 幂等；POST 都不是</td><td><a href="#methods">4</a></td></tr>
+  <tr><td>请求报文由哪几部分组成</td><td>请求行（方法 路径 版本）、首部、空行、正文</td><td><a href="#message">3</a></td></tr>
+  <tr><td>HTTP 无状态、Cookie 与 Session 的区别</td><td>Cookie 在浏览器、Session 在服务器；Session 靠 Cookie 传 ID</td><td><a href="#cookie">6</a></td></tr>
+  <tr><td>HTTP/1.1、2、3 各改进了什么</td><td>持久连接 → 多路复用 + 头部压缩 → QUIC（UDP）</td><td><a href="#versions">13</a></td></tr>
+  <tr><td>HTTPS 用了哪些加密、端口是多少</td><td>非对称加密交换会话密钥，对称加密传数据；证书防冒充；443</td><td><a href="#https">14</a></td></tr>
+  <tr><td>URL 的哪部分不会发给服务器</td><td>片段 <code>#...</code></td><td><a href="#url">2</a></td></tr>
+</table>
+
+<h2 id="self-test">自测</h2>
+<details><summary>1. 用户请求 <code>https://shop.example.com/orders/1002</code>，已登录，但这条订单属于别人。服务器最合适返回哪个状态码？A. 400　B. 401　C. 403　D. 404</summary>
+C。服务器通过 Cookie 已经知道你是谁（认证通过），只是你没有权限看（授权失败）。401 用于「不知道你是谁」；404 也有网站这样用来隐藏资源的存在，但按状态码本意，选 403。</details>
+<details><summary>2. 用户访问网站时页面显示 502 Bad Gateway，最可能的原因是？A. 用户没有登录　B. 请求的页面不存在　C. 反向代理后面的应用服务器进程已停止　D. 应用服务器处理时间过长</summary>
+C。502 是网关（反向代理）从上游拿不到合法响应，最常见的就是上游进程挂了、连不上。A 是 401，B 是 404，D 是 504：上游连得上，只是超时了还没回。</details>
+<details><summary>3. 下列 HTTP 方法中，不是幂等的是？A. GET　B. PUT　C. DELETE　D. POST</summary>
+D。POST /orders 发 3 次会下 3 个订单，结果和发 1 次不一样。PUT 把价格改成 79，发几次都是 79；DELETE 删一次和删多次，资源最后都不存在。</details>
+<details><summary>4. 关于 GET 和 POST，下列说法正确的是？A. POST 比 GET 安全，因为参数在正文里　B. HTTP 协议规定 GET 的 URL 不能超过 2 KB　C. GET 是安全且幂等的方法　D. POST 请求不能带查询参数</summary>
+C。A 错：参数在正文里只是不显示在地址栏，不用 HTTPS 时抓包照样能看到。B 错：长度限制来自浏览器和服务器，协议本身没有。D 错：<code>POST /orders?from=app</code> 完全合法。</details>
+<details><summary>5. 浏览器发出带 <code>If-None-Match: "p42-v3"</code> 的请求，服务器发现资源的 ETag 仍是 <code>"p42-v3"</code>，会返回？响应里有正文吗？</summary>
+304 Not Modified，没有正文。条件成立说明浏览器手里的副本还是最新的，服务器只回状态行和首部，浏览器继续用本机缓存。如果 ETag 变了，就回 200 并带上新的完整正文。</details>
+<details><summary>6. 一个网页包含 1 个 HTML 和 4 张图片，只计 RTT（不计 DNS、TLS 和传输时间）。分别用 HTTP/1.0 非持久连接、HTTP/1.1 持久连接（不用管线化）、HTTP/2 多路复用，各需要几个 RTT？</summary>
+<ul>
+  <li>非持久：每个对象都要 1 个 RTT 握手 + 1 个 RTT 请求响应，5 × 2 = <b>10</b>。</li>
+  <li>持久、不管线化：握手 1 次（1）+ HTML（1）+ 4 张图逐个请求（4）= <b>6</b>。</li>
+  <li>多路复用：握手（1）+ HTML（1）+ 4 张图同时请求（1）= <b>3</b>。HTML 必须先到，浏览器才知道要哪几张图，所以图片不能和 HTML 一起发。</li>
+</ul></details>
+<details><summary>7. 关于 HTTPS，下列说法错误的是？A. 默认端口是 443　B. 传输数据时主要使用对称加密　C. 证书用来证明服务器的公钥确实属于该域名　D. HTTPS 加密后，路上的路由器看不到通信双方的 IP 地址</summary>
+D。IP 地址在 IP 首部里，路由器要靠它转发，不能加密。TLS 加密的是 HTTP 报文（请求行、首部、Cookie、正文）。B 对：非对称加密只用来商量会话密钥，之后用更快的对称加密。</details>
+<details><summary>8. HTTP/3 和前几个版本最大的不同是什么？为什么要这样改？</summary>
+HTTP/3 的传输层不再是 TCP，而是基于 UDP 的 QUIC。原因是 HTTP/2 虽然在一条连接上多路复用，但 TCP 是一条字节流，丢一个报文段，所有流都要等它重传（TCP 层的队头阻塞）。QUIC 对每条流单独保证顺序，一条流丢包不影响其他流，还把 TLS 握手合进了建连过程。</details>
+
+<div class="nav"><a href="05-tcp.html">← 上一课：TCP</a><a href="07-sql.html">下一课：SQL →</a></div>
+<script src="../anim.js"></script>
+<script src="js/06-http.js"></script>
+</body>
+</html>

@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>计算机基础 第 1 课 · 进程与进程调度</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="cs.css">
+<style>
+/* 本课四个进程的固定配色，插图和动画共用 */
+.p1 { fill: #e3f2fd; stroke: #0b62c4; } .p2 { fill: #ffe0b2; stroke: #e65100; }
+.p3 { fill: #c8e6c9; stroke: #2e7d32; } .p4 { fill: #ede7f6; stroke: #5e35b1; }
+.idle { fill: #f5f5f5; stroke: #bbb; }
+.box.p1 { background: #e3f2fd; } .box.p2 { background: #ffe0b2; }
+.box.p3 { background: #c8e6c9; } .box.p4 { background: #ede7f6; }
+</style>
+</head>
+<body>
+<!-- 全页共用的箭头。SVG 里写 marker-end="url(#arrow)" 即可 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+  <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0b62c4"/></marker>
+  <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c62828"/></marker>
+</defs></svg>
+
+<p><a href="index.html">← 计算机基础目录</a></p>
+<h1>第 1 课 · 进程与进程调度</h1>
+<p class="one-line">一个 CPU 核同一时刻只能执行一个程序。操作系统让程序<b>轮流</b>上 CPU，轮得足够快，看起来就像在同时运行。「下一个轮到谁」由<b>调度算法</b>决定。</p>
+<p class="prereq">开始前要会：这是本系列第一课，不需要前置知识。只要知道「程序是一份写好的指令清单，CPU 一条条地执行它」就够了。</p>
+
+<p>整个系列用同一个例子：<b>一家小网店</b>。这一课看网店的服务器：服务器上同时跑着「处理订单」「发确认邮件」「查库存」「生成日报」等好几个程序，而 CPU 只有一个核。它们是怎么轮流使用 CPU 的？</p>
+
+<p class="roadmap"><b>本课的路线</b>：程序和进程 → 并发 → 进程的状态 → 切换进程的代价 → 创建进程（fork）→ 调度：挑下一个 → 用什么指标评价 → 各种调度算法 → 线程 → 进程间通信 → 题单怎么考。</p>
+
+<h2 id="program-process">1. 程序和进程</h2>
+<p>先认识几个名词，后面一直会用到：</p>
+<div class="term"><b>程序</b>：磁盘上的一个文件，里面是指令和数据，例如网店的 <code>shop-server</code>。它是死的，不运行就什么也不做。</div>
+<div class="term"><b>进程</b>：<b>正在运行的程序</b>。同一个程序运行两次，就是两个进程。每个进程有一个编号，叫 <b>PID</b>。</div>
+<div class="term"><b>内核</b>：操作系统里最核心的那部分程序，一直待在内存里，权限最高。管理进程、分配内存、操作硬件都由它来做。</div>
+<div class="term"><b>寄存器</b>：CPU 内部几个很小、很快的存储格，用来存正在计算的数。其中<b>程序计数器（PC）</b>记着「下一条要执行的指令在哪里」。</div>
+<p>进程除了占一块内存（放代码、数据等，第 2 课细讲），内核还会给每个进程建一份档案，叫<b>进程控制块（PCB）</b>，记录这个进程的一切：</p>
+
+<figure class="fig">
+<svg viewBox="0 0 640 220" width="640" role="img" aria-label="程序运行起来变成进程，进程有自己的内存和 PCB">
+  <rect x="20" y="60" width="130" height="100" rx="6" class="plain"/>
+  <text x="85" y="100" text-anchor="middle" class="mono">shop-server</text>
+  <text x="85" y="124" text-anchor="middle" class="small">磁盘上的程序文件</text>
+  <text x="85" y="144" text-anchor="middle" class="small">（静态，不会动）</text>
+  <line x1="155" y1="110" x2="232" y2="110" class="line" marker-end="url(#arrow)"/>
+  <text x="193" y="100" text-anchor="middle">运行</text>
+  <rect x="240" y="18" width="385" height="190" rx="8" fill="#fafafa" stroke="#0b62c4" stroke-dasharray="5 4"/>
+  <text x="252" y="40" class="title">进程（PID 1024）</text>
+  <text x="330" y="40" dx="60" class="small">←「活」的程序</text>
+  <rect x="255" y="52" width="150" height="30" class="obj"/><text x="330" y="72" text-anchor="middle">代码</text>
+  <rect x="255" y="86" width="150" height="30" class="obj"/><text x="330" y="106" text-anchor="middle">数据（全局变量）</text>
+  <rect x="255" y="120" width="150" height="30" class="obj"/><text x="330" y="140" text-anchor="middle">堆（运行时申请的）</text>
+  <rect x="255" y="154" width="150" height="30" class="obj"/><text x="330" y="174" text-anchor="middle">栈（函数调用）</text>
+  <text x="330" y="200" text-anchor="middle" class="small">占用的内存（第 2 课细讲）</text>
+  <rect x="425" y="52" width="185" height="132" rx="4" class="hot"/>
+  <text x="517" y="72" text-anchor="middle" class="title">PCB（内核保管）</text>
+  <text x="437" y="96">PID = 1024</text>
+  <text x="437" y="116">状态 = 运行</text>
+  <text x="437" y="136">PC = 下一条指令的位置</text>
+  <text x="437" y="156">各寄存器的值</text>
+  <text x="437" y="176" class="small">打开的文件、内存信息……</text>
+</svg>
+<figcaption>程序是文件；进程 = 程序跑起来以后的那一份「活」的实体：自己的内存 + 一份 PCB</figcaption>
+</figure>
+<p>记住一句话：<b>PCB 是进程存在的唯一标志</b>。内核只认 PCB：创建进程就是建一个 PCB，进程结束就是回收它的 PCB。</p>
+
+<h2 id="concurrency">2. 并发：一个核怎么「同时」跑好几个进程</h2>
+<p>CPU 里真正执行指令的部件叫<b>核</b>。一个核同一时刻只能执行一条指令流。网店服务器只有一个核，却同时开着四个进程，办法是<b>轮流</b>：每个进程跑一小会儿（几毫秒），就换下一个。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 200" width="640" role="img" aria-label="单核轮流运行是并发，多核同时运行是并行">
+  <text x="10" y="22" class="title">单核：并发（轮流用 CPU）</text>
+  <text x="10" y="54">核</text>
+  <rect x="60" y="36" width="90" height="26" class="obj"/><text x="105" y="54" text-anchor="middle">A</text>
+  <rect x="150" y="36" width="90" height="26" class="hot"/><text x="195" y="54" text-anchor="middle">B</text>
+  <rect x="240" y="36" width="90" height="26" class="ok"/><text x="285" y="54" text-anchor="middle">C</text>
+  <rect x="330" y="36" width="90" height="26" class="obj"/><text x="375" y="54" text-anchor="middle">A</text>
+  <rect x="420" y="36" width="90" height="26" class="hot"/><text x="465" y="54" text-anchor="middle">B</text>
+  <rect x="510" y="36" width="90" height="26" class="ok"/><text x="555" y="54" text-anchor="middle">C</text>
+  <text x="10" y="102" class="title">双核：并行（真的同时）</text>
+  <text x="10" y="132">核 1</text>
+  <rect x="60" y="114" width="540" height="26" class="obj"/><text x="330" y="132" text-anchor="middle">A</text>
+  <text x="10" y="166">核 2</text>
+  <rect x="60" y="148" width="270" height="26" class="hot"/><text x="195" y="166" text-anchor="middle">B</text>
+  <rect x="330" y="148" width="270" height="26" class="ok"/><text x="465" y="166" text-anchor="middle">C</text>
+  <line x1="60" y1="190" x2="615" y2="190" class="line" marker-end="url(#arrow)"/>
+  <text x="620" y="186" text-anchor="end" class="small">时间</text>
+</svg>
+<figcaption>上：任一瞬间只有一个在跑，但一段时间里三个都有进展。下：两个核，同一瞬间真有两个在跑</figcaption>
+</figure>
+<ul>
+  <li><b>并发</b>：一段时间内，多个进程都在推进（可以是轮流）。宏观上同时，微观上交替。</li>
+  <li><b>并行</b>：同一时刻，多个进程真的在同时执行。必须有多个核。</li>
+</ul>
+
+<h2 id="states">3. 进程的五种状态</h2>
+<p>先补一个名词：<b>I/O</b>（输入/输出），指读写磁盘、收发网络数据这类和外部设备打交道的操作。它比 CPU 计算慢成千上万倍。进程要读磁盘时，不能自己去操作硬件，要通过<b>系统调用</b>请内核代办，然后只能干等结果。</p>
+<p>干等的时候还占着 CPU 就太浪费了，所以内核会把它挪开，换别人上。于是一个进程一生会在几种状态之间来回切换：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 260" width="640" role="img" aria-label="进程五状态转换图">
+  <ellipse cx="70" cy="80" rx="50" ry="24" class="muted"/><text x="70" y="85" text-anchor="middle">新建</text>
+  <ellipse cx="250" cy="80" rx="50" ry="24" class="obj"/><text x="250" y="85" text-anchor="middle" class="title">就绪</text>
+  <ellipse cx="450" cy="80" rx="50" ry="24" class="ok"/><text x="450" y="85" text-anchor="middle" class="title">运行</text>
+  <ellipse cx="585" cy="80" rx="45" ry="24" class="muted"/><text x="585" y="85" text-anchor="middle">终止</text>
+  <ellipse cx="350" cy="215" rx="50" ry="24" class="hot"/><text x="350" y="220" text-anchor="middle" class="title">阻塞</text>
+  <line x1="120" y1="80" x2="198" y2="80" class="line" marker-end="url(#arrow)"/>
+  <text x="159" y="70" text-anchor="middle" class="small">创建完成</text>
+  <path d="M 285,62 Q 350,22 415,62" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="350" y="34" text-anchor="middle">被调度选中</text>
+  <path d="M 415,98 Q 350,138 285,98" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="350" y="138" text-anchor="middle">时间片用完 / 被抢占</text>
+  <line x1="500" y1="80" x2="538" y2="80" class="line" marker-end="url(#arrow)"/>
+  <text x="519" y="70" text-anchor="middle" class="small">退出</text>
+  <line x1="440" y1="104" x2="378" y2="194" class="line" marker-end="url(#arrow)"/>
+  <text x="430" y="172">等 I/O（如读磁盘）</text>
+  <line x1="322" y1="194" x2="260" y2="104" class="line" marker-end="url(#arrow)"/>
+  <text x="272" y="172" text-anchor="end">I/O 完成</text>
+</svg>
+<figcaption>三个主角：就绪（万事俱备，只差 CPU）、运行（正占着 CPU）、阻塞（在等某件事，给它 CPU 也没用）</figcaption>
+</figure>
+<p>考试最爱问「哪种转换不存在」，看图上的箭头就能答：</p>
+<ul>
+  <li><b>阻塞 → 运行</b>：不存在。等的事办完了，也得先回就绪排队，再被调度选中。</li>
+  <li><b>就绪 → 阻塞</b>：不存在。要阻塞，得先在运行中发起 I/O 请求；一个没在运行的进程发不出请求。</li>
+  <li><b>运行 → 阻塞</b>是进程<b>自己</b>主动发起的（它要等 I/O）；<b>运行 → 就绪</b>是被动的（时间到了，被内核换下）。</li>
+</ul>
+
+<h2 id="context-switch">4. 换进程的代价：上下文切换</h2>
+<p>进程 P1 正跑到一半，要换成 P2。P1 下次回来时必须能从断点接着跑，所以内核要做两件事：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 170" width="640" role="img" aria-label="上下文切换：保存 P1 的寄存器到 PCB，再从 P2 的 PCB 恢复">
+  <rect x="20" y="45" width="120" height="70" rx="4" class="hot"/>
+  <text x="80" y="76" text-anchor="middle" class="title">P1 的 PCB</text>
+  <text x="80" y="98" text-anchor="middle" class="small">存下：PC、寄存器</text>
+  <rect x="260" y="45" width="120" height="70" rx="4" class="plain"/>
+  <text x="320" y="76" text-anchor="middle" class="title">CPU</text>
+  <text x="320" y="98" text-anchor="middle" class="small">PC、寄存器</text>
+  <rect x="500" y="45" width="120" height="70" rx="4" class="obj"/>
+  <text x="560" y="76" text-anchor="middle" class="title">P2 的 PCB</text>
+  <text x="560" y="98" text-anchor="middle" class="small">上次存的现场</text>
+  <line x1="258" y1="80" x2="144" y2="80" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="200" y="70" text-anchor="middle" class="small">① 保存 P1 的现场</text>
+  <line x1="498" y1="80" x2="384" y2="80" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="440" y="70" text-anchor="middle" class="small">② 恢复 P2 的现场</text>
+  <text x="320" y="152" text-anchor="middle">切换的这段时间里，P1、P2 都没在干活：这是纯开销</text>
+</svg>
+<figcaption>「现场」（上下文）就是 PC 和寄存器的值，加上内存信息</figcaption>
+</figure>
+<p>这个过程叫<b>上下文切换</b>。它不做任何有用的计算，所以切换越频繁，CPU 浪费得越多。后面讲时间片轮转时会用到这个结论。</p>
+
+<h2 id="fork">5. 进程是怎么创建出来的：fork</h2>
+<p>在 Linux 里，新进程由已有的进程「复制」出来。系统调用 <code>fork()</code> 把当前进程几乎原样复制一份：代码、数据、打开的文件都一样，PID 不同。原来的叫<b>父进程</b>，复制出来的叫<b>子进程</b>。</p>
+<p>最奇特的一点：<code>fork()</code> <b>调用一次，返回两次</b>。父、子进程都从 <code>fork()</code> 的下一行接着往下跑，靠返回值区分自己是谁：</p>
+<pre>pid = fork();
+if (pid == 0)  { /* 子进程拿到 0 */ }
+else if (pid &gt; 0) { /* 父进程拿到子进程的 PID */ }
+else           { /* 返回 -1：创建失败 */ }</pre>
+<p>笔试题常用 C 语言出（Python 在 Linux 上的 <code>os.fork()</code> 规则完全一样）。看这段代码会打印几次 <code>hi</code>：</p>
+<pre>fork();
+fork();
+printf("hi\n");</pre>
+<figure class="fig">
+<svg viewBox="0 0 640 200" width="640" role="img" aria-label="两次 fork 后共有 4 个进程">
+  <text x="10" y="34" class="small">开始：1 个</text>
+  <text x="10" y="104" class="small">第 1 次 fork 后：2 个</text>
+  <text x="10" y="174" class="small">第 2 次 fork 后：4 个</text>
+  <line x1="320" y1="50" x2="200" y2="82" class="line"/>
+  <line x1="320" y1="50" x2="460" y2="82" class="line"/>
+  <line x1="200" y1="120" x2="160" y2="152" class="line"/>
+  <line x1="200" y1="120" x2="270" y2="152" class="line"/>
+  <line x1="460" y1="120" x2="400" y2="152" class="line"/>
+  <line x1="460" y1="120" x2="530" y2="152" class="line"/>
+  <circle cx="320" cy="30" r="20" class="obj"/><text x="320" y="35" text-anchor="middle">P</text>
+  <circle cx="200" cy="100" r="20" class="obj"/><text x="200" y="105" text-anchor="middle">P</text>
+  <circle cx="460" cy="100" r="20" class="hot"/><text x="460" y="105" text-anchor="middle">C1</text>
+  <circle cx="160" cy="170" r="20" class="obj"/><text x="160" y="175" text-anchor="middle">P</text>
+  <circle cx="270" cy="170" r="20" class="hot"/><text x="270" y="175" text-anchor="middle">C2</text>
+  <circle cx="400" cy="170" r="20" class="obj"/><text x="400" y="175" text-anchor="middle">C1</text>
+  <circle cx="530" cy="170" r="20" class="hot"/><text x="530" y="175" text-anchor="middle">C3</text>
+</svg>
+<figcaption>每次 fork，当时活着的<b>每个</b>进程都一分为二（橙色是新生的子进程）。最后 4 个进程各打印一次 hi</figcaption>
+</figure>
+<p>规律：连续执行 n 次 <code>fork()</code>，最后有 <b>2<sup>n</sup></b> 个进程，其中新创建的有 2<sup>n</sup> − 1 个。</p>
+
+<h2 id="scheduling">6. 调度：从就绪队列里挑一个</h2>
+<p>处于就绪状态的进程排成一队，叫<b>就绪队列</b>。CPU 一空出来，内核里负责挑人的那段程序，也就是<b>调度器</b>，就从队列里选一个送上 CPU。怎么选，就是<b>调度算法</b>。</p>
+<p>按「能不能把正在跑的进程中途换下来」，调度分两类：</p>
+<ul>
+  <li><b>非抢占式</b>：进程一旦上了 CPU，就一直跑到结束或自己去等 I/O，别人只能等。</li>
+  <li><b>抢占式</b>：内核可以中途把它换下来。靠的是<b>时钟中断</b>：硬件定时器每隔一小段时间打断一次 CPU（这种「硬件打断 CPU，让内核来处理」的机制叫<b>中断</b>），内核借这个机会决定要不要换人。</li>
+</ul>
+
+<h2 id="metrics">7. 怎么评价一个调度算法：周转时间和等待时间</h2>
+<p>笔试里的计算题全部围绕下面几个量。拿一个进程的一生来看：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 165" width="640" role="img" aria-label="到达、等待、运行、完成的时间关系">
+  <rect x="80" y="30" width="220" height="26" class="muted"/><text x="190" y="48" text-anchor="middle">在就绪队列里等</text>
+  <rect x="300" y="30" width="220" height="26" class="ok"/><text x="410" y="48" text-anchor="middle">在 CPU 上运行</text>
+  <line x1="80" y1="24" x2="80" y2="80" class="dash"/><line x1="300" y1="24" x2="300" y2="80" class="dash"/><line x1="520" y1="24" x2="520" y2="80" class="dash"/>
+  <text x="80" y="76" text-anchor="middle" class="small">到达</text>
+  <text x="300" y="76" text-anchor="middle" class="small">开始运行</text>
+  <text x="520" y="76" text-anchor="middle" class="small">完成</text>
+  <line x1="82" y1="96" x2="298" y2="96" class="line" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="190" y="112" text-anchor="middle">等待时间</text>
+  <line x1="302" y1="96" x2="518" y2="96" class="line" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="410" y="112" text-anchor="middle">服务时间（要跑多久）</text>
+  <line x1="82" y1="132" x2="518" y2="132" class="arrow-blue" marker-start="url(#arrow-blue)" marker-end="url(#arrow-blue)"/>
+  <text x="300" y="152" text-anchor="middle">周转时间 = 完成时刻 − 到达时刻</text>
+</svg>
+<figcaption>被抢占时，等待会断成好几段，但下面的公式照样成立</figcaption>
+</figure>
+<table>
+  <tr><th>量</th><th>公式</th><th>含义</th></tr>
+  <tr><td>周转时间</td><td>完成时刻 − 到达时刻</td><td>从交上任务到拿到结果，一共过了多久</td></tr>
+  <tr><td>等待时间</td><td>周转时间 − 服务时间</td><td>其中白白排队的时间（本课的进程不做 I/O）</td></tr>
+  <tr><td>带权周转时间</td><td>周转时间 ÷ 服务时间</td><td>≥ 1。越接近 1，说明越没被耽误</td></tr>
+  <tr><td>响应时间</td><td>第一次上 CPU 的时刻 − 到达时刻</td><td>交互程序最在乎：点了按钮多久有反应</td></tr>
+</table>
+<p>下面整课都用网店服务器上的这四个进程（时间单位随意，比如 10 毫秒）：</p>
+<table>
+  <tr><th>进程</th><th>做什么</th><th>到达时刻</th><th>服务时间</th></tr>
+  <tr><td>P1</td><td>处理订单</td><td>0</td><td>7</td></tr>
+  <tr><td>P2</td><td>发确认邮件</td><td>2</td><td>4</td></tr>
+  <tr><td>P3</td><td>查库存</td><td>4</td><td>1</td></tr>
+  <tr><td>P4</td><td>生成日报</td><td>5</td><td>4</td></tr>
+</table>
+
+<h2 id="algorithms">8. 经典调度算法</h2>
+<h3 id="fcfs">先来先服务（FCFS）</h3>
+<p>谁先到谁先跑，非抢占。最简单，也最公平，但有一个大毛病：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 150" width="640" role="img" aria-label="FCFS 和 SJF 的甘特图对比">
+  <text x="10" y="50" class="title">FCFS</text>
+  <rect x="80" y="30" width="210" height="28" class="p1"/><text x="185" y="49" text-anchor="middle">P1</text>
+  <rect x="290" y="30" width="120" height="28" class="p2"/><text x="350" y="49" text-anchor="middle">P2</text>
+  <rect x="410" y="30" width="30" height="28" class="p3"/><text x="425" y="49" text-anchor="middle">P3</text>
+  <rect x="440" y="30" width="120" height="28" class="p4"/><text x="500" y="49" text-anchor="middle">P4</text>
+  <text x="80" y="74" text-anchor="middle" class="small">0</text><text x="290" y="74" text-anchor="middle" class="small">7</text>
+  <text x="410" y="74" text-anchor="middle" class="small">11</text><text x="440" y="74" text-anchor="middle" class="small">12</text>
+  <text x="560" y="74" text-anchor="middle" class="small">16</text>
+  <text x="10" y="112" class="title">SJF</text>
+  <rect x="80" y="92" width="210" height="28" class="p1"/><text x="185" y="111" text-anchor="middle">P1</text>
+  <rect x="290" y="92" width="30" height="28" class="p3"/><text x="305" y="111" text-anchor="middle">P3</text>
+  <rect x="320" y="92" width="120" height="28" class="p2"/><text x="380" y="111" text-anchor="middle">P2</text>
+  <rect x="440" y="92" width="120" height="28" class="p4"/><text x="500" y="111" text-anchor="middle">P4</text>
+  <text x="80" y="136" text-anchor="middle" class="small">0</text><text x="290" y="136" text-anchor="middle" class="small">7</text>
+  <text x="320" y="136" text-anchor="middle" class="small">8</text><text x="440" y="136" text-anchor="middle" class="small">12</text>
+  <text x="560" y="136" text-anchor="middle" class="small">16</text>
+</svg>
+<figcaption>这种横条图叫<b>甘特图</b>：横轴是时间，每一段写着那段时间谁在 CPU 上</figcaption>
+</figure>
+<p>按 FCFS 算一遍（完成时刻从甘特图上读）：</p>
+<table>
+  <tr><th>进程</th><th>到达</th><th>服务</th><th>完成</th><th>周转 = 完成 − 到达</th><th>等待 = 周转 − 服务</th><th>带权周转</th></tr>
+  <tr><td>P1</td><td>0</td><td>7</td><td>7</td><td>7</td><td>0</td><td>1</td></tr>
+  <tr><td>P2</td><td>2</td><td>4</td><td>11</td><td>9</td><td>5</td><td>2.25</td></tr>
+  <tr><td>P3</td><td>4</td><td>1</td><td>12</td><td>8</td><td>7</td><td><b>8</b></td></tr>
+  <tr><td>P4</td><td>5</td><td>4</td><td>16</td><td>11</td><td>7</td><td>2.75</td></tr>
+  <tr><th>平均</th><td></td><td></td><td></td><td>8.75</td><td>4.75</td><td>3.5</td></tr>
+</table>
+<p>P3 只要跑 1 个单位，却排了 7 个单位，带权周转高达 8。短进程排在长进程后面，被拖累，这叫<b>护航效应</b>。结论：<b>FCFS 对长作业有利，对短作业不利</b>。</p>
+
+<h3 id="sjf">短作业优先（SJF）</h3>
+<p>CPU 空出来时，从就绪队列里挑<b>服务时间最短</b>的，非抢占。看上面第二条甘特图：t = 7 时 P1 跑完，就绪队列里有 P2（4）、P3（1）、P4（4），选 P3；之后 P2、P4 一样长，按先到的来。</p>
+<p>平均周转时间降到 8，平均等待时间降到 4。可以证明：<b>所有进程同时到达时，SJF 的平均等待时间最短</b>。代价有两个：</p>
+<ul>
+  <li>要提前知道每个进程要跑多久，现实里只能估计。</li>
+  <li><b>饥饿</b>：如果短进程源源不断地来，长进程就永远轮不到。</li>
+</ul>
+
+<h3 id="srtf">最短剩余时间优先（SRTF）</h3>
+<p>SJF 的抢占版：每当有新进程到达，就比一比它的服务时间和当前进程的<b>剩余</b>时间，新来的更短就抢占。在这组数据上，平均等待时间进一步降到 3（下面动画里可以看到具体过程）。</p>
+
+<h3 id="hrrn">高响应比优先（HRRN）</h3>
+<p>SJF 挑进程时只看服务时间，所以短进程不断到来时，长进程会饿死。HRRN 挑进程时多看一个因素：<b>这个进程已经等了多久</b>。规则：CPU 空出来时，给就绪队列里的每个进程算一个<b>响应比</b>，挑最高的；选中的进程一直跑到结束（非抢占）。</p>
+<pre>响应比 = (已等待时间 + 服务时间) ÷ 服务时间 = 1 + 已等待时间 ÷ 服务时间
+已等待时间 = 当前时刻 − 到达时刻</pre>
+<p>这里的「已等待时间」是<b>到当前时刻为止</b>等了多久，不是第 7 节那个算到完成为止的等待时间。非抢占时，还在就绪队列里的进程从没上过 CPU，所以它就是「当前时刻 − 到达时刻」。</p>
+<p><b>响应比的含义</b>：分子「已等待 + 服务」，正是「如果现在就让它上 CPU，它的周转时间」；再除以服务时间，就是它的<a href="#metrics">带权周转时间</a>。所以，响应比就是「现在开跑的话，这个进程的带权周转时间」。HRRN 每次挑这个值最大的，也就是<b>已经被耽误得最厉害</b>的那个。</p>
+<p>从「1 + 已等待时间 ÷ 服务时间」能读出两点：</p>
+<ul>
+  <li>刚到达时已等待时间为 0，所有进程的响应比都是 1。之后每等 1 个单位，响应比增加 1 ÷ 服务时间：服务时间 1 的进程每单位增加 1，服务时间 4 的只增加 0.25。<b>等得一样久时，服务时间短的响应比高</b>，这一点和 SJF 一致。</li>
+  <li>长进程的响应比增加得慢，但<b>只要还在等，就一直增加，没有上限</b>；每个新到的短进程却都要从 1 开始。所以长进程的响应比迟早会超过新到的短进程，不会饿死。</li>
+</ul>
+
+<p><b>在本课的例子上走一遍</b>（数据见<a href="#metrics">第 7 节</a>的表）。t = 0 时就绪队列里只有 P1，P1 跑 0–7。t = 7 时 P1 完成，P2、P3、P4 都已到达：</p>
+<table>
+  <tr><th>t = 7</th><th>到达</th><th>服务</th><th>已等待 = 7 − 到达</th><th>响应比</th></tr>
+  <tr><td>P2</td><td>2</td><td>4</td><td>5</td><td>(5 + 4) ÷ 4 = 2.25</td></tr>
+  <tr><td>P3</td><td>4</td><td>1</td><td>3</td><td>(3 + 1) ÷ 1 = <b>4</b>　← 选</td></tr>
+  <tr><td>P4</td><td>5</td><td>4</td><td>2</td><td>(2 + 4) ÷ 4 = 1.5</td></tr>
+</table>
+<p>P3 跑 7–8。t = 8 时重新算，P2、P4 都又多等了 1：</p>
+<table>
+  <tr><th>t = 8</th><th>到达</th><th>服务</th><th>已等待 = 8 − 到达</th><th>响应比</th></tr>
+  <tr><td>P2</td><td>2</td><td>4</td><td>6</td><td>(6 + 4) ÷ 4 = <b>2.5</b>　← 选</td></tr>
+  <tr><td>P4</td><td>5</td><td>4</td><td>3</td><td>(3 + 4) ÷ 4 = 1.75</td></tr>
+</table>
+<p>P2 跑 8–12，最后 P4 跑 12–16。顺序是 P1、P3、P2、P4，和 SJF 完全一样：这组数据里没有长进程被反复插队，看不出两者的差别。</p>
+
+<p><b>两者的差别出现在饥饿场景里</b>。换一组数据：A 在 0 到达，服务时间 2；长进程 L 在 1 到达，服务时间 4；短进程源源不断，每隔 2 个单位来一个，服务时间都是 2：S1 在 1 到达，S2 在 3 到达，S3 在 5 到达，依此类推。A 先跑 0–2。</p>
+<table>
+  <tr><th>CPU 空出来时</th><th>SJF 的选择</th><th>HRRN 算出的响应比</th><th>HRRN 的选择</th></tr>
+  <tr><td>t = 2</td><td>S1（2 &lt; 4）</td><td>L：1 + 1 ÷ 4 = 1.25；S1：1 + 1 ÷ 2 = 1.5</td><td>S1，跑 2–4</td></tr>
+  <tr><td>t = 4</td><td>S2（2 &lt; 4）</td><td>L：1 + 3 ÷ 4 = 1.75；S2：1 + 1 ÷ 2 = 1.5</td><td><b>L</b>，跑 4–8</td></tr>
+  <tr><td>t = 6、8、10……</td><td>S3、S4、S5……</td><td></td><td></td></tr>
+</table>
+<p>SJF 每次 CPU 空出来，队里都有一个服务时间 2 的新进程，L 永远轮不到。HRRN 里，L 在 t = 2 时比 S1 低，但它一直在等、响应比一直在涨，而 S2 是新来的、只等了 1；到 t = 4，L 就超过了 S2，上了 CPU。</p>
+
+<h3 id="priority">优先级调度</h3>
+<p>每个进程有一个优先级，挑最高的。可以抢占，也可以不抢占。「数字小代表优先级高」还是反过来，每道题会自己约定，读题时要看清楚。它同样会让低优先级进程饥饿，常用解法是<b>老化</b>：等得越久，优先级慢慢调高。</p>
+
+<h3 id="rr">时间片轮转（RR）</h3>
+<p>就绪队列按先来后到排队，每个进程最多连续跑一个<b>时间片</b> q，用完还没跑完就回到<b>队尾</b>，抢占式。分时系统、交互系统都靠它，因为每个进程都能很快轮到一次，响应时间短。</p>
+<p>q 怎么定是个权衡（这里用上第 4 节的上下文切换）：</p>
+<ul>
+  <li>q 太大：每个进程在一个时间片里就跑完了，退化成 FCFS。</li>
+  <li>q 太小：频繁切换，上下文切换的开销占比太高。</li>
+</ul>
+<p>本课动画里有一个细节要注意：<b>同一时刻既有新进程到达，又有进程用完时间片时，新到达的先入队</b>。这是最常见的约定，但个别题目会另作说明。</p>
+
+<h3 id="mlfq">多级反馈队列</h3>
+<p>把上面几种的优点拼起来，是很多真实系统的做法：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 235" width="640" role="img" aria-label="多级反馈队列：新进程进最高级，用完时间片降一级">
+  <text x="140" y="20" class="small">新进程从这里进</text>
+  <line x1="170" y1="24" x2="170" y2="38" class="line" marker-end="url(#arrow)"/>
+  <text x="10" y="62">Q0（最高）</text>
+  <rect x="140" y="40" width="300" height="34" class="obj"/><text x="290" y="62" text-anchor="middle">时间片 = 1</text>
+  <line x1="290" y1="74" x2="290" y2="103" class="line" marker-end="url(#arrow)"/>
+  <text x="300" y="93" class="small">用完时间片还没跑完：降一级</text>
+  <text x="10" y="127">Q1</text>
+  <rect x="140" y="105" width="300" height="34" class="hot"/><text x="290" y="127" text-anchor="middle">时间片 = 2</text>
+  <line x1="290" y1="139" x2="290" y2="168" class="line" marker-end="url(#arrow)"/>
+  <text x="300" y="158" class="small">再降一级</text>
+  <text x="10" y="192">Q2（最低）</text>
+  <rect x="140" y="170" width="300" height="34" class="ok"/><text x="290" y="192" text-anchor="middle">时间片 = 4</text>
+  <text x="460" y="62" class="small">调度器先看 Q0，</text>
+  <text x="460" y="80" class="small">Q0 空了才看 Q1，</text>
+  <text x="460" y="98" class="small">以此类推</text>
+  <text x="140" y="226" class="small">最低一级里用完时间片，就回本级队尾（也就是时间片轮转）</text>
+</svg>
+<figcaption>短进程在 Q0 里一下就跑完了（像 SJF）；长进程逐级下沉，在下面用更长的时间片慢慢跑</figcaption>
+</figure>
+
+<h3>小结</h3>
+<table>
+  <tr><th>算法</th><th>抢占？</th><th>优点</th><th>毛病</th></tr>
+  <tr><td>FCFS</td><td>否</td><td>简单、公平</td><td>短作业被长作业拖累（护航效应）</td></tr>
+  <tr><td>SJF</td><td>否</td><td>平均等待时间最短</td><td>要预知运行时间；长作业饥饿</td></tr>
+  <tr><td>SRTF</td><td>是</td><td>比 SJF 还短</td><td>同上，切换更多</td></tr>
+  <tr><td>HRRN</td><td>否</td><td>兼顾短作业和等得久的</td><td>每次都要算响应比</td></tr>
+  <tr><td>优先级</td><td>都可以</td><td>重要的先做</td><td>低优先级饥饿（用老化解决）</td></tr>
+  <tr><td>RR</td><td>是</td><td>响应快，适合交互</td><td>q 难定；平均周转时间常比 SJF 长</td></tr>
+</table>
+
+<h2 id="demo">9. 动手玩：看四种算法怎么排这四个进程</h2>
+<p>点一种算法，动画按时间一格一格往前走：上面是此刻谁在 CPU 上、就绪队列里排着谁，中间是甘特图，下面是每个进程的周转时间和等待时间。建议先点 <b>FCFS</b> 对照上面的表，再点 <b>RR</b>，然后把时间片改成 1 和 10 各试一次。</p>
+<div class="demo" id="scheduler"></div>
+
+<h2 id="threads">10. 线程：进程里的多条执行流</h2>
+<p>网店要同时服务很多顾客。每来一个顾客就开一个进程？太重了：进程之间的内存是互相隔离的，创建一个进程要复制一大堆东西，切换进程还要换掉整套内存信息。</p>
+<p>于是有了<b>线程</b>：一个进程内部可以有好几条执行流，它们共用进程的资源，各自只保留「执行到哪了」需要的那一点东西。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 235" width="640" role="img" aria-label="同一进程内的线程共享代码、数据、堆和文件，各自有栈和寄存器">
+  <rect x="20" y="10" width="600" height="215" rx="8" fill="#fafafa" stroke="#0b62c4" stroke-dasharray="5 4"/>
+  <text x="32" y="32" class="title">一个进程（shop-server）</text>
+  <rect x="40" y="44" width="130" height="38" class="obj"/><text x="105" y="68" text-anchor="middle">代码</text>
+  <rect x="180" y="44" width="140" height="38" class="obj"/><text x="250" y="68" text-anchor="middle">数据（全局变量）</text>
+  <rect x="330" y="44" width="120" height="38" class="obj"/><text x="390" y="68" text-anchor="middle">堆</text>
+  <rect x="460" y="44" width="140" height="38" class="obj"/><text x="530" y="68" text-anchor="middle">打开的文件</text>
+  <text x="320" y="102" text-anchor="middle" class="small">↑ 以上所有线程共享 ↑　　　　↓ 以下每个线程各有一份 ↓</text>
+  <rect x="50" y="112" width="160" height="100" rx="4" class="hot"/>
+  <text x="130" y="132" text-anchor="middle">线程 1：订单 A</text>
+  <rect x="65" y="142" width="130" height="26" class="plain"/><text x="130" y="160" text-anchor="middle">栈</text>
+  <rect x="65" y="174" width="130" height="26" class="plain"/><text x="130" y="192" text-anchor="middle">PC + 寄存器</text>
+  <rect x="240" y="112" width="160" height="100" rx="4" class="hot"/>
+  <text x="320" y="132" text-anchor="middle">线程 2：订单 B</text>
+  <rect x="255" y="142" width="130" height="26" class="plain"/><text x="320" y="160" text-anchor="middle">栈</text>
+  <rect x="255" y="174" width="130" height="26" class="plain"/><text x="320" y="192" text-anchor="middle">PC + 寄存器</text>
+  <rect x="430" y="112" width="160" height="100" rx="4" class="hot"/>
+  <text x="510" y="132" text-anchor="middle">线程 3：写日志</text>
+  <rect x="445" y="142" width="130" height="26" class="plain"/><text x="510" y="160" text-anchor="middle">栈</text>
+  <rect x="445" y="174" width="130" height="26" class="plain"/><text x="510" y="192" text-anchor="middle">PC + 寄存器</text>
+</svg>
+<figcaption>栈记录「函数调用到了哪一层」，PC 记录「下一条指令」，这两样决定一条执行流走到了哪里，所以必须各有一份</figcaption>
+</figure>
+<table>
+  <tr><th></th><th>进程</th><th>线程</th></tr>
+  <tr><td>定位</td><td><b>资源分配</b>的基本单位</td><td><b>CPU 调度</b>的基本单位</td></tr>
+  <tr><td>内存</td><td>各自独立，互不干扰</td><td>同一进程的线程共享内存</td></tr>
+  <tr><td>创建、切换开销</td><td>大</td><td>小（同一进程内切换不用换内存信息）</td></tr>
+  <tr><td>一个出错</td><td>不影响别的进程</td><td>一个线程非法访问内存，<b>整个进程</b>一起崩</td></tr>
+</table>
+<p>现代操作系统里，第 6～8 节说的「调度进程」实际调度的是线程，道理完全一样。共享内存很方便，但两个线程同时改同一个变量会出错，第 3 课专门讲怎么办。</p>
+
+<h2 id="ipc">11. 进程之间怎么通信</h2>
+<p>进程的内存互相隔离，要交换数据就得借助内核提供的通道。了解每种方式的特点即可：</p>
+<table>
+  <tr><th>方式</th><th>特点</th></tr>
+  <tr><td>管道（pipe）</td><td>一端写、一端读的字节流，单向。命令行里的 <code>ls | grep shop</code> 就是它。普通管道只能用于有亲缘关系的进程（例如 fork 出来的父子）</td></tr>
+  <tr><td>命名管道（FIFO）</td><td>有文件名的管道，不相关的进程也能用</td></tr>
+  <tr><td>消息队列</td><td>内核里的一个信箱，按「一条条消息」收发</td></tr>
+  <tr><td>共享内存</td><td>让两个进程看到同一块内存（第 2 课讲怎么做到）。<b>最快</b>，因为数据不用经内核复制；但要自己加锁防止同时修改（第 3 课）</td></tr>
+  <tr><td>信号量</td><td>一个计数器，用来协调先后顺序和互斥，本身不传数据（第 3 课）</td></tr>
+  <tr><td>信号</td><td>通知某件事发生了，例如按 Ctrl+C 发的 SIGINT、<code>kill -9</code> 发的 SIGKILL</td></tr>
+  <tr><td>套接字（socket）</td><td>唯一能<b>跨机器</b>通信的方式，网络部分（第 4～6 课）都建立在它之上</td></tr>
+</table>
+
+<h2 id="exam">12. 题单怎么考</h2>
+<p>牛客「操作系统专项」里和本课有关的题，基本就是下面这几类。做题卡住时，回到右边那一节：</p>
+<table class="qmap">
+  <tr><th>题型</th><th>怎么想</th><th>回看</th></tr>
+  <tr><td>给到达时间和服务时间，求平均周转 / 等待时间</td><td>先画甘特图，再逐个套「周转 = 完成 − 到达，等待 = 周转 − 服务」</td><td><a href="#metrics">7</a>、<a href="#algorithms">8</a>、<a href="#demo">动画</a></td></tr>
+  <tr><td>哪种算法有利于短作业 / 会饥饿 / 是抢占式</td><td>对照小结表</td><td><a href="#algorithms">8</a></td></tr>
+  <tr><td>求某时刻的响应比、按 HRRN 排顺序</td><td>响应比 = 1 + 等待 ÷ 服务</td><td><a href="#hrrn">HRRN</a></td></tr>
+  <tr><td>时间片过大 / 过小会怎样</td><td>过大退化成 FCFS，过小切换开销大</td><td><a href="#rr">RR</a>、<a href="#context-switch">4</a></td></tr>
+  <tr><td>哪种状态转换不可能、某事件引起哪种转换</td><td>对照状态图的箭头</td><td><a href="#states">3</a></td></tr>
+  <tr><td>fork 后打印几次、共有几个进程</td><td>每次 fork 让当时所有进程翻倍</td><td><a href="#fork">5</a></td></tr>
+  <tr><td>进程和线程的区别、线程共享什么</td><td>资源分配 vs 调度单位；栈和寄存器不共享</td><td><a href="#threads">10</a></td></tr>
+  <tr><td>并发和并行的区别</td><td>轮流 vs 同时</td><td><a href="#concurrency">2</a></td></tr>
+  <tr><td>进程间通信有哪些、哪种最快</td><td>共享内存最快；跨机器只能用套接字</td><td><a href="#ipc">11</a></td></tr>
+  <tr><td>PCB 的作用</td><td>进程存在的唯一标志</td><td><a href="#program-process">1</a></td></tr>
+</table>
+
+<h2 id="self-test">自测</h2>
+<details><summary>1. A、B、C 三个进程都在 0 时刻到达，服务时间依次是 6、3、1。FCFS 和 SJF 的平均等待时间各是多少？</summary>
+FCFS 按 A、B、C 顺序跑，等待时间是 0、6、9，平均 5。SJF 按 C、B、A 顺序跑，等待时间是 C 0、B 1、A 4，平均 5/3 ≈ 1.67。这正是「同时到达时 SJF 的平均等待时间最短」的例子。</details>
+<details><summary>2. 时间片轮转，q = 2。A 在 0 时刻到达，服务时间 3；B 在 1 时刻到达，服务时间 3。平均等待时间是多少？</summary>
+甘特图：A 0–2，B 2–4，A 4–5，B 5–6。t = 2 时 A 用完时间片回到队尾，排在早已到达的 B 后面。A 在 5 完成，周转 5，等待 2；B 在 6 完成，周转 5，等待 2。平均等待 2。</details>
+<details><summary>3. 下列哪种状态转换不可能发生？A. 运行→就绪　B. 就绪→运行　C. 阻塞→运行　D. 运行→阻塞</summary>
+C。等待的事件完成后，进程只能先回到就绪状态，再等调度器选中它。</details>
+<details><summary>4. 下面的代码一共打印几行 <code>-</code>？<pre>for (int i = 0; i &lt; 2; i++) { fork(); printf("-\n"); }</pre></summary>
+6 行。i = 0 时 fork 出 2 个进程，各打一行（2 行）；i = 1 时 2 个进程各自 fork 变成 4 个，各打一行（4 行）。<br>
+进阶：去掉 <code>\n</code> 会变成 8 个。因为 <code>printf</code> 先把字符放进进程内存里的缓冲区，遇到换行或程序结束才真正输出；fork 复制进程时，缓冲区里还没输出的 <code>-</code> 也被一起复制了。</details>
+<details><summary>5. 同一进程的多个线程之间，下面哪一项不共享？A. 堆　B. 全局变量　C. 栈　D. 打开的文件</summary>
+C。栈记录每条执行流自己的函数调用，必须各有一份。</details>
+<details><summary>6. 某时刻 CPU 空闲，就绪队列里 A 已等待 6、服务时间 3，B 已等待 3、服务时间 1。按 HRRN 选谁？</summary>
+A 的响应比 = (6 + 3) / 3 = 3，B 的响应比 = (3 + 1) / 1 = 4，选 B。</details>
+<details><summary>7. 时间片轮转的时间片为什么不能设得太小？</summary>
+每用完一个时间片就要上下文切换一次，切换本身不干活。时间片越小，切换次数越多，CPU 花在切换上的比例就越高。</details>
+
+<div class="nav"><a href="index.html">← 目录</a><a href="02-virtual-memory.html">下一课：内存管理与虚拟内存 →</a></div>
+<script src="../anim.js"></script>
+<script src="js/01-process-scheduling.js"></script>
+</body>
+</html>

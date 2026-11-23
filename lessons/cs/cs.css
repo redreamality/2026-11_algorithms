@@ -1,0 +1,40 @@
+/* 计算机基础系列：在 ../style.css 之上补的样式。只放多课共用的东西，单课专用的写在该课的 <style> 里。 */
+
+/* 插图：SVG 居中、按容器缩放，下面一行图注 */
+figure.fig { margin: 18px 0; text-align: center; }
+figure.fig svg { max-width: 100%; height: auto; }
+figure.fig figcaption { color: #666; font-size: 14px; margin-top: 4px; }
+
+/* SVG 里统一的字体和配色。蓝 = 普通对象，橙 = 正在看的，绿 = 成功 / 完成，红 = 出错 / 冲突，灰 = 辅助线 */
+svg text { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 14px; fill: #222; }
+svg .mono { font-family: Consolas, monospace; }
+svg .small { font-size: 12px; fill: #666; }
+svg .title { font-weight: bold; }
+svg .obj { fill: #e3f2fd; stroke: #0b62c4; stroke-width: 1.5; }
+svg .hot { fill: #ffe0b2; stroke: #e65100; stroke-width: 1.5; }
+svg .ok { fill: #c8e6c9; stroke: #2e7d32; stroke-width: 1.5; }
+svg .bad { fill: #ffcdd2; stroke: #c62828; stroke-width: 1.5; }
+svg .plain { fill: #fff; stroke: #555; stroke-width: 1.5; }
+svg .muted { fill: #f5f5f5; stroke: #bbb; stroke-width: 1; }
+svg .line { stroke: #555; stroke-width: 1.5; fill: none; }
+svg .dash { stroke: #999; stroke-width: 1.2; stroke-dasharray: 4 3; fill: none; }
+svg .arrow-blue { stroke: #0b62c4; stroke-width: 1.8; fill: none; }
+svg .arrow-red { stroke: #c62828; stroke-width: 1.8; fill: none; }
+svg .arrow-green { stroke: #2e7d32; stroke-width: 1.8; fill: none; }
+
+/* 概念卡：新名词第一次出现时给的定义 */
+.term { background: #f3f7fc; border-left: 4px solid #0b62c4; padding: 6px 14px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+.term b:first-child { color: #0b62c4; }
+
+/* 概念地图：本课每一节依赖哪几节 */
+.roadmap { font-size: 15px; }
+
+/* 题单怎么考：题型 → 对应知识点 */
+table.qmap td:first-child { white-space: nowrap; }
+.tag { display: inline-block; font-size: 13px; padding: 0 6px; border-radius: 3px; background: #eee; color: #555; margin-right: 4px; }
+
+/* 动画里用到的甘特图、时间轴等通用格子 */
+.demo table { font-size: 15px; }
+.demo td.hot, .demo th.hot { background: #ffe0b2; }
+.demo td.ok { background: #c8e6c9; }
+.demo td.bad { background: #ffcdd2; }

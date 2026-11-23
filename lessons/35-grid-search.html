@@ -135,8 +135,52 @@ def shortest_route(warehouse, start, goal):
   <tr><td>542</td><td>01 矩阵</td><td>课后练习：多源 BFS，从所有 0 同时出发</td></tr>
   <tr><td>1020</td><td>飞地的数量</td><td>课后练习：和 130 一样从边界出发</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-200"><summary>LeetCode 200 · 岛屿数量</summary>
+<p><b>题意</b>：给一个 m × n 的字符网格，<code>"1"</code> 是陆地、<code>"0"</code> 是水，水平或竖直相邻的陆地连成一个岛屿，网格四周都是水，返回岛屿的数量。完整讲解见 <a href="#number-of-islands">正文题 1</a>。</p>
+</details>
+<details id="lc-695"><summary>LeetCode 695 · 岛屿的最大面积</summary>
+<p><b>题意</b>：给一个 m × n 的 0/1 网格，上下左右相连的 1 组成一个岛屿，岛屿面积是它的格子数，返回最大的岛屿面积；没有岛屿时返回 0。完整讲解见 <a href="#max-area-of-island">正文题 2</a>。</p>
+</details>
+<details id="lc-994"><summary>LeetCode 994 · 腐烂的橘子</summary>
+<p><b>题意</b>：m × n 网格里 0 是空格、1 是新鲜橘子、2 是腐烂橘子；每过一分钟，腐烂橘子上下左右相邻的新鲜橘子都会腐烂。返回直到没有新鲜橘子为止最少要几分钟；做不到返回 -1。完整讲解见 <a href="#rotting-oranges">正文题 3</a>。</p>
+</details>
+<details id="lc-130"><summary>LeetCode 130 · 被围绕的区域</summary>
+<p><b>题意</b>：m × n 网格由 <code>'X'</code> 和 <code>'O'</code> 组成，把所有被 <code>'X'</code> 围住的 <code>'O'</code> 区域（不和边界上任何 <code>'O'</code> 连通的区域）原地改成 <code>'X'</code>，不返回值。完整讲解见 <a href="#surrounded-regions">正文题 4</a>。</p>
+</details>
+<details id="lc-463"><summary>LeetCode 463 · 岛屿的周长</summary>
+<p><b>题意</b>：给一个 row × col 的 0/1 网格 <code>grid</code>，1 是陆地、0 是水，每个格子是边长为 1 的正方形。陆地只在水平和竖直方向相连。网格被水完全包围，其中<b>恰好有一个岛屿</b>，岛屿内部没有“湖”（和外面的水不相连的水域）。返回这个岛屿的周长。</p>
+<p><b>例子</b>：输入 <code>grid = [[0, 1, 0, 0], [1, 1, 1, 0], [0, 1, 0, 0], [1, 1, 0, 0]]</code>，即</p>
+<pre>0 1 0 0
+1 1 1 0
+0 1 0 0
+1 1 0 0</pre>
+<p>输出 <code>16</code>：7 块陆地共 28 条边，相邻陆地之间有 6 条公共边，每条公共边在两块陆地里各算过一次，要减掉 2 × 6 = 12，剩下 16。</p>
+<p><b>数据范围</b>：1 ≤ row, col ≤ 100。</p>
+</details>
+<details id="lc-542"><summary>LeetCode 542 · 01 矩阵</summary>
+<p><b>题意</b>：给一个 m × n 的 0/1 矩阵 <code>mat</code>，返回一个同样大小的矩阵，其中每个格子的值是 <code>mat</code> 里这个格子到最近的 0 的距离。上下左右相邻的两个格子距离为 1。</p>
+<p><b>例子</b>（力扣示例 2）：输入 <code>mat = [[0, 0, 0], [0, 1, 0], [1, 1, 1]]</code>，输出 <code>[[0, 0, 0], [0, 1, 0], [1, 2, 1]]</code>：</p>
+<pre>输入        输出
+0 0 0      0 0 0
+0 1 0      0 1 0
+1 1 1      1 2 1</pre>
+<p>最下面一行中间的 1，上方是 1、左右也是 1，要走两步（比如先往上再往上）才碰到 0，所以是 2；其他 1 旁边都直接有 0。</p>
+<p><b>数据范围</b>：1 ≤ m, n ≤ 10<sup>4</sup>，且 m × n ≤ 10<sup>4</sup>；矩阵里至少有一个 0。</p>
+</details>
+<details id="lc-1020"><summary>LeetCode 1020 · 飞地的数量</summary>
+<p><b>题意</b>：给一个 m × n 的 0/1 网格，0 是海洋、1 是陆地。一次移动是从一块陆地走到上下左右相邻的另一块陆地，或者从网格边界上的陆地走出网格。返回无论怎么移动都无法走出网格的陆地格子数量。</p>
+<p><b>例子</b>：输入 <code>grid = [[0, 0, 0, 0], [1, 0, 1, 0], [0, 1, 1, 0], [0, 0, 0, 0]]</code>，即</p>
+<pre>0 0 0 0
+1 0 1 0
+0 1 1 0
+0 0 0 0</pre>
+<p>输出 <code>3</code>：左边的 <code>(1, 0)</code> 在边界上，可以走出去；右边相连的三块 <code>(1, 2)</code>、<code>(2, 1)</code>、<code>(2, 2)</code> 被海洋包住，走不出去。</p>
+<p><b>数据范围</b>：1 ≤ m, n ≤ 500。</p>
+</details>
 
-<h2>题 1：岛屿数量（LeetCode 200）</h2>
+<h2 id="number-of-islands">题 1：岛屿数量（LeetCode 200）</h2>
 <p><b>题意。</b>网格里 <code>"1"</code> 是陆地，<code>"0"</code> 是水。上下左右相连的陆地组成一个岛屿，问一共有几个岛屿。例如：</p>
 <pre>1 1 0 0
 1 0 0 1
@@ -170,7 +214,7 @@ def shortest_route(warehouse, start, goal):
 <p><b>为什么是对的。</b>每次 <code>island_count</code> 加一时，碰到的这块陆地一定属于一座还没数过的岛：如果这座岛之前被数过，当时就已经整座淹掉了，这块不可能还是 <code>"1"</code>。反过来，每座岛至少有一块陆地会被扫描碰到，所以不会漏数。</p>
 <p><b>复杂度。</b>每个格子被扫描一次，被 <code>sink</code> 改成水最多一次，时间 O(row_count × col_count)。递归深度最坏是整张网格都是陆地，额外空间 O(row_count × col_count)。</p>
 
-<h2>题 2：岛屿的最大面积（LeetCode 695）</h2>
+<h2 id="max-area-of-island">题 2：岛屿的最大面积（LeetCode 695）</h2>
 <p><b>题意。</b>网格里 1 是陆地，0 是水。岛屿的面积就是它有几格陆地，求最大的岛屿面积，没有岛屿就返回 0。例如：</p>
 <pre>1 1 0 0
 1 0 0 1
@@ -193,7 +237,7 @@ def shortest_route(warehouse, start, goal):
 <p>先点<b>岛屿数量（DFS）</b>：红框是正在访问的格子，下面的递归栈显示 DFS 走到了多深；访问过的陆地被染上颜色、写上它是第几个岛（这就是原地标记）。注意扫描继续往后走时，染过色的格子都被直接跳过。题 3 读完后再点<b>腐烂的橘子（多源 BFS）</b>，看烂橘子怎么一圈一圈往外扩散。</p>
 <div class="demo" id="grid"></div>
 
-<h2>题 3：腐烂的橘子（LeetCode 994）</h2>
+<h2 id="rotting-oranges">题 3：腐烂的橘子（LeetCode 994）</h2>
 <p><b>题意。</b>网格里 0 是空格，1 是新鲜橘子，2 是腐烂的橘子。每过一分钟，每个烂橘子上下左右相邻的新鲜橘子都会变烂。问最少几分钟后所有橘子都烂掉？如果有新鲜橘子永远烂不到（比如四周都是空格），返回 -1；一开始就没有新鲜橘子，返回 0。例如：</p>
 <pre>2 1 1
 1 1 0
@@ -237,7 +281,7 @@ def minutes_until_all_rotten(grid):
 <p><b>为什么是对的。</b>BFS 按层推进：第 k 层的格子，就是离最近的烂橘子正好 k 步的格子。所有烂橘子同时在第 0 层，所以每个新鲜橘子第一次被碰到时，碰到它的一定是离它最近的那个烂橘子，层数就是它烂掉的分钟数。最后一个烂掉的橘子所在的层数，就是答案。队列空了还有新鲜橘子，说明它们和任何烂橘子都不连通，返回 -1。</p>
 <p><b>复杂度。</b>每个格子最多入队、出队一次，时间 O(row_count × col_count)；队列最坏装下所有格子，额外空间 O(row_count × col_count)。</p>
 
-<h2>题 4：被围绕的区域（LeetCode 130）</h2>
+<h2 id="surrounded-regions">题 4：被围绕的区域（LeetCode 130）</h2>
 <p><b>题意。</b>网格里只有 <code>"X"</code> 和 <code>"O"</code>。把所有被 <code>"X"</code> 完全围住的 <code>"O"</code> 改成 <code>"X"</code>，原地修改。“被围住”是指：这一片相连的 <code>"O"</code> 里，没有任何一格在网格的边界上。例如：</p>
 <pre>X X X X          X X X X
 X O O X    →     X X X X

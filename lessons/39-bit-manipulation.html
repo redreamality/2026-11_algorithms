@@ -89,7 +89,7 @@ int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(netw
 </table>
 <p><b>养成加括号的习惯</b>。在 Python 里，<code>&amp;</code> 比 <code>==</code> 优先级高，所以 <code>number &amp; 1 == 0</code> 恰好是对的；但在 C、Java、JavaScript 里它会被理解成 <code>number &amp; (1 == 0)</code>。另外移位比加减优先级低，<code>1 &lt;&lt; k - 1</code> 是 <code>1 &lt;&lt; (k - 1)</code>。写成 <code>(number &amp; 1) == 0</code>、<code>(1 &lt;&lt; k) - 1</code> 就不用记这些。</p>
 
-<h2>题 1：只出现一次的数字（LeetCode 136）</h2>
+<h2 id="single-number">题 1：只出现一次的数字（LeetCode 136）</h2>
 <p><b>题意</b>：数组里除了一个数只出现一次，其余每个数都恰好出现两次。找出只出现一次的那个。要求 O(n) 时间、O(1) 额外空间。</p>
 <p><b>例子</b>：<code>[4, 1, 2, 1, 2]</code>，1 和 2 都出现两次，返回 4。</p>
 <p><b>普通做法为什么不满足要求</b>：用字典数每个数出现几次，时间 O(n)，但要 O(n) 额外空间；先排序再看相邻的数，空间省了，但时间是 O(n log n)。</p>
@@ -121,7 +121,7 @@ int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(netw
   <tr><td>number - 1</td><td>11</td><td><code>1011</code>（最低位的 1 变 0，右边的 0 变 1）</td></tr>
   <tr><td>number &amp; (number - 1)</td><td>8</td><td><code>1000</code>（第 2 位的 1 被去掉了）</td></tr>
 </table>
-<h3>用法一：位 1 的个数（LeetCode 191）</h3>
+<h3 id="number-of-one-bits">用法一：位 1 的个数（LeetCode 191）</h3>
 <p><b>题意</b>：一个非负整数的二进制里有几个 1。例如 11 = <code>1011</code>，有 3 个 1。</p>
 <p><b>普通做法</b>：一位一位地看（<code>number &amp; 1</code>，然后右移），要循环“二进制的总位数”次，32 位整数就是 32 次。</p>
 <p><b>用上这一招</b>：反复执行 <code>number &amp;= number - 1</code>，每次正好去掉一个 1，直到变成 0。去了几次，就有几个 1。循环次数等于 1 的个数，对“1 很少”的数特别快。</p>
@@ -133,14 +133,14 @@ int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(netw
     return one_bit_count
 
 # 实际项目里直接用 number.bit_count()（Python 3.10+），这里手写是为了练 n &amp; (n - 1)</pre>
-<h3>用法二：2 的幂（LeetCode 231）</h3>
+<h3 id="power-of-two">用法二：2 的幂（LeetCode 231）</h3>
 <p><b>题意</b>：判断一个整数是不是 2 的幂（1、2、4、8、16……）。</p>
 <p><b>关键观察</b>：2 的幂的二进制<b>恰好只有一个 1</b>（16 = <code>10000</code>）。去掉这唯一的 1 之后就变成 0。反过来，有两个以上 1 的数，去掉最低位的那个后还剩别的 1，不是 0。</p>
 <pre>def is_power_of_two(number):
     return number &gt; 0 and (number &amp; (number - 1)) == 0</pre>
 <p><code>number &gt; 0</code> 不能省：0 没有任何 1，<code>0 &amp; -1</code> 也等于 0，会被误判成 2 的幂；负数也不是 2 的幂。<b>复杂度</b>：O(1)。</p>
 
-<h2>题 3：比特位计数（LeetCode 338）</h2>
+<h2 id="counting-bits">题 3：比特位计数（LeetCode 338）</h2>
 <p><b>题意</b>：给一个 limit，返回长度为 limit + 1 的列表，第 i 项是 i 的二进制里 1 的个数。</p>
 <p><b>例子</b>：limit = 5，0..5 的二进制是 0、1、10、11、100、101，返回 <code>[0, 1, 1, 2, 1, 2]</code>。</p>
 <p><b>普通做法为什么慢</b>：对每个数单独去数，是 O(limit × 位数)。</p>
@@ -153,7 +153,7 @@ int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(netw
 </ol>
 <p>例如 5 = <code>101</code>：<code>5 &gt;&gt; 1</code> = 2 = <code>10</code>，有 1 个 1；5 的最后一位是 1，所以 5 有 1 + 1 = 2 个 1。<b>复杂度</b>：O(limit)。</p>
 
-<h2>题 4：用位掩码枚举子集（LeetCode 78）</h2>
+<h2 id="subsets">题 4：用位掩码枚举子集（LeetCode 78）</h2>
 <p><b>题意</b>：列出一个数组（元素互不相同）的所有子集。第 21 课用回溯写过，这里换一种写法。</p>
 <p><b>关键观察</b>：n 个元素，每个元素“选或不选”，正好对应一个 n 位二进制数的每一位“1 或 0”。所以 0 到 2<sup>n</sup> − 1 这 2<sup>n</sup> 个整数，和 2<sup>n</sup> 个子集<b>一一对应</b>。这个整数就叫<b>位掩码</b> <code>bit_mask</code>：第 k 位是 1，就表示选了 <code>items[k]</code>。</p>
 <table>
@@ -216,6 +216,51 @@ int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(netw
   <tr><td>190</td><td>颠倒二进制位</td><td>练手：逐位取出再拼到另一头</td></tr>
   <tr><td>371</td><td>两整数之和</td><td>拓展：不用加号做加法（Python 里要手动处理负数，较麻烦）</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-136"><summary>LeetCode 136 · 只出现一次的数字</summary>
+<p><b>题意</b>：非空整数数组 <code>nums</code> 里，除某个元素只出现一次外，其余每个元素都出现两次，找出那个元素；必须线性时间、只用常量额外空间。完整讲解见 <a href="#single-number">正文题 1</a>。</p>
+</details>
+<details id="lc-268"><summary>LeetCode 268 · 丢失的数字</summary>
+<p><b>题意</b>：数组 <code>nums</code> 含有 [0, n] 中的 n 个互不相同的数，返回 [0, n] 里没有出现在数组中的那个数（进阶：线性时间、常数额外空间）。完整讲解见 <a href="#single-number">正文题 1</a> 末尾的变体。</p>
+</details>
+<details id="lc-137"><summary>LeetCode 137 · 只出现一次的数字 II</summary>
+<p><b>题意</b>：整数数组 <code>nums</code> 里，除某个元素只出现一次外，其余每个元素都恰好出现<b>三次</b>，找出并返回那个元素。必须线性时间、常数级额外空间。</p>
+<p><b>例子</b>：输入 <code>nums = [2, 2, 3, 2]</code>，输出 <code>3</code>。2 出现三次，3 出现一次。</p>
+<p><b>数据范围</b>：1 ≤ nums.length ≤ 3 × 10<sup>4</sup>，−2<sup>31</sup> ≤ nums[i] ≤ 2<sup>31</sup> − 1，会有负数。</p>
+</details>
+<details id="lc-260"><summary>LeetCode 260 · 只出现一次的数字 III</summary>
+<p><b>题意</b>：整数数组 <code>nums</code> 里恰好有<b>两个</b>元素只出现一次，其余元素都出现两次，找出这两个元素，可以按任意顺序返回。必须线性时间、常量额外空间。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 2, 1, 3, 2, 5]</code>，输出 <code>[3, 5]</code>（<code>[5, 3]</code> 也对）。1 和 2 各出现两次，3 和 5 各出现一次。</p>
+<p><b>数据范围</b>：2 ≤ nums.length ≤ 3 × 10<sup>4</sup>，−2<sup>31</sup> ≤ nums[i] ≤ 2<sup>31</sup> − 1，会有负数。</p>
+</details>
+<details id="lc-191"><summary>LeetCode 191 · 位 1 的个数</summary>
+<p><b>题意</b>：给正整数 n（1 ≤ n ≤ 2<sup>31</sup> − 1），返回它二进制表示中 1 的个数（也叫汉明重量）。完整讲解见 <a href="#number-of-one-bits">正文题 2 用法一</a>。</p>
+</details>
+<details id="lc-231"><summary>LeetCode 231 · 2 的幂</summary>
+<p><b>题意</b>：给整数 n（−2<sup>31</sup> ≤ n ≤ 2<sup>31</sup> − 1），存在整数 x 使 n = 2<sup>x</sup> 时返回 true，否则返回 false（进阶：不用循环和递归）。完整讲解见 <a href="#power-of-two">正文题 2 用法二</a>。</p>
+</details>
+<details id="lc-461"><summary>LeetCode 461 · 汉明距离</summary>
+<p><b>题意</b>：两个整数的汉明距离是它们二进制表示中对应位不同的位置数目。给两个整数 x 和 y，返回它们的汉明距离。</p>
+<p><b>例子</b>：输入 <code>x = 1, y = 4</code>，输出 <code>2</code>。1 = <code>0001</code>，4 = <code>0100</code>，第 0 位和第 2 位不同。</p>
+<p><b>数据范围</b>：0 ≤ x, y ≤ 2<sup>31</sup> − 1，都是非负数。</p>
+</details>
+<details id="lc-338"><summary>LeetCode 338 · 比特位计数</summary>
+<p><b>题意</b>：给整数 n（0 ≤ n ≤ 10<sup>5</sup>），返回长度为 n + 1 的数组，第 i 项是 i 的二进制表示中 1 的个数；不要用内置函数，进阶要求 O(n) 一趟扫描。完整讲解见 <a href="#counting-bits">正文题 3</a>。</p>
+</details>
+<details id="lc-78"><summary>LeetCode 78 · 子集</summary>
+<p><b>题意</b>：给元素互不相同的整数数组 <code>nums</code>（长度 ≤ 10），返回它所有可能的子集（幂集），不能包含重复的子集，可以按任意顺序返回。完整讲解见 <a href="#subsets">正文题 4</a>。</p>
+</details>
+<details id="lc-190"><summary>LeetCode 190 · 颠倒二进制位</summary>
+<p><b>题意</b>：把给定整数 n 的 32 个二进制位首尾颠倒（第 0 位换到第 31 位，第 1 位换到第 30 位……），返回得到的整数。</p>
+<p><b>例子</b>：输入 <code>n = 43261596</code>，输出 <code>964176192</code>。43261596 补足 32 位是 <code>00000010100101000001111010011100</code>，倒过来是 <code>00111001011110000010100101000000</code>，即 964176192。注意要先补足 32 位再颠倒，前导 0 会变成末尾的 0。</p>
+<p><b>数据范围</b>：0 ≤ n ≤ 2<sup>31</sup> − 2，且 n 是偶数（所以颠倒后最高位是 0，结果仍是非负数）。进阶：如果这个函数要被调用很多次，怎样优化。</p>
+</details>
+<details id="lc-371"><summary>LeetCode 371 · 两整数之和</summary>
+<p><b>题意</b>：给两个整数 a 和 b，<b>不使用运算符 + 和 -</b>，计算并返回 a + b。</p>
+<p><b>例子</b>：输入 <code>a = 1, b = 2</code>，输出 <code>3</code>。</p>
+<p><b>数据范围</b>：−1000 ≤ a, b ≤ 1000，会有负数。</p>
+</details>
 
 <h2>最容易错的地方</h2>
 <ul>
@@ -239,7 +284,7 @@ int(ipaddress.ip_address("192.168.1.77")) &amp; int(network.netmask) == int(netw
 <details><summary>3. 比特位计数里，为什么 one_bit_count[i &gt;&gt; 1] 一定已经算好了？</summary>
 i ≥ 1 时 i &gt;&gt; 1 = i // 2 &lt; i，而我们是从小到大填表的，比 i 小的下标都已经填过。这正是四步法第 4 步“遍历顺序要保证用到的状态已经算好”。</details>
 
-<div class="nav"><a href="38-dp-2d.html">← 上一课：二维 DP 高频题</a><a href="index.html">回到目录 →</a></div>
+<div class="nav"><a href="38-dp-2d.html">← 上一课：二维 DP 高频题</a><a href="40-number-theory.html">下一课：数论模板 →</a></div>
 <script src="anim.js"></script>
 <script src="js/39-bit-manipulation.js"></script>
 </body>

@@ -103,8 +103,54 @@ for window_end in range(len(items)):
   <tr><td>424</td><td>替换后的最长重复字符</td><td>求最长（稍难）</td></tr>
   <tr><td>239</td><td>滑动窗口最大值（困难，要用“单调队列”技巧，这里先不展开）</td><td>固定大小</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-3"><summary>LeetCode 3 · 无重复字符的最长子串</summary>
+<p><b>题意</b>：给字符串 <code>s</code>（由英文字母、数字、符号和空格组成，可以是空串），返回其中不含重复字符的最长子串的长度。完整讲解见 <a href="#longest-substring-no-repeat">正文第 1 题</a>。</p>
+</details>
+<details id="lc-76"><summary>LeetCode 76 · 最小覆盖子串</summary>
+<p><b>题意</b>：返回 <code>s</code> 中包含 <code>t</code> 所有字符的最短子串（<code>t</code> 中重复的字符，子串里的个数不能少于 <code>t</code> 里的个数），不存在返回空字符串，题目保证答案唯一。完整讲解见 <a href="#min-window-substring">正文第 2 题</a>。</p>
+</details>
+<details id="lc-209"><summary>LeetCode 209 · 长度最小的子数组</summary>
+<p><b>题意</b>：给正整数数组 <code>nums</code> 和正整数 <code>target</code>，返回和大于等于 <code>target</code> 的最短子数组的长度，不存在返回 0。完整讲解见 <a href="#min-size-subarray-sum">正文第 3 题</a>。</p>
+</details>
+<details id="lc-643"><summary>LeetCode 643 · 子数组最大平均数 I</summary>
+<p><b>题意</b>：给 n 个整数组成的数组 <code>nums</code> 和整数 <code>k</code>，在所有长度恰好为 k 的子数组里，找出平均数最大的那个，返回这个最大平均数。与标准答案误差小于 10<sup>-5</sup> 都算正确。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 12, -5, -6, 50, 3]</code>，<code>k = 4</code>，输出 <code>12.75</code>：长度为 4 的子数组有三个，和分别是 2、51、42，最大的是 [12, -5, -6, 50]，51 / 4 = 12.75。</p>
+<p><b>数据范围</b>：1 ≤ k ≤ n ≤ 10<sup>5</sup>；-10<sup>4</sup> ≤ nums[i] ≤ 10<sup>4</sup>，可以是负数。</p>
+</details>
+<details id="lc-438"><summary>LeetCode 438 · 找到字符串中所有字母异位词</summary>
+<p><b>题意</b>：给字符串 <code>s</code> 和 <code>p</code>，找出 <code>s</code> 中所有是 <code>p</code> 的字母异位词的子串，返回这些子串的起始下标，顺序任意。字母异位词指把一个字符串的字母重新排列得到的字符串（每个字母出现的次数相同），包括原字符串本身。</p>
+<p><b>例子</b>：输入 <code>s = "cbaebabacd"</code>，<code>p = "abc"</code>，输出 <code>[0, 6]</code>：下标 0 开始的 "cba" 和下标 6 开始的 "bac" 都是 "abc" 的字母异位词。</p>
+<p><b>数据范围</b>：1 ≤ s.length, p.length ≤ 3 × 10<sup>4</sup>；只含小写英文字母。</p>
+</details>
+<details id="lc-567"><summary>LeetCode 567 · 字符串的排列</summary>
+<p><b>题意</b>：给字符串 <code>s1</code> 和 <code>s2</code>，判断 <code>s2</code> 是否包含 <code>s1</code> 的某个排列，也就是 <code>s1</code> 的某个排列是不是 <code>s2</code> 的子串。是返回 <code>true</code>，否则返回 <code>false</code>。</p>
+<p><b>例子</b>：输入 <code>s1 = "ab"</code>，<code>s2 = "eidbaooo"</code>，输出 <code>true</code>：<code>s2</code> 里有子串 "ba"，它是 "ab" 的一个排列。</p>
+<p><b>数据范围</b>：1 ≤ s1.length, s2.length ≤ 10<sup>4</sup>；只含小写英文字母。</p>
+</details>
+<details id="lc-1004"><summary>LeetCode 1004 · 最大连续 1 的个数 III</summary>
+<p><b>题意</b>：给只含 0 和 1 的数组 <code>nums</code> 和整数 <code>k</code>，最多可以把 k 个 0 翻转成 1，返回翻转后数组里全是 1 的最长子数组的长度。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0]</code>，<code>k = 2</code>，输出 <code>6</code>：把下标 5 和 10 的 0 翻转，下标 5～10 就是 6 个连续的 1。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 10<sup>5</sup>；0 ≤ k ≤ n。</p>
+</details>
+<details id="lc-904"><summary>LeetCode 904 · 水果成篮</summary>
+<p><b>题意</b>：一排果树从左到右排列，<code>fruits[i]</code> 是第 i 棵树上水果的种类。你有两个篮子，每个篮子只能装<b>一种</b>水果，装多少个不限。你可以从任意一棵树开始，从这棵树起每棵树恰好摘一个水果，然后向右走到下一棵；一旦遇到某棵树的水果放不进任何一个篮子，就必须停下。返回最多能摘多少个水果。</p>
+<p><b>例子</b>：输入 <code>fruits = [1, 2, 1]</code>，输出 <code>3</code>：三棵树只有两种水果，可以全摘。再看示例 3：<code>fruits = [1, 2, 3, 2, 2]</code>，输出 <code>4</code>：从下标 1 开始摘 [2, 3, 2, 2]；如果从下标 0 开始，走到下标 2 的种类 3 时两个篮子已经装了 1 和 2，只能停下，只摘到 2 个。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 10<sup>5</sup>；0 ≤ fruits[i] &lt; n。</p>
+</details>
+<details id="lc-424"><summary>LeetCode 424 · 替换后的最长重复字符</summary>
+<p><b>题意</b>：给只含大写英文字母的字符串 <code>s</code> 和整数 <code>k</code>。每次操作可以把任意一个字符改成任意一个大写英文字母，最多操作 k 次。返回操作后只由同一个字母组成的最长子串的长度。</p>
+<p><b>例子</b>：输入 <code>s = "ABAB"</code>，<code>k = 2</code>，输出 <code>4</code>：把两个 A 都改成 B（或把两个 B 都改成 A），整个字符串就是同一个字母。</p>
+<p><b>数据范围</b>：1 ≤ s.length ≤ 10<sup>5</sup>；0 ≤ k ≤ s.length。</p>
+</details>
+<details id="lc-239"><summary>LeetCode 239 · 滑动窗口最大值</summary>
+<p><b>题意</b>：给整数数组 <code>nums</code> 和整数 <code>k</code>，一个大小为 k 的窗口从数组最左端每次向右移动一格，直到最右端。返回一个数组，依次记录窗口每个位置上 k 个数里的最大值。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 3, -1, -3, 5, 3, 6, 7]</code>，<code>k = 3</code>，输出 <code>[3, 3, 5, 5, 6, 7]</code>：窗口依次是 [1, 3, -1]、[3, -1, -3]、[-1, -3, 5]、[-3, 5, 3]、[5, 3, 6]、[3, 6, 7]，各取最大值。</p>
+<p><b>数据范围</b>：1 ≤ k ≤ n ≤ 10<sup>5</sup>；-10<sup>4</sup> ≤ nums[i] ≤ 10<sup>4</sup>。</p>
+</details>
 
-<h2>第 1 题：无重复字符的最长子串（求最长）</h2>
+<h2 id="longest-substring-no-repeat">第 1 题：无重复字符的最长子串（求最长）</h2>
 <p><b>题意</b>：给一个字符串，找出其中不含重复字符的最长子串，返回它的长度。子串必须连续。</p>
 <p><b>例子</b>：<code>"abcabcbb"</code> 返回 3，最长的是 "abc"。<code>"pwwkew"</code> 返回 3，最长的是 "wke"；"pwke" 虽然也没有重复，但它在原串里不连续，是子序列不是子串。</p>
 <p><b>暴力做法为什么慢</b>：枚举每个起点，从起点往右一个个加字符，遇到重复就停。起点有 n 个，每个起点最多往右走 n 步，O(n²)。</p>
@@ -127,7 +173,7 @@ for window_end, character in enumerate(text):
 <p><b>为什么是对的</b>：对每一个 <code>window_end</code>，收缩完以后的窗口是“以 <code>window_end</code> 结尾的、最长的无重复子串”。为什么是最长：<code>window_start</code> 只在窗口里有重复时才右移，而且挪到刚好没有重复就停。答案子串一定以某个位置结尾，所以把每个 <code>window_end</code> 的最长值取最大，就是答案。</p>
 <p><b>复杂度</b>：<code>window_start</code> 和 <code>window_end</code> 各走一遍，时间 O(n)；集合最多装下所有不同的字符，空间 O(字符种类数)。</p>
 
-<h2>第 2 题：最小覆盖子串（求最短）</h2>
+<h2 id="min-window-substring">第 2 题：最小覆盖子串（求最短）</h2>
 <p><b>题意</b>：给字符串 <code>source</code> 和 <code>target</code>，在 <code>source</code> 里找最短的连续子串，使 <code>target</code> 里的每个字符都被包含，重复的字符要包含同样多次。找不到返回空字符串。</p>
 <p><b>例子</b>：<code>source = "ADOBECODEBANC"</code>，<code>target = "ABC"</code>，返回 <code>"BANC"</code>。"ADOBEC" 也包含 A、B、C，但它长 6，"BANC" 只长 4。再比如 <code>target = "AA"</code>，窗口里就必须有两个 A。</p>
 <p><b>暴力做法为什么慢</b>：枚举所有子串 O(n²) 个，每个再检查是否覆盖 <code>target</code>，更慢。</p>
@@ -160,7 +206,7 @@ for window_end, character in enumerate(source):
 <p><b>为什么是对的</b>：对每一个 <code>window_end</code>，收缩循环会把左边界推到“再推一格就不覆盖”的位置，所以在这个右边界下，记录到的就是最短的覆盖窗口。答案一定以某个位置结尾，因此也一定被记录过。</p>
 <p><b>复杂度</b>：两个下标各走一遍 <code>source</code>，加上统计 <code>target</code>，时间 O(len(source) + len(target))；dict 的大小是 O(字符种类数)。</p>
 
-<h2>第 3 题：长度最小的子数组（求最短）</h2>
+<h2 id="min-size-subarray-sum">第 3 题：长度最小的子数组（求最短）</h2>
 <p><b>题意</b>：数组 <code>numbers</code> 里都是<b>正整数</b>。找出和大于等于 <code>target</code> 的最短连续子数组，返回它的长度，不存在返回 0。</p>
 <p><b>例子</b>：<code>target = 7</code>，<code>numbers = [2, 3, 1, 2, 4, 3]</code>，返回 2，因为 [4, 3] 的和是 7。[2, 3, 1, 2] 的和是 8 也满足，但它长 4。</p>
 <p><b>暴力做法为什么慢</b>：枚举每个起点，往右累加直到和够了。O(n²)。</p>

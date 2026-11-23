@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>计算机基础 第 5 课 · TCP：三次握手、四次挥手与可靠传输</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="cs.css">
+<style>
+/* 本课：时序图里「最新一个报文」用橙色箭头；丢失的报文画红叉 */
+svg .arrow-hot { stroke: #e65100; stroke-width: 2.2; fill: none; }
+svg .lost-mark { fill: #c62828; font-size: 18px; font-weight: bold; }
+.box.client-state, .box.server-state { min-width: 120px; }
+.box.state-ESTABLISHED { background: #c8e6c9; }
+.box.state-TIME_WAIT, .box.state-CLOSE_WAIT, .box.state-LAST_ACK, .box.state-FIN_WAIT_1, .box.state-FIN_WAIT_2 { background: #ffe0b2; }
+.box.state-SYN_SENT, .box.state-SYN_RCVD { background: #e3f2fd; }
+.demo svg { max-width: 100%; height: auto; display: block; margin: 6px auto; }
+</style>
+</head>
+<body>
+<!-- 全页共用的箭头。SVG 里写 marker-end="url(#arrow)" 即可 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+  <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0b62c4"/></marker>
+  <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c62828"/></marker>
+  <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e7d32"/></marker>
+  <marker id="arrow-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e65100"/></marker>
+</defs></svg>
+
+<p><a href="index.html">← 计算机基础目录</a></p>
+<h1>第 5 课 · TCP：三次握手、四次挥手与可靠传输</h1>
+<p class="one-line">IP 只管把分组尽力送到对面的主机，会丢、会乱序。TCP 在两端各记一套<b>编号</b>，靠「对方确认收到了哪里」来发现丢失并重发，于是在不可靠的网络上做出了一条可靠的字节流。握手、挥手、窗口，都是围绕这套编号展开的。</p>
+<p class="prereq">开始前要会：<a href="04-network-layers.html">第 4 课</a>的五层模型、封装与首部、端口号、IP 地址，以及「分组在网络里可能丢失、可能乱序到达」；<a href="01-process-scheduling.html#ipc">第 1 课 · 进程间通信</a>里的套接字。</p>
+
+<p>还是那家小网店。顾客在浏览器里打开网店首页：浏览器所在的电脑临时挑了一个端口 <b>52000</b>，去连网店服务器的 <b>443</b> 端口（HTTPS）。这一课从头到尾只跟着这一条连接：它怎么建立、请求和响应怎么可靠地送达、最后怎么关掉，以及网络拥堵时它怎么放慢速度。</p>
+
+<p class="roadmap"><b>本课的路线</b>：传输层干什么 → UDP：最简单的传输 → TCP 的四个特点 → TCP 首部 → 序号与确认号 → 三次握手 → 为什么不是两次 → 四次挥手 → TIME_WAIT → 确认与重传 → 滑动窗口与流量控制 → 拥塞控制 → 动手玩 → 题单怎么考。</p>
+
+<h2 id="transport">1. 传输层干什么：从主机到进程</h2>
+<p>第 4 课讲过，网络层（IP）负责把一个分组从一台主机送到另一台主机。但一台主机上同时跑着很多进程：网店服务器上既有监听 443 的网店程序，也有监听 22 的 SSH 服务。分组到了服务器，该交给哪个进程？这就是<b>传输层</b>的事。</p>
+<div class="term"><b>传输层</b>：五层模型里网络层之上、应用层之下的那一层。它负责<b>进程到进程</b>的通信：用<b>端口号</b>区分同一台主机上的不同进程。网络层只负责主机到主机。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 210" width="640" role="img" aria-label="IP 地址找到主机，端口号找到主机上的进程">
+  <rect x="20" y="30" width="200" height="150" rx="8" fill="#fafafa" stroke="#0b62c4" stroke-dasharray="5 4"/>
+  <text x="32" y="52" class="title">顾客的电脑</text>
+  <rect x="40" y="70" width="160" height="40" class="hot"/><text x="120" y="95" text-anchor="middle">浏览器 :52000</text>
+  <rect x="40" y="122" width="160" height="40" class="muted"/><text x="120" y="147" text-anchor="middle">音乐软件 :53100</text>
+  <rect x="420" y="30" width="200" height="150" rx="8" fill="#fafafa" stroke="#0b62c4" stroke-dasharray="5 4"/>
+  <text x="432" y="52" class="title">网店服务器</text>
+  <rect x="440" y="70" width="160" height="40" class="hot"/><text x="520" y="95" text-anchor="middle">网店程序 :443</text>
+  <rect x="440" y="122" width="160" height="40" class="muted"/><text x="520" y="147" text-anchor="middle">SSH 服务 :22</text>
+  <line x1="222" y1="190" x2="418" y2="190" class="line" marker-end="url(#arrow)"/>
+  <text x="320" y="204" text-anchor="middle" class="small">网络层（IP）：主机 → 主机</text>
+  <line x1="202" y1="90" x2="436" y2="90" class="arrow-blue" marker-start="url(#arrow-blue)" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="80" text-anchor="middle">传输层：进程 ↔ 进程</text>
+  <text x="320" y="116" text-anchor="middle" class="small">靠端口号找到具体是哪个进程</text>
+</svg>
+<figcaption>IP 地址把数据送到那台电脑，端口号再把它交给电脑上的那个进程</figcaption>
+</figure>
+<p>第 1 课提到的<b>套接字</b>就是进程使用传输层的入口。一条连接由两端的「IP 地址 + 端口」一起确定，共四个数：</p>
+<pre>（顾客电脑的 IP, 52000）  ↔  （网店服务器的 IP, 443）</pre>
+<p>服务器的 443 是固定的（大家都知道 HTTPS 去 443 找）；浏览器这边的 52000 是操作系统临时分配的，叫<b>临时端口</b>，每开一条新连接换一个。所以同一台服务器的 443 端口能同时和成千上万个顾客保持连接，靠的是对方的 IP 和端口各不相同。</p>
+<p>传输层有两个主角：简单的 <b>UDP</b> 和复杂的 <b>TCP</b>。先看简单的。</p>
+
+<h2 id="udp">2. UDP：只加端口，别的什么都不管</h2>
+<p><b>UDP</b>（用户数据报协议）在应用的数据前面加一个 8 字节的首部，然后直接交给 IP。它的特点用一句话说：<b>除了端口和校验，什么都不管</b>。</p>
+<ul>
+  <li><b>无连接</b>：发之前不用和对方打招呼，想发就发。</li>
+  <li><b>不可靠</b>：丢了就丢了，不重发；乱序了也不排序。</li>
+  <li><b>首部只有 8 字节</b>：源端口、目的端口、长度、校验和，各 2 字节。<b>校验和</b>是按数据内容算出的一个数，接收方再算一遍，对不上就说明传输中出了错，直接丢弃。</li>
+  <li><b>面向报文</b>：应用交下来一条消息，UDP 就原样发一个数据报，不拆也不合。</li>
+</ul>
+<p>为什么还有人用这么「简陋」的协议？因为<b>快、开销小</b>：不用建立连接，没有重传带来的等待。适合的场景：</p>
+<table>
+  <tr><th>场景</th><th>为什么用 UDP</th></tr>
+  <tr><td>DNS 查询（53 端口，第 4 课）</td><td>一问一答各一个小数据报，丢了让应用自己再问一次就行，建连接反而更慢</td></tr>
+  <tr><td>视频通话、直播、在线游戏</td><td>要的是「新」，晚到的旧画面重发过来也没用</td></tr>
+  <tr><td>DHCP（自动分配 IP）、SNMP（网络管理）</td><td>报文小、一问一答</td></tr>
+  <tr><td>HTTP/3（第 6 课）</td><td>在 UDP 之上自己实现可靠传输，绕开 TCP 的一些限制</td></tr>
+</table>
+<p>网店首页可不能这样：网页少了一段就显示不出来。所以浏览器和网店之间用的是 TCP。</p>
+
+<h2 id="tcp-intro">3. TCP 的四个特点</h2>
+<p><b>TCP</b>（传输控制协议）是传输层的另一个主角。HTTP、HTTPS、SSH、FTP、SMTP（第 4 课那些常用端口）全都跑在 TCP 上。它的四个特点：</p>
+<div class="term"><b>面向连接</b>：传数据之前，双方要先交换几个报文，商量好初始编号、各自分配好<b>缓冲区</b>（内存里暂存收发数据的一块区域），这个约定好的「通话状态」叫<b>连接</b>。用完还要专门把连接关掉。</div>
+<div class="term"><b>可靠</b>：发出去的数据保证<b>不丢、不重、按顺序</b>交给对方的应用。丢了会重发，重复的会丢掉，乱序的会排好。</div>
+<div class="term"><b>面向字节流</b>：TCP 不管应用一次写了多少，只把数据看成一长串字节，自己决定怎么切块发送。应用写一次 1000 字节，对方可能分两次读到 600 + 400。</div>
+<div class="term"><b>全双工</b>：一条连接上，两个方向可以同时发数据。可以理解为两条方向相反、各自独立的字节流。</div>
+<p>TCP 传送的数据单位叫<b>报文段</b>（第 4 课「各层的数据单位」里的「段」）：TCP 首部 + 切下来的一块数据。下面先看首部里有什么，因为整课的机制都写在这几个字段里。</p>
+
+<h2 id="header">4. TCP 首部：几个关键字段</h2>
+<figure class="fig">
+<svg viewBox="0 0 640 260" width="640" role="img" aria-label="UDP 首部 8 字节与 TCP 首部 20 字节的字段布局">
+  <text x="120" y="22" text-anchor="middle" class="title">UDP 首部（8 字节）</text>
+  <text x="440" y="22" text-anchor="middle" class="title">TCP 首部（固定部分 20 字节）</text>
+  <text x="120" y="42" text-anchor="middle" class="small">←　每行 32 位 = 4 字节　→</text>
+  <text x="440" y="42" text-anchor="middle" class="small">←　每行 32 位 = 4 字节　→</text>
+  <rect x="20" y="50" width="100" height="28" class="obj"/><text x="70" y="69" text-anchor="middle">源端口</text>
+  <rect x="120" y="50" width="100" height="28" class="obj"/><text x="170" y="69" text-anchor="middle">目的端口</text>
+  <rect x="20" y="78" width="100" height="28" class="plain"/><text x="70" y="97" text-anchor="middle">长度</text>
+  <rect x="120" y="78" width="100" height="28" class="plain"/><text x="170" y="97" text-anchor="middle">校验和</text>
+  <rect x="20" y="106" width="200" height="28" class="muted"/><text x="120" y="125" text-anchor="middle">数据</text>
+  <rect x="250" y="50" width="190" height="28" class="obj"/><text x="345" y="69" text-anchor="middle">源端口（52000）</text>
+  <rect x="440" y="50" width="190" height="28" class="obj"/><text x="535" y="69" text-anchor="middle">目的端口（443）</text>
+  <rect x="250" y="78" width="380" height="28" class="hot"/><text x="440" y="97" text-anchor="middle">序号 seq（32 位）</text>
+  <rect x="250" y="106" width="380" height="28" class="hot"/><text x="440" y="125" text-anchor="middle">确认号 ack（32 位）</text>
+  <rect x="250" y="134" width="70" height="28" class="plain"/><text x="285" y="152" text-anchor="middle" class="small">首部长度</text>
+  <rect x="320" y="134" width="40" height="28" class="plain"/><text x="340" y="152" text-anchor="middle" class="small">保留</text>
+  <rect x="360" y="134" width="80" height="28" class="hot"/><text x="400" y="153" text-anchor="middle">标志位</text>
+  <rect x="440" y="134" width="190" height="28" class="hot"/><text x="535" y="153" text-anchor="middle">窗口</text>
+  <rect x="250" y="162" width="190" height="28" class="plain"/><text x="345" y="181" text-anchor="middle">校验和</text>
+  <rect x="440" y="162" width="190" height="28" class="plain"/><text x="535" y="181" text-anchor="middle">紧急指针</text>
+  <rect x="250" y="190" width="380" height="28" class="muted"/><text x="440" y="209" text-anchor="middle">选项（可变长，最多 40 字节）</text>
+  <text x="400" y="240" text-anchor="middle" class="small">↑ 标志位：URG ACK PSH RST SYN FIN，各 1 位，置 1 表示「有这个意思」</text>
+</svg>
+<figcaption>橙色是本课要用到的字段。TCP 首部最少 20 字节、最多 60 字节；UDP 固定 8 字节</figcaption>
+</figure>
+<table>
+  <tr><th>字段</th><th>作用</th></tr>
+  <tr><td>源端口、目的端口</td><td>各 16 位，找到两端的进程（和 UDP 一样）</td></tr>
+  <tr><td>序号 seq</td><td>这个报文段里<b>第一个数据字节</b>的编号（下一节细讲）</td></tr>
+  <tr><td>确认号 ack</td><td>「我期望收到你的下一个字节的编号」，只有 ACK 标志为 1 时才有效</td></tr>
+  <tr><td>窗口</td><td>「我的接收缓冲区还能放多少字节」，用来做流量控制（第 11 节）</td></tr>
+  <tr><td>SYN</td><td>同步（synchronize）：请求建立连接，并告诉对方自己的初始序号</td></tr>
+  <tr><td>ACK</td><td>确认：确认号字段有效。连接建立后，所有报文段的 ACK 都是 1</td></tr>
+  <tr><td>FIN</td><td>结束（finish）：我这个方向的数据发完了，要关闭</td></tr>
+  <tr><td>RST</td><td>重置（reset）：出错了，立刻中断连接（例如连一个没人监听的端口）</td></tr>
+</table>
+<p>PSH（让对方尽快把数据交给应用）和 URG（配合紧急指针，标出紧急数据）考得少，知道名字即可。</p>
+
+<h2 id="seq-ack">5. 序号与确认号：TCP 的核心</h2>
+<p>TCP 是字节流，所以它给自己发出的<b>每一个字节</b>都编一个号。两个方向各编各的。</p>
+<div class="term"><b>初始序号（ISN）</b>：建立连接时，每一方随机选一个起始编号。本课约定：<b>客户端（浏览器）ISN = 100，服务器 ISN = 300</b>。真实系统里是随机的 32 位数，这里用小数字方便算。</div>
+<div class="term"><b>序号 seq</b>：报文段里第一个数据字节的编号。</div>
+<div class="term"><b>确认号 ack</b>：<b>期望收到的下一个字节的编号</b>。ack = 201 的意思是「200 号以及之前的字节我都收到了，下一个请发 201」。这种「确认到哪里为止全部收到」的方式叫<b>累计确认</b>。</div>
+<p>还有一条规则必须记住：<b>SYN 和 FIN 虽然不带数据，但各占一个序号</b>；只带 ACK、不带数据的报文段不占序号。为什么？因为 SYN 和 FIN 也需要被确认（对方得回一个 ack 表示「你的 SYN 我收到了」），占了一个号才有东西可确认。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 190" width="640" role="img" aria-label="客户端方向的字节编号：SYN 占 100，请求数据占 101 到 200，下一个是 201">
+  <text x="20" y="24" class="title">客户端 → 服务器这个方向的编号</text>
+  <rect x="40" y="50" width="90" height="36" class="hot"/><text x="85" y="66" text-anchor="middle" class="mono">100</text><text x="85" y="81" text-anchor="middle" class="small">SYN</text>
+  <rect x="130" y="50" width="60" height="36" class="obj"/><text x="160" y="73" text-anchor="middle" class="mono">101</text>
+  <rect x="190" y="50" width="60" height="36" class="obj"/><text x="220" y="73" text-anchor="middle" class="mono">102</text>
+  <rect x="250" y="50" width="60" height="36" class="obj"/><text x="280" y="73" text-anchor="middle" class="mono">103</text>
+  <rect x="310" y="50" width="80" height="36" class="obj"/><text x="350" y="73" text-anchor="middle">……</text>
+  <rect x="390" y="50" width="60" height="36" class="obj"/><text x="420" y="73" text-anchor="middle" class="mono">200</text>
+  <rect x="450" y="50" width="90" height="36" class="muted"/><text x="495" y="73" text-anchor="middle" class="mono">201 …</text>
+  <path d="M 132,96 L 132,104 L 448,104 L 448,96" class="line"/>
+  <text x="290" y="124" text-anchor="middle">请求数据 100 字节：seq = 101，占 101～200</text>
+  <line x1="495" y1="150" x2="495" y2="92" class="arrow-green" marker-end="url(#arrow-green)"/>
+  <text x="495" y="168" text-anchor="middle">服务器回 ack = 201</text>
+  <text x="495" y="184" text-anchor="middle" class="small">「下一个要 201」</text>
+</svg>
+<figcaption>ack 指向的是「还没收到的第一个字节」，所以总是 = 已收到的最后一个编号 + 1</figcaption>
+</figure>
+<p>由此得到笔试里最常用的公式：</p>
+<pre>收到 seq = x、带 n 字节数据的报文段后，回 ack = x + n
+收到 SYN 或 FIN（seq = x，不带数据）后，回 ack = x + 1</pre>
+
+<h2 id="handshake-3">6. 三次握手：建立连接</h2>
+<p>连接要商量好什么？最关键的是<b>双方的初始序号</b>：客户端得告诉服务器「我从 100 开始编号」，服务器得确认收到；反过来服务器也要告诉客户端「我从 300 开始」，客户端也得确认收到。这一来一回共要传四件事，其中服务器的「确认」和「告诉自己的 ISN」可以合在一个报文里，于是正好三个报文：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 290" width="640" role="img" aria-label="三次握手时序图：SYN、SYN+ACK、ACK 以及双方状态">
+  <text x="200" y="22" text-anchor="middle" class="title">浏览器 :52000</text>
+  <text x="440" y="22" text-anchor="middle" class="title">网店服务器 :443</text>
+  <line x1="200" y1="32" x2="200" y2="280" class="line"/>
+  <line x1="440" y1="32" x2="440" y2="280" class="line"/>
+  <text x="190" y="54" text-anchor="end" class="small mono">CLOSED</text>
+  <text x="450" y="54" class="small mono">LISTEN</text>
+  <line x1="200" y1="90" x2="438" y2="130" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="104" text-anchor="middle" class="mono" transform="rotate(9.46 320 110)">① SYN seq=100</text>
+  <text x="190" y="94" text-anchor="end" class="small mono">SYN_SENT</text>
+  <text x="450" y="134" class="small mono">SYN_RCVD</text>
+  <line x1="440" y1="150" x2="202" y2="190" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="164" text-anchor="middle" class="mono" transform="rotate(-9.46 320 170)">② SYN+ACK seq=300 ack=101</text>
+  <text x="190" y="194" text-anchor="end" class="small mono">ESTABLISHED</text>
+  <line x1="200" y1="210" x2="438" y2="250" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="224" text-anchor="middle" class="mono" transform="rotate(9.46 320 230)">③ ACK seq=101 ack=301</text>
+  <text x="450" y="254" class="small mono">ESTABLISHED</text>
+  <text x="20" y="94" class="small">调用 connect()</text>
+  <text x="560" y="54" class="small">调用 listen()</text>
+</svg>
+<figcaption>时序图：竖线是时间（从上往下），斜箭头是一个报文段，斜着画是因为路上要花时间。两侧写的是收发之后进入的状态</figcaption>
+</figure>
+<p>逐个看，每一步都套上一节的公式：</p>
+<ol>
+  <li><b>第一次</b>：客户端发 <code>SYN=1, seq=100</code>。告诉服务器「我要连，我的 ISN 是 100」。发出后客户端进入 <b>SYN_SENT</b>（已发出 SYN，等回音）。</li>
+  <li><b>第二次</b>：服务器回 <code>SYN=1, ACK=1, seq=300, ack=101</code>。ack = 100 + 1，因为 SYN 占了一个序号；seq = 300 是服务器自己的 ISN。服务器收到 SYN 时进入 <b>SYN_RCVD</b>（已收到 SYN）。</li>
+  <li><b>第三次</b>：客户端回 <code>ACK=1, seq=101, ack=301</code>。seq = 101，因为客户端的 100 号已经被 SYN 用掉了；ack = 300 + 1。客户端收到第二次握手时就进入 <b>ESTABLISHED</b>（连接已建立），服务器收到第三次握手后也进入 ESTABLISHED。</li>
+</ol>
+<p>这里出现的状态名都是 TCP 规定的，笔试会直接考：</p>
+<table>
+  <tr><th>状态</th><th>意思</th><th>谁会处于</th></tr>
+  <tr><td>CLOSED</td><td>没有连接</td><td>双方的起点和终点</td></tr>
+  <tr><td>LISTEN</td><td>在某个端口上等别人来连</td><td>服务器（程序调用了 <code>listen()</code>）</td></tr>
+  <tr><td>SYN_SENT</td><td>发了 SYN，等 SYN+ACK</td><td>客户端（程序调用了 <code>connect()</code>）</td></tr>
+  <tr><td>SYN_RCVD</td><td>收到 SYN、回了 SYN+ACK，等最后的 ACK</td><td>服务器</td></tr>
+  <tr><td>ESTABLISHED</td><td>连接已建立，可以收发数据</td><td>双方</td></tr>
+</table>
+<p>两个常考细节：</p>
+<ul>
+  <li>第三次握手的 ACK <b>可以携带数据</b>（这时它就占序号了）；前两次不能带数据。</li>
+  <li>主动发起连接的一方叫<b>主动打开</b>（客户端），在 LISTEN 状态等待的一方叫<b>被动打开</b>（服务器）。</li>
+</ul>
+
+<h2 id="why-three">7. 为什么是三次，不是两次</h2>
+<p>两次（SYN、SYN+ACK）之后，服务器就知道「客户端能发、我能收、我能发」，但还不知道<b>客户端到底收没收到我的 SYN+ACK</b>，也就是客户端是否确认了服务器的 ISN 300。少了这一步，最典型的问题出在<b>已经作废的旧 SYN</b> 上。</p>
+<p>设想浏览器以前发过一个 SYN（seq = 50），它在某个拥堵的路由器里滞留了很久。浏览器等不到回音早就放弃了。现在这个旧 SYN 终于到了服务器：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 410" width="640" role="img" aria-label="两次握手时旧 SYN 会让服务器白白建立连接，三次握手时客户端回 RST 拒绝">
+  <text x="20" y="22" class="title">如果只有两次握手</text>
+  <text x="200" y="22" text-anchor="middle" class="small">浏览器</text>
+  <text x="440" y="22" text-anchor="middle" class="small">网店服务器</text>
+  <line x1="200" y1="32" x2="200" y2="165" class="line"/>
+  <line x1="440" y1="32" x2="440" y2="165" class="line"/>
+  <line x1="200" y1="50" x2="438" y2="90" class="arrow-red" stroke-dasharray="6 4" marker-end="url(#arrow-red)"/>
+  <text x="320" y="64" text-anchor="middle" class="small" transform="rotate(9.46 320 70)">旧 SYN seq=50（浏览器早已放弃它）</text>
+  <line x1="440" y1="100" x2="202" y2="140" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="114" text-anchor="middle" class="small mono" transform="rotate(-9.46 320 120)">SYN+ACK seq=300 ack=51</text>
+  <text x="190" y="152" text-anchor="end" class="small">没发过这个，不理</text>
+  <rect x="450" y="84" width="180" height="48" rx="4" class="bad"/>
+  <text x="540" y="104" text-anchor="middle">以为连接已建立</text>
+  <text x="540" y="123" text-anchor="middle" class="small">分配缓冲区，一直白等数据</text>
+  <line x1="20" y1="180" x2="620" y2="180" class="dash"/>
+  <text x="20" y="206" class="title">三次握手</text>
+  <line x1="200" y1="216" x2="200" y2="400" class="line"/>
+  <line x1="440" y1="216" x2="440" y2="400" class="line"/>
+  <line x1="200" y1="226" x2="438" y2="266" class="arrow-red" stroke-dasharray="6 4" marker-end="url(#arrow-red)"/>
+  <text x="320" y="240" text-anchor="middle" class="small" transform="rotate(9.46 320 246)">同一个旧 SYN seq=50</text>
+  <text x="450" y="270" class="small mono">SYN_RCVD</text>
+  <line x1="440" y1="276" x2="202" y2="316" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="290" text-anchor="middle" class="small mono" transform="rotate(-9.46 320 296)">SYN+ACK seq=300 ack=51</text>
+  <text x="190" y="320" text-anchor="end" class="small">ack=51 不对，</text>
+  <text x="190" y="336" text-anchor="end" class="small">我没在连</text>
+  <line x1="200" y1="326" x2="438" y2="366" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="340" text-anchor="middle" class="small mono" transform="rotate(9.46 320 346)">RST</text>
+  <rect x="450" y="352" width="180" height="40" rx="4" class="ok"/>
+  <text x="540" y="377" text-anchor="middle">不建立连接，回 LISTEN</text>
+</svg>
+<figcaption>第三次握手让客户端有机会说「这不是我现在要的连接」。只有两次时，服务器没有任何办法分辨旧 SYN</figcaption>
+</figure>
+<p>归纳起来，三次握手的目的是：<b>双方都确认了对方的初始序号</b>（同步序号），并且都确认了「对方能收、也能发」。两次只能做到一半；四次可以，但第二、三次能合并，所以三次就够了。</p>
+<h3 id="syn-flood">SYN 洪泛攻击</h3>
+<p>服务器收到 SYN 后会进入 SYN_RCVD，并为这个「半建立」的连接分配一点资源，等第三次握手。攻击者用大量伪造的源 IP 狂发 SYN，却从不回第三次握手的 ACK，服务器里就堆满了 SYN_RCVD 状态的<b>半连接</b>，存放它们的队列（半连接队列）被占满，正常顾客的 SYN 就进不来了。这叫 <b>SYN 洪泛（SYN Flood）</b>，是一种<b>拒绝服务攻击</b>（目的不是偷数据，而是让正常用户用不了服务）。常见防御是 <b>SYN Cookie</b>：收到 SYN 时先不分配资源，把必要信息编码进自己的初始序号里，等对方带着正确的 ack 回来再建立连接。</p>
+
+<h2 id="teardown">8. 四次挥手：关闭连接</h2>
+<p>浏览器拿到了首页，要关掉这条连接。第 3 节说过 TCP 是全双工的，两个方向是两条独立的字节流，所以要<b>分别关</b>：每个方向各需要一个 FIN 和一个 ACK，一共四个报文。</p>
+<p>接着主线：握手后浏览器发了 100 字节的请求（101～200），服务器回了 200 字节的响应（301～500）。所以此刻客户端下一个序号是 201，服务器下一个序号是 501。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 390" width="640" role="img" aria-label="四次挥手时序图以及双方状态">
+  <text x="200" y="22" text-anchor="middle" class="title">浏览器 :52000</text>
+  <text x="440" y="22" text-anchor="middle" class="title">网店服务器 :443</text>
+  <line x1="200" y1="32" x2="200" y2="380" class="line"/>
+  <line x1="440" y1="32" x2="440" y2="380" class="line"/>
+  <text x="190" y="50" text-anchor="end" class="small mono">ESTABLISHED</text>
+  <text x="450" y="50" class="small mono">ESTABLISHED</text>
+  <line x1="200" y1="70" x2="438" y2="110" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="84" text-anchor="middle" class="mono" transform="rotate(9.46 320 90)">① FIN seq=201 ack=501</text>
+  <text x="190" y="74" text-anchor="end" class="small mono">FIN_WAIT_1</text>
+  <text x="450" y="114" class="small mono">CLOSE_WAIT</text>
+  <line x1="440" y1="124" x2="202" y2="164" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="138" text-anchor="middle" class="mono" transform="rotate(-9.46 320 144)">② ACK seq=501 ack=202</text>
+  <text x="190" y="168" text-anchor="end" class="small mono">FIN_WAIT_2</text>
+  <line x1="440" y1="184" x2="202" y2="214" class="dash" marker-end="url(#arrow)"/>
+  <text x="320" y="192" text-anchor="middle" class="small" transform="rotate(-7.2 320 199)">（如果还有数据，可以继续发）</text>
+  <text x="450" y="200" class="small">半关闭：服务器→浏览器</text>
+  <text x="450" y="216" class="small">这个方向还开着</text>
+  <line x1="440" y1="236" x2="202" y2="276" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="250" text-anchor="middle" class="mono" transform="rotate(-9.46 320 256)">③ FIN seq=501 ack=202</text>
+  <text x="450" y="240" class="small mono">LAST_ACK</text>
+  <text x="190" y="280" text-anchor="end" class="small mono">TIME_WAIT</text>
+  <line x1="200" y1="290" x2="438" y2="330" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="304" text-anchor="middle" class="mono" transform="rotate(9.46 320 310)">④ ACK seq=202 ack=502</text>
+  <text x="450" y="334" class="small mono">CLOSED</text>
+  <rect x="196" y="284" width="8" height="78" class="hot"/>
+  <text x="190" y="326" text-anchor="end" class="small">等 2MSL</text>
+  <text x="190" y="374" text-anchor="end" class="small mono">CLOSED</text>
+</svg>
+<figcaption>主动关闭方（这里是浏览器）最后要在 TIME_WAIT 里多等一会儿；被动关闭方收到最后的 ACK 就直接 CLOSED</figcaption>
+</figure>
+<ol>
+  <li><b>第一次</b>：浏览器发 <code>FIN=1, seq=201</code>，表示「我没有数据要发了」，进入 <b>FIN_WAIT_1</b>（等对方确认我的 FIN）。</li>
+  <li><b>第二次</b>：服务器回 <code>ACK=1, ack=202</code>（FIN 占了 201），进入 <b>CLOSE_WAIT</b>（等自己这边的程序关闭）。浏览器收到后进入 <b>FIN_WAIT_2</b>（等对方的 FIN）。</li>
+  <li><b>第三次</b>：服务器的程序处理完剩下的事、调用 <code>close()</code> 后，发 <code>FIN=1, seq=501</code>，进入 <b>LAST_ACK</b>（等最后一个 ACK）。注意 seq 还是 501：第二次挥手是纯 ACK，不占序号。</li>
+  <li><b>第四次</b>：浏览器回 <code>ACK=1, seq=202, ack=502</code>，进入 <b>TIME_WAIT</b>；服务器收到后进入 <b>CLOSED</b>。</li>
+</ol>
+<p><b>为什么要四次，不能像握手那样把中间两个合并？</b>握手时服务器收到 SYN 就能立刻回 SYN+ACK，因为它没有别的事要做。挥手时服务器收到 FIN，只说明<b>浏览器</b>不发了，服务器自己可能还有数据没发完，必须等它的程序处理完、调用 <code>close()</code> 才能发 FIN。所以 ACK 先回（让对方别重发 FIN），FIN 后发。中间这段「一个方向关了、另一个方向还开着」的状态叫<b>半关闭</b>。（如果服务器收到 FIN 时恰好也没东西要发，第二、三次可以合并成一个 FIN+ACK，变成三次挥手，这是允许的。）</p>
+<p><b>服务器上出现大量 CLOSE_WAIT 说明什么？</b>CLOSE_WAIT 是「对方已经关了，在等我自己的程序调用 <code>close()</code>」。这个状态不会超时自己消失，堆积很多，几乎总是<b>服务器程序的 bug：收到对方关闭后没有关闭套接字</b>（例如异常分支里忘了 close）。这和 TIME_WAIT 多是两回事。</p>
+
+<h2 id="time-wait">9. TIME_WAIT：为什么要等 2MSL</h2>
+<div class="term"><b>MSL</b>（报文段最大生存时间）：一个报文段在网络里最多能存活多久，超过就一定已经被丢弃。RFC 建议 2 分钟，Linux 实际取 30 秒，TIME_WAIT 固定等 60 秒。</div>
+<p>主动关闭方发出最后一个 ACK 后，不立刻 CLOSED，而是在 TIME_WAIT 里等 <b>2MSL</b>。理由有两条。</p>
+<p><b>理由一：最后一个 ACK 可能丢。</b>它一旦丢了，服务器在 LAST_ACK 里等不到确认，会超时重发 FIN（发出的报文段一段时间没被确认就再发一次，叫超时重传，第 10 节细讲）。浏览器必须还「在场」才能再回一个 ACK：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 345" width="640" role="img" aria-label="最后一个 ACK 丢失，服务器重发 FIN，浏览器仍在 TIME_WAIT，能再回 ACK">
+  <text x="200" y="22" text-anchor="middle" class="title">浏览器</text>
+  <text x="440" y="22" text-anchor="middle" class="title">网店服务器</text>
+  <line x1="200" y1="32" x2="200" y2="335" class="line"/>
+  <line x1="440" y1="32" x2="440" y2="335" class="line"/>
+  <text x="450" y="56" class="small mono">LAST_ACK</text>
+  <line x1="440" y1="60" x2="202" y2="100" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="74" text-anchor="middle" class="mono" transform="rotate(-9.46 320 80)">FIN seq=501</text>
+  <text x="190" y="104" text-anchor="end" class="small mono">TIME_WAIT</text>
+  <line x1="200" y1="114" x2="316" y2="133" class="arrow-red" stroke-dasharray="6 4"/>
+  <text x="326" y="140" text-anchor="middle" class="lost-mark">✗</text>
+  <text x="258" y="108" text-anchor="middle" class="small mono" transform="rotate(9.46 258 118)">ACK ack=502</text>
+  <text x="350" y="146" class="small">丢了</text>
+  <text x="450" y="166" class="small">等不到 ACK，超时</text>
+  <line x1="440" y1="186" x2="202" y2="226" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="200" text-anchor="middle" class="mono" transform="rotate(-9.46 320 206)">重发 FIN seq=501</text>
+  <line x1="200" y1="236" x2="438" y2="276" class="arrow-green" marker-end="url(#arrow-green)"/>
+  <text x="320" y="250" text-anchor="middle" class="mono" transform="rotate(9.46 320 256)">ACK seq=202 ack=502</text>
+  <text x="450" y="280" class="small mono">CLOSED</text>
+  <rect x="196" y="100" width="8" height="210" class="hot"/>
+  <text x="190" y="170" text-anchor="end" class="small">还在 TIME_WAIT，</text>
+  <text x="190" y="186" text-anchor="end" class="small">所以能再回一次 ACK</text>
+  <text x="190" y="326" text-anchor="end" class="small mono">CLOSED（2MSL 后）</text>
+</svg>
+<figcaption>如果浏览器发完 ACK 就 CLOSED，重发的 FIN 到达时没人认识这条连接，只会换来一个 RST，服务器无法正常关闭</figcaption>
+</figure>
+<p>为什么是 2MSL？最坏情况：ACK 在路上走了将近 1 个 MSL 才丢，服务器重发的 FIN 又要走将近 1 个 MSL 才到。等满 2MSL，就能覆盖「一来一回」。</p>
+<p><b>理由二：让旧连接的报文在网络里死光。</b>如果浏览器立刻用同一个端口 52000 再连网店 443，新连接和旧连接的四元组完全相同。旧连接还在路上滞留的报文段晚到了，可能被误认成新连接的数据。等 2MSL，两个方向上旧连接的所有报文段都过期了。</p>
+<p>代价是：TIME_WAIT 期间这个四元组不能复用。<b>主动关闭的一方</b>才会进入 TIME_WAIT。如果是服务器主动关连接（例如短连接的 HTTP 服务），服务器上就会堆很多 TIME_WAIT，这本身是正常现象，可以通过让客户端主动关闭、改用长连接（第 6 课）或打开端口复用选项缓解。</p>
+
+<h2 id="reliable">10. 可靠传输：确认、超时重传、快速重传</h2>
+<p>回到连接建立之后。IP 不保证送达，TCP 靠下面三样东西把丢失、重复、乱序都处理掉：</p>
+<ul>
+  <li><b>确认</b>：接收方每收到数据就回 ack（第 5 节的累计确认）。</li>
+  <li><b>按序号整理</b>：接收方按 seq 把乱序到达的报文段排好；seq 已经收过的（重复的）直接丢弃。</li>
+  <li><b>重传</b>：发送方发现某段数据没被确认，就再发一次。怎么「发现」，有两种办法。</li>
+</ul>
+<div class="term"><b>RTT</b>（往返时间）：发出一个报文段到收到它的确认，一共花多久。</div>
+<div class="term"><b>超时重传</b>：发送方每发出一个报文段就启动一个<b>重传计时器</b>，时长叫 <b>RTO</b>（重传超时时间），比 RTT 稍长一些，由 TCP 根据测到的 RTT 动态调整。计时器到期还没收到确认，就认为它丢了，重发。</div>
+<p>超时重传的毛病是慢：RTO 比 RTT 长，丢一个报文段就要干等一整个 RTO。于是有了更快的办法。为了看清楚，这一节把网店的响应换成更大的商品页：500 字节，分成 5 个报文段，每段 100 字节，seq 依次是 301、401、501、601、701。其中 401 那段丢了：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 260" width="640" role="img" aria-label="快速重传：401 号报文段丢失，浏览器连回 3 个重复的 ack=401，服务器立即重发">
+  <text x="20" y="64" class="small">服务器发出</text>
+  <rect x="110" y="44" width="90" height="34" class="obj"/><text x="155" y="66" text-anchor="middle" class="mono">seq=301</text>
+  <rect x="210" y="44" width="90" height="34" class="bad"/><text x="255" y="66" text-anchor="middle" class="mono">seq=401</text>
+  <rect x="310" y="44" width="90" height="34" class="obj"/><text x="355" y="66" text-anchor="middle" class="mono">seq=501</text>
+  <rect x="410" y="44" width="90" height="34" class="obj"/><text x="455" y="66" text-anchor="middle" class="mono">seq=601</text>
+  <rect x="510" y="44" width="90" height="34" class="obj"/><text x="555" y="66" text-anchor="middle" class="mono">seq=701</text>
+  <text x="255" y="34" text-anchor="middle" class="small">✗ 路上丢了</text>
+  <line x1="155" y1="80" x2="155" y2="118" class="line" marker-end="url(#arrow)"/>
+  <line x1="355" y1="80" x2="355" y2="118" class="line" marker-end="url(#arrow)"/>
+  <line x1="455" y1="80" x2="455" y2="118" class="line" marker-end="url(#arrow)"/>
+  <line x1="555" y1="80" x2="555" y2="118" class="line" marker-end="url(#arrow)"/>
+  <text x="255" y="140" text-anchor="middle" class="small">（没收到）</text>
+  <text x="20" y="142" class="small">浏览器回</text>
+  <rect x="110" y="122" width="90" height="34" class="ok"/><text x="155" y="144" text-anchor="middle" class="mono">ack=401</text>
+  <rect x="310" y="122" width="90" height="34" class="hot"/><text x="355" y="144" text-anchor="middle" class="mono">ack=401</text>
+  <rect x="410" y="122" width="90" height="34" class="hot"/><text x="455" y="144" text-anchor="middle" class="mono">ack=401</text>
+  <rect x="510" y="122" width="90" height="34" class="hot"/><text x="555" y="144" text-anchor="middle" class="mono">ack=401</text>
+  <text x="155" y="174" text-anchor="middle" class="small">正常确认</text>
+  <text x="355" y="174" text-anchor="middle" class="small">重复 1</text>
+  <text x="455" y="174" text-anchor="middle" class="small">重复 2</text>
+  <text x="555" y="174" text-anchor="middle" class="small">重复 3</text>
+  <text x="320" y="210" text-anchor="middle">服务器收到 3 个重复 ACK → 立刻重发 seq=401，不等计时器超时</text>
+  <text x="320" y="238" text-anchor="middle" class="small">浏览器收到 401 后，501～800 早已缓存好，直接回 ack=801</text>
+</svg>
+<figcaption>501、601、701 到了，但 401 还缺着，累计确认只能一直说「我要 401」，于是出现重复的 ACK</figcaption>
+</figure>
+<div class="term"><b>快速重传</b>：发送方连续收到<b>3 个重复 ACK</b>（同一个 ack 值又来了 3 次，加上第一次共 4 个），就认定那一段丢了，立即重传，不等超时。</div>
+<p>为什么是 3 个而不是 1 个？因为 IP 会乱序：401 可能只是比 501 晚到一点，这时也会出现 1～2 个重复 ACK。连续 3 个重复，基本可以肯定是真丢了。</p>
+
+<h2 id="flow">11. 滑动窗口与流量控制</h2>
+<p>如果发一段就停下来等它的确认，一个 RTT 只能发一段，太慢了。TCP 允许发送方<b>不等确认，连续发出一批</b>，这一批的范围就是<b>窗口</b>。</p>
+<div class="term"><b>接收窗口（rwnd）</b>：接收方在每个报文段首部的「窗口」字段里告诉对方：我的接收缓冲区还能放多少字节。</div>
+<div class="term"><b>发送窗口</b>：发送方「已发出但还没被确认」加上「还可以马上发」的那段字节范围。发送窗口不能超过对方通告的 rwnd。</div>
+<p>还是服务器发商品页（100 字节一段）。假设浏览器通告 rwnd = 400：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 240" width="640" role="img" aria-label="发送窗口随着确认向右滑动">
+  <text x="330" y="22" text-anchor="middle" class="small">发送窗口 = rwnd = 400 字节</text>
+  <path d="M 192,40 L 192,30 L 468,30 L 468,40" class="arrow-blue"/>
+  <rect x="50" y="44" width="70" height="34" class="ok"/><text x="85" y="66" text-anchor="middle" class="mono">301</text>
+  <rect x="120" y="44" width="70" height="34" class="ok"/><text x="155" y="66" text-anchor="middle" class="mono">401</text>
+  <rect x="190" y="44" width="70" height="34" class="hot"/><text x="225" y="66" text-anchor="middle" class="mono">501</text>
+  <rect x="260" y="44" width="70" height="34" class="hot"/><text x="295" y="66" text-anchor="middle" class="mono">601</text>
+  <rect x="330" y="44" width="70" height="34" class="obj"/><text x="365" y="66" text-anchor="middle" class="mono">701</text>
+  <rect x="400" y="44" width="70" height="34" class="obj"/><text x="435" y="66" text-anchor="middle" class="mono">801</text>
+  <rect x="470" y="44" width="70" height="34" class="muted"/><text x="505" y="66" text-anchor="middle" class="mono">901</text>
+  <rect x="540" y="44" width="70" height="34" class="muted"/><text x="575" y="66" text-anchor="middle" class="mono">1001</text>
+  <text x="120" y="98" text-anchor="middle" class="small">已发送、已确认</text>
+  <text x="260" y="98" text-anchor="middle" class="small">已发送、未确认</text>
+  <text x="400" y="98" text-anchor="middle" class="small">还没发，可以马上发</text>
+  <text x="540" y="98" text-anchor="middle" class="small">不能发（超出窗口）</text>
+  <line x1="320" y1="108" x2="320" y2="134" class="line" marker-end="url(#arrow)"/>
+  <text x="330" y="126" class="small">收到 ack=701，rwnd 仍是 400：窗口右移 200 字节</text>
+  <path d="M 332,150 L 332,140 L 608,140 L 608,150" class="arrow-blue"/>
+  <rect x="50" y="154" width="70" height="34" class="ok"/><text x="85" y="176" text-anchor="middle" class="mono">301</text>
+  <rect x="120" y="154" width="70" height="34" class="ok"/><text x="155" y="176" text-anchor="middle" class="mono">401</text>
+  <rect x="190" y="154" width="70" height="34" class="ok"/><text x="225" y="176" text-anchor="middle" class="mono">501</text>
+  <rect x="260" y="154" width="70" height="34" class="ok"/><text x="295" y="176" text-anchor="middle" class="mono">601</text>
+  <rect x="330" y="154" width="70" height="34" class="obj"/><text x="365" y="176" text-anchor="middle" class="mono">701</text>
+  <rect x="400" y="154" width="70" height="34" class="obj"/><text x="435" y="176" text-anchor="middle" class="mono">801</text>
+  <rect x="470" y="154" width="70" height="34" class="obj"/><text x="505" y="176" text-anchor="middle" class="mono">901</text>
+  <rect x="540" y="154" width="70" height="34" class="obj"/><text x="575" y="176" text-anchor="middle" class="mono">1001</text>
+  <text x="320" y="218" text-anchor="middle" class="small">每格是一个 100 字节的报文段，格里写的是它的 seq</text>
+</svg>
+<figcaption>窗口的左边沿跟着 ack 前进，宽度由 rwnd 决定。确认一到，窗口就向右「滑」，所以叫滑动窗口</figcaption>
+</figure>
+<div class="term"><b>流量控制</b>：接收方用 rwnd 限制发送方的速度，<b>防止发得太快把接收方的缓冲区撑爆</b>。管的是「两端之间」：接收方来不及处理。</div>
+<p>如果浏览器的应用一直不读，缓冲区满了，它会通告 <b>rwnd = 0</b>，服务器就停止发送。之后浏览器腾出空间会发一个新的窗口通告，但万一这个通告丢了，双方会互相干等。所以收到零窗口的一方会启动<b>持续计时器</b>（也叫坚持计时器），定期发一个很小的<b>零窗口探测</b>报文，问「现在有空间了吗」。</p>
+<p>补充一种笔试常见的分类：发送方只重传丢失那一段的叫<b>选择重传</b>（SR）；一旦超时就把那一段之后已发的全部重传的叫<b>回退 N</b>（GBN）。TCP 主要靠累计确认，行为接近 GBN，但会缓存乱序到达的数据，加上 SACK 选项（选择确认：接收方在首部选项里告诉发送方自己额外收到了哪几段不连续的数据）后接近选择重传。</p>
+
+<h2 id="congestion">12. 拥塞控制：别把网络堵死</h2>
+<p>流量控制只看接收方。可是中间的路由器也有限度：大家都猛发，路由器的缓冲区排满，分组就被丢弃；丢了大家重发，网络更堵。这种「网络里的分组太多，导致性能急剧下降」叫<b>拥塞</b>。</p>
+<div class="term"><b>拥塞控制</b>：发送方根据网络状况（主要看有没有丢包）主动调整发送速度，<b>防止把网络堵死</b>。管的是「整个网络」，和流量控制管的对象不同。</div>
+<div class="term"><b>拥塞窗口（cwnd）</b>：发送方自己估计的「网络现在能承受一次发多少」。笔试里以<b>报文段个数</b>为单位（每个报文段的数据量取最大报文段长度 <b>MSS</b>）。真正的发送窗口 = min(rwnd, cwnd)。</div>
+<div class="term"><b>慢启动门限（ssthresh）</b>：一条分界线。cwnd 小于它时快速增长，达到它之后改为缓慢增长。</div>
+<p>本节以<b>轮次</b>（1 个 RTT 算 1 轮）为单位看 cwnd 怎么变。TCP Reno 的规则分四条：</p>
+<ol>
+  <li><b>慢启动</b>：连接刚建好，cwnd = 1。每收到一个确认 cwnd 加 1，一轮里发出的 cwnd 个报文段都被确认，所以效果是<b>每轮翻倍</b>：1、2、4、8……名字叫「慢」，是因为起点只有 1，其实增长是指数级的。本课约定：<b>翻倍后不超过 ssthresh</b>，到达 ssthresh 就停在那里。</li>
+  <li><b>拥塞避免</b>：cwnd ≥ ssthresh 以后，<b>每轮只加 1</b>，小心地试探网络的上限。</li>
+  <li><b>超时</b>（说明网络很可能堵得厉害，连后续的报文段都过不去）：ssthresh = 当时 cwnd / 2，<b>cwnd = 1</b>，重新慢启动。</li>
+  <li><b>收到 3 个重复 ACK</b>（说明后面的报文段还能到，网络只是轻微拥塞）：先快速重传丢的那一段，然后 ssthresh = 当时 cwnd / 2，<b>cwnd = ssthresh</b>，直接进入拥塞避免。这一步叫<b>快恢复</b>。</li>
+</ol>
+<p>cwnd / 2 遇到奇数向下取整，且 ssthresh 最小取 2。拥塞避免的「加 1」和出事时的「减半」合起来，叫<b>加法增大、乘法减小（AIMD）</b>。早期的 TCP Tahoe 没有快恢复，3 个重复 ACK 时也把 cwnd 降到 1；题目没说明时按 Reno 算。</p>
+<p>下面是典型的计算题（下方动画的默认值就是它）：</p>
+<p><b>题</b>：TCP Reno，初始 cwnd = 1，ssthresh = 16。第 12 轮发生超时。问第 13、17、20 轮的 cwnd 各是多少？</p>
+<table>
+  <tr><th>轮次</th><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td></tr>
+  <tr><th>cwnd</th><td>1</td><td>2</td><td>4</td><td>8</td><td>16</td><td>17</td><td>18</td><td>19</td><td>20</td><td>21</td></tr>
+  <tr><th>ssthresh</th><td>16</td><td>16</td><td>16</td><td>16</td><td>16</td><td>16</td><td>16</td><td>16</td><td>16</td><td>16</td></tr>
+  <tr><th>阶段</th><td colspan="4">慢启动，每轮翻倍</td><td colspan="6">到达 16，拥塞避免，每轮 +1</td></tr>
+</table>
+<table>
+  <tr><th>轮次</th><td>11</td><td>12</td><td>13</td><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td><td>19</td><td>20</td></tr>
+  <tr><th>cwnd</th><td>22</td><td><b>23</b> 超时</td><td><b>1</b></td><td>2</td><td>4</td><td>8</td><td><b>11</b></td><td>12</td><td>13</td><td><b>14</b></td></tr>
+  <tr><th>ssthresh</th><td>16</td><td>16</td><td>11</td><td>11</td><td>11</td><td>11</td><td>11</td><td>11</td><td>11</td><td>11</td></tr>
+  <tr><th>阶段</th><td colspan="2">拥塞避免</td><td colspan="4">重新慢启动</td><td colspan="4">到达 11，拥塞避免</td></tr>
+</table>
+<p>逐步说明：第 5 轮 cwnd 翻倍到 16 = ssthresh，从第 6 轮起每轮 +1，第 12 轮是 16 + 7 = 23。第 12 轮超时：ssthresh = ⌊23 / 2⌋ = 11，第 13 轮 cwnd = 1。之后 1、2、4、8，第 17 轮本该翻倍成 16，但不能超过 ssthresh = 11，所以是 11；之后每轮 +1，第 20 轮 = 14。<b>答案：1、11、14</b>。</p>
+<p>如果第 12 轮不是超时而是收到 3 个重复 ACK：ssthresh 同样变成 11，但第 13 轮 cwnd = 11，然后每轮 +1，第 20 轮是 11 + 7 = 18。两种情况画在一张图上：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 325" width="640" role="img" aria-label="ssthresh 为 16、第 12 轮出事时，超时与 3 个重复 ACK 两种情况下的拥塞窗口曲线">
+  <line x1="60" y1="290" x2="625" y2="290" class="line"/>
+  <line x1="60" y1="290" x2="60" y2="24" class="line"/>
+  <text x="52" y="294" text-anchor="end" class="small">0</text>
+  <text x="52" y="254" text-anchor="end" class="small">5</text>
+  <text x="52" y="214" text-anchor="end" class="small">10</text>
+  <text x="52" y="174" text-anchor="end" class="small">15</text>
+  <text x="52" y="134" text-anchor="end" class="small">20</text>
+  <text x="52" y="94" text-anchor="end" class="small">25</text>
+  <text x="66" y="22" class="small">cwnd</text>
+  <text x="60" y="306" text-anchor="middle" class="small">1</text><text x="176" y="306" text-anchor="middle" class="small">5</text>
+  <text x="321" y="306" text-anchor="middle" class="small">10</text><text x="379" y="306" text-anchor="middle" class="small">12</text>
+  <text x="466" y="306" text-anchor="middle" class="small">15</text><text x="611" y="306" text-anchor="middle" class="small">20</text>
+  <text x="560" y="320" text-anchor="middle" class="small">轮次（RTT）</text>
+  <path d="M 60,162 L 393,162 L 393,202 L 611,202" class="dash"/>
+  <text x="70" y="156" class="small">ssthresh = 16</text>
+  <text x="545" y="220" class="small">ssthresh = 11</text>
+  <polyline points="60,282 89,274 118,258 147,226 176,162 205,154 234,146 263,138 292,130 321,122 350,114 379,106" class="line"/>
+  <polyline points="379,106 408,282 437,274 466,258 495,226 524,202 553,194 582,186 611,178" class="arrow-red"/>
+  <polyline points="379,106 408,202 437,194 466,186 495,178 524,170 553,162 582,154 611,146" class="arrow-blue"/>
+  <circle cx="379" cy="106" r="5" class="bad"/>
+  <text x="379" y="94" text-anchor="middle" class="small">第 12 轮 cwnd = 23，出事</text>
+  <circle cx="408" cy="282" r="4" class="bad"/>
+  <circle cx="408" cy="202" r="4" class="obj"/>
+  <text x="150" y="276" class="small">慢启动（翻倍）</text>
+  <text x="200" y="186" class="small">拥塞避免（+1）</text>
+  <line x1="440" y1="40" x2="470" y2="40" class="arrow-red"/><text x="478" y="44" class="small">超时：cwnd → 1</text>
+  <line x1="440" y1="60" x2="470" y2="60" class="arrow-blue"/><text x="478" y="64" class="small">3 个重复 ACK：cwnd → 11</text>
+</svg>
+<figcaption>红线：超时后从 1 重新慢启动，到 11 后改为 +1。蓝线：快恢复，直接从 11 开始 +1。虚线是 ssthresh</figcaption>
+</figure>
+<p>为什么两种情况处理不同？超时意味着发出去的报文段一个确认都没回来，网络可能堵死了，只能从头试；3 个重复 ACK 意味着后面的报文段都送到了，只丢了一个，网络还通，砍一半就够。</p>
+
+<h2 id="demo">13. 动手玩</h2>
+<h3 id="demo-handshake">TCP 连接的一生</h3>
+<p>每一帧多发一个报文段。最上面是双方当前的状态；时序图两侧标出状态在哪一刻变化。先点「三次握手」对照第 6 节，再点「完整过程」从建立看到关闭，最后点「握手时第二个报文丢失」看超时重传（服务器发出 SYN+ACK 时启动了重传计时器）。</p>
+<div class="demo" id="handshake"></div>
+<h3 id="demo-cwnd">拥塞窗口变化</h3>
+<p>按第 12 节的 Reno 规则逐轮计算。默认值就是上面那道题：ssthresh = 16，第 12 轮出事。可以改初始 ssthresh 和出事的轮次 N 再试，例如把 ssthresh 改成 8。</p>
+<div class="demo" id="cwnd"></div>
+
+<h2 id="exam">题单怎么考</h2>
+<p>牛客「计算机网络专项」里和本课有关的题，基本就是下面这几类：</p>
+<table class="qmap">
+  <tr><th>题型</th><th>怎么想</th><th>回看</th></tr>
+  <tr><td>TCP 和 UDP 的区别、哪些应用用 UDP</td><td>连接、可靠、首部 20 vs 8 字节、字节流 vs 报文；DNS、视频用 UDP</td><td><a href="#udp">2</a>、<a href="#tcp-intro">3</a></td></tr>
+  <tr><td>给出 seq 和数据长度，求 ack</td><td>ack = seq + 数据长度；SYN、FIN 各占 1</td><td><a href="#seq-ack">5</a></td></tr>
+  <tr><td>三次握手每步的 seq / ack / 标志位</td><td>画时序图，逐个套公式</td><td><a href="#handshake-3">6</a>、<a href="#demo-handshake">动画</a></td></tr>
+  <tr><td>某个报文发出 / 收到后处于什么状态</td><td>对照握手、挥手两张时序图两侧的状态</td><td><a href="#handshake-3">6</a>、<a href="#teardown">8</a></td></tr>
+  <tr><td>为什么是三次握手</td><td>双方都确认对方的 ISN；防止旧 SYN 建立错误连接</td><td><a href="#why-three">7</a></td></tr>
+  <tr><td>SYN 洪泛攻击利用了什么</td><td>大量半连接占满 SYN_RCVD 队列</td><td><a href="#syn-flood">SYN 洪泛</a></td></tr>
+  <tr><td>为什么挥手要四次</td><td>全双工、半关闭：ACK 和 FIN 不能一起发</td><td><a href="#teardown">8</a></td></tr>
+  <tr><td>TIME_WAIT 等多久、为什么、在哪一方</td><td>主动关闭方等 2MSL；最后的 ACK 可能丢、旧报文要过期</td><td><a href="#time-wait">9</a></td></tr>
+  <tr><td>服务器大量 CLOSE_WAIT / TIME_WAIT</td><td>CLOSE_WAIT：程序没 close；TIME_WAIT：服务器主动关闭</td><td><a href="#teardown">8</a>、<a href="#time-wait">9</a></td></tr>
+  <tr><td>快速重传的触发条件</td><td>3 个重复 ACK</td><td><a href="#reliable">10</a></td></tr>
+  <tr><td>流量控制和拥塞控制的区别</td><td>rwnd 管接收方，cwnd 管网络；发送窗口取较小值</td><td><a href="#flow">11</a>、<a href="#congestion">12</a></td></tr>
+  <tr><td>求第 n 个 RTT 时的 cwnd</td><td>逐轮列表：小于 ssthresh 翻倍（不超过它），之后 +1；超时回 1，3 个重复 ACK 减半</td><td><a href="#congestion">12</a>、<a href="#demo-cwnd">动画</a></td></tr>
+</table>
+
+<h2 id="self-test">自测</h2>
+<details><summary>1. 客户端初始序号为 1000，服务器初始序号为 5000。第三次握手报文的 seq 和 ack 分别是多少？</summary>
+seq = 1001，ack = 5001。第一次握手 SYN 用掉了客户端的 1000 号，所以客户端下一个序号是 1001；服务器的 SYN（seq = 5000）也占一个序号，客户端期望的下一个是 5001。和本课主线 100 / 300 → 101 / 301 是同一个道理。</details>
+<details><summary>2. 主机甲向乙发送了一个 seq = 200、携带 300 字节数据的报文段，乙正确收到后，回给甲的确认号是多少？</summary>
+500。这段数据占 200～499 号字节，乙期望的下一个字节是 200 + 300 = 500。</details>
+<details><summary>3. 四次挥手中，主动关闭方在发出最后一个 ACK 后处于什么状态？要等多久？A. CLOSE_WAIT，1MSL　B. TIME_WAIT，2MSL　C. LAST_ACK，2MSL　D. FIN_WAIT_2，1MSL</summary>
+B。最后的 ACK 可能丢失，对方会重发 FIN，主动关闭方要还在场才能再回 ACK；ACK 走一程、重发的 FIN 再走一程，最长约 2MSL。同时这段时间也让旧连接的报文段全部过期。CLOSE_WAIT 和 LAST_ACK 是被动关闭方的状态。</details>
+<details><summary>4. 网店服务器上用 netstat 看到几千个 CLOSE_WAIT 连接，最可能的原因是？</summary>
+服务器程序在对方关闭连接后，没有调用 <code>close()</code> 关闭自己的套接字（通常是代码里某个分支漏了关闭）。CLOSE_WAIT 是被动关闭方收到 FIN 之后、自己发 FIN 之前的状态，只有程序调用 close 才会离开它。</details>
+<details><summary>5. 下列哪个协议通常使用 UDP？A. HTTP　B. SMTP　C. DNS　D. FTP</summary>
+C。DNS 查询一问一答，报文小，用 UDP 53 端口；建立 TCP 连接反而多花一个 RTT。其余三个都基于 TCP。</details>
+<details><summary>6. TCP Reno，初始 cwnd = 1，ssthresh = 8，第 6 轮发生超时。第 11 轮的 cwnd 是多少？</summary>
+6。逐轮：第 1～4 轮 1、2、4、8（第 4 轮到达 8 = ssthresh）；第 5 轮 9，第 6 轮 10，此时超时：ssthresh = 10 / 2 = 5，cwnd = 1。第 7 轮 1，第 8 轮 2，第 9 轮 4，第 10 轮本该翻倍成 8，但不超过 ssthresh = 5，所以是 5；第 11 轮进入拥塞避免，5 + 1 = 6。可以在动画里把 ssthresh 设为 8、N 设为 6 验证。</details>
+<details><summary>7. TCP Reno 中 cwnd = 20 时收到 3 个重复 ACK，接下来 ssthresh 和 cwnd 各变为多少？下一轮呢？</summary>
+ssthresh = 20 / 2 = 10，cwnd = 10（快恢复，不回到 1），下一轮进入拥塞避免，cwnd = 11。如果是超时，则 ssthresh 同样是 10，但 cwnd = 1，下一轮 2。</details>
+<details><summary>8. 下列关于流量控制和拥塞控制的说法，正确的是？A. 流量控制是为了防止网络拥塞　B. 拥塞窗口由接收方通告　C. 发送窗口取接收窗口和拥塞窗口中较小的那个　D. 慢启动阶段 cwnd 线性增长</summary>
+C。A 错：流量控制防的是接收方缓冲区溢出。B 错：接收方通告的是 rwnd，cwnd 是发送方自己估计的。D 错：慢启动每轮翻倍，是指数增长，拥塞避免才是线性增长。</details>
+
+<div class="nav"><a href="04-network-layers.html">← 上一课：网络分层与 IP</a><a href="06-http.html">下一课：HTTP →</a></div>
+<script src="../anim.js"></script>
+<script src="js/05-tcp.js"></script>
+</body>
+</html>

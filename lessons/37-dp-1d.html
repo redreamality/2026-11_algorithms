@@ -75,7 +75,7 @@ cheapest_pass_plan([1, 4, 6, 7, 8, 20], {1: 2, 7: 7, 30: 15})
 </ol>
 <p>下面每道题都按这个顺序讲：先讲题意，再讲暴力做法为什么慢，然后是关键观察，接着套四步法，最后说明为什么对、复杂度多少。</p>
 
-<h2>题 1：打家劫舍（LeetCode 198）</h2>
+<h2 id="house-robber">题 1：打家劫舍（LeetCode 198）</h2>
 <p><b>题意</b>：一排房子，每间里有一些钱。相邻的两间如果在同一晚都被偷，就会触发警报。问不触发警报的前提下，最多能偷多少钱。</p>
 <p><b>例子</b>：钱数是 <code>[2, 7, 9, 3, 1]</code>。偷第 0、2、4 间（绿色），得到 2 + 9 + 1 = 12，这是最多的。注意“偷 7 和 3”只有 10，“偷 7 和 1”只有 8：并不是挑最大的那间就对。</p>
 <div class="row"><span class="label">下标：</span><span class="box small">0</span><span class="box small">1</span><span class="box small">2</span><span class="box small">3</span><span class="box small">4</span></div>
@@ -112,7 +112,7 @@ cheapest_pass_plan([1, 4, 6, 7, 8, 20], {1: 2, 7: 7, 30: 15})
 <p>三个按钮各演示一道题，用“上一步 / 下一步”慢慢看。<b>打家劫舍</b>：橙色是正在填的格子，蓝色是它要用的两格，最后绿色标出到底偷了哪几间。<b>最长递增子序列</b>：看 <code>smallest_tail</code> 怎么随每个新数变化，橙色是这一步被追加或替换的位置。<b>最大子数组和</b>：看“以当前数结尾的最大和”什么时候接着前面、什么时候重新开始。</p>
 <div class="demo" id="dp1d"></div>
 
-<h2>题 2：零钱兑换（LeetCode 322 回顾，518 重点）</h2>
+<h2 id="coin-change">题 2：零钱兑换（LeetCode 322 回顾，518 重点）</h2>
 <p><b>回顾 322（第 19 课已经写过）</b>：面值 <code>coins</code> 每种不限个数，凑出 amount 最少要几枚。状态 <code>fewest_coins_for_amount[a]</code> = 凑出金额 a 最少要几枚；转移是枚举“最后一枚是哪种面值”：<code>fewest_coins_for_amount[a] = min(fewest_coins_for_amount[a - coin] + 1)</code>。</p>
 <p><b>这一课做 518：问有多少种组合。</b></p>
 <p><b>题意</b>：面值 <code>coins</code> 每种不限个数，凑出 amount 一共有几种组合。组合不看顺序：1 + 2 + 2 和 2 + 1 + 2 算同一种。</p>
@@ -135,7 +135,7 @@ cheapest_pass_plan([1, 4, 6, 7, 8, 20], {1: 2, 7: 7, 30: 15})
 <p><b>如果把两层循环反过来会怎样？</b>外层循环金额、内层循环面值，意思就变成“凑出 a 时，最后一枚可以是任何面值”，于是 1 + 2 和 2 + 1 会被当成两种，数出来的是<b>排列数</b>（这正是 LeetCode 377「组合总和 Ⅳ」）。例如 coins = [1, 2]、amount = 3：组合是 {1 + 1 + 1, 1 + 2} 共 2 种，排列是 1 + 1 + 1、1 + 2、2 + 1 共 3 种。<b>遍历顺序决定了你数的是什么</b>，这就是四步法第 4 步的意义。</p>
 <p><b>复杂度</b>：O(len(coins) × amount) 时间，O(amount) 空间。</p>
 
-<h2>题 3：最长递增子序列（LeetCode 300），这一课做 O(n log n)</h2>
+<h2 id="longest-increasing-subsequence">题 3：最长递增子序列（LeetCode 300），这一课做 O(n log n)</h2>
 <p><b>题意</b>：从数组里按原来的顺序挑出一些数（可以不连续），要求严格递增，问最长能挑几个。</p>
 <p><b>例子</b>：<code>[10, 9, 2, 5, 3, 7, 101, 18]</code>，最长的一个是 [2, 3, 7, 18]（也可以是 [2, 5, 7, 101]），长度 4。</p>
 <p><b>回顾 O(n²)（第 20 课）</b>：<code>dp[i]</code> = 以 numbers[i] 结尾的最长递增子序列长度，对每个 i 往前扫所有 j。n = 10<sup>5</sup> 时要做 10<sup>10</sup> 次比较，太慢。</p>
@@ -173,7 +173,7 @@ def longest_increasing_length_fast(numbers):
 <p>“严格递增”用 <code>bisect_left</code>：遇到相等的数会替换它，而不是追加，所以 [7, 7, 7] 的答案是 1。如果题目要求“非严格递增”（允许相等），就改用 <code>bisect_right</code>。</p>
 <p><b>复杂度</b>：每个数做一次二分，O(n log n) 时间，O(n) 空间。</p>
 
-<h2>题 4：单词拆分（LeetCode 139）</h2>
+<h2 id="word-break">题 4：单词拆分（LeetCode 139）</h2>
 <p><b>题意</b>：给一个字符串 text 和一个词典，问 text 能不能切成若干段，每一段都是词典里的词。词可以重复使用。</p>
 <p><b>例子</b>：text = "applepenapple"，词典 ["apple", "pen"]，可以切成 apple | pen | apple，返回 True。text = "catsandog"，词典 ["cats", "dog", "sand", "and", "cat"]：切成 cats | and | og 或 cat | sand | og 都剩下 "og" 不是词，返回 False。</p>
 <p><b>暴力做法为什么慢</b>：长度为 n 的串，每两个字符之间都可以切或不切，一共 2<sup>n-1</sup> 种切法。而且很多切法的“前半段”是相同的，被反复检查。</p>
@@ -188,7 +188,7 @@ def longest_increasing_length_fast(numbers):
 <p>拿 "applepenapple" 走一遍：<code>can_build_prefix[0]</code> 为 True；i = 5 时 j = 0、<code>text[0:5]</code> = "apple" 是词，所以 <code>can_build_prefix[5]</code> 为 True；i = 8 时 j = 5、"pen" 是词，<code>can_build_prefix[8]</code> 为 True；i = 13 时 j = 8、"apple" 是词，<code>can_build_prefix[13]</code> 为 True。</p>
 <p><b>复杂度</b>：两层循环 O(n²) 个 (j, i)，每次切片和查集合是 O(n)，最坏 O(n³)。优化：只让 j 往回看“词典里最长单词的长度”那么远，就变成 O(n × L²)，L 是最长单词的长度。先把词典转成 <code>set</code>，查一个词是 O(1) 级别。</p>
 
-<h2>题 5：最大子数组和（LeetCode 53）</h2>
+<h2 id="maximum-subarray">题 5：最大子数组和（LeetCode 53）</h2>
 <p><b>题意</b>：找一段<b>连续</b>的、非空的子数组，让它的和最大，返回这个和。</p>
 <p><b>例子</b>：<code>[-2, 1, -3, 4, -1, 2, 1, -5, 4]</code>，连续的一段 [4, -1, 2, 1] 和为 6，最大。全是负数时，答案是最大的那个负数，比如 [-3, -1, -2] 返回 -1（不能一个都不选）。</p>
 <p><b>暴力做法为什么慢</b>：枚举所有起点和终点有 n(n + 1) / 2 段，每段再求和是 O(n³)；用前缀和省掉求和也还是 O(n²)。</p>
@@ -246,6 +246,58 @@ def longest_increasing_length_fast(numbers):
   <tr><td>53</td><td>最大子数组和</td><td>题 5</td></tr>
   <tr><td>152</td><td>乘积最大子数组</td><td>练手：题 5 的升级，负负得正，要同时记最大和最小</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-70"><summary>LeetCode 70 · 爬楼梯</summary>
+<p><b>题意</b>：要爬到 n 级台阶的楼顶，每次可以爬 1 级或 2 级，问一共有多少种不同的方法爬到楼顶。</p>
+<p><b>例子</b>：输入 <code>n = 3</code>，输出 <code>3</code>：1 + 1 + 1、1 + 2、2 + 1。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 45。</p>
+</details>
+<details id="lc-746"><summary>LeetCode 746 · 使用最小花费爬楼梯</summary>
+<p><b>题意</b>：数组 <code>cost</code> 里 <code>cost[i]</code> 是从第 i 级台阶向上爬要付的费用，付过之后可以向上爬 1 级或 2 级。可以从下标 0 或下标 1 的台阶开始爬。楼顶在最后一级台阶之上（下标 n 的位置），返回到达楼顶的最低花费。</p>
+<p><b>例子</b>：输入 <code>cost = [10, 15, 20]</code>，输出 <code>15</code>：从下标 1 开始，付 15，向上爬 2 级直接到楼顶。</p>
+<p><b>数据范围</b>：2 ≤ cost.length ≤ 1000；0 ≤ cost[i] ≤ 999。</p>
+</details>
+<details id="lc-198"><summary>LeetCode 198 · 打家劫舍</summary>
+<p><b>题意</b>：一排房屋，第 i 间存有现金 <code>nums[i]</code>，相邻两间在同一晚都被偷就会触发警报，返回不触发警报的前提下最多能偷到多少钱。完整讲解见 <a href="#house-robber">正文题 1</a>。</p>
+</details>
+<details id="lc-213"><summary>LeetCode 213 · 打家劫舍 II</summary>
+<p><b>题意</b>：和 198 一样，第 i 间房屋存有现金 <code>nums[i]</code>，相邻两间在同一晚都被偷就会触发警报；区别是房屋<b>围成一圈</b>，第一间和最后一间也相邻。返回不触发警报的前提下最多能偷到多少钱。</p>
+<p><b>例子</b>：输入 <code>nums = [2, 3, 2]</code>，输出 <code>3</code>：第 0 间和第 2 间首尾相邻，不能同时偷，只偷中间那间最多。</p>
+<p><b>数据范围</b>：1 ≤ nums.length ≤ 100（可以只有一间）；0 ≤ nums[i] ≤ 1000。</p>
+</details>
+<details id="lc-322"><summary>LeetCode 322 · 零钱兑换</summary>
+<p><b>题意</b>：给不同面额的硬币数组 <code>coins</code> 和总金额 <code>amount</code>，每种硬币数量不限，返回凑成 <code>amount</code> 最少要几枚硬币；凑不出来返回 -1。<a href="#coin-change">正文题 2</a> 开头回顾了这道题。</p>
+<p><b>例子</b>：输入 <code>coins = [1, 2, 5]</code>，<code>amount = 11</code>，输出 <code>3</code>：11 = 5 + 5 + 1。</p>
+<p><b>数据范围</b>：1 ≤ coins.length ≤ 12；1 ≤ coins[i] ≤ 2<sup>31</sup> - 1；0 ≤ amount ≤ 10<sup>4</sup>（amount = 0 时答案是 0）。</p>
+</details>
+<details id="lc-518"><summary>LeetCode 518 · 零钱兑换 II</summary>
+<p><b>题意</b>：给不同面额的硬币数组 <code>coins</code> 和总金额 <code>amount</code>，每种硬币数量不限，返回凑成 <code>amount</code> 的硬币组合数（不计顺序）；凑不出来返回 0。完整讲解见 <a href="#coin-change">正文题 2</a>。</p>
+</details>
+<details id="lc-377"><summary>LeetCode 377 · 组合总和 Ⅳ</summary>
+<p><b>题意</b>：给一个由<b>互不相同</b>的正整数组成的数组 <code>nums</code> 和目标数 <code>target</code>，每个数可以重复使用，返回和为 <code>target</code> 的组合个数。这里顺序不同的序列算作不同的组合。题目保证答案在 32 位整数范围内。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 2, 3]</code>，<code>target = 4</code>，输出 <code>7</code>：(1, 1, 1, 1)、(1, 1, 2)、(1, 2, 1)、(1, 3)、(2, 1, 1)、(2, 2)、(3, 1)。</p>
+<p><b>数据范围</b>：1 ≤ nums.length ≤ 200；1 ≤ nums[i] ≤ 1000；1 ≤ target ≤ 1000。</p>
+</details>
+<details id="lc-300"><summary>LeetCode 300 · 最长递增子序列</summary>
+<p><b>题意</b>：给一个整数数组 <code>nums</code>，返回其中最长<b>严格</b>递增子序列的长度；子序列是删掉若干个元素（也可以不删）、不改变其余元素顺序得到的序列。完整讲解见 <a href="#longest-increasing-subsequence">正文题 3</a>。</p>
+</details>
+<details id="lc-139"><summary>LeetCode 139 · 单词拆分</summary>
+<p><b>题意</b>：给一个字符串 <code>s</code> 和一个字符串列表 <code>wordDict</code>，判断能否用字典里的单词拼接出 <code>s</code>，字典里的单词可以重复使用。完整讲解见 <a href="#word-break">正文题 4</a>。</p>
+</details>
+<details id="lc-91"><summary>LeetCode 91 · 解码方法</summary>
+<p><b>题意</b>：字母 A～Z 按 <code>"A" → "1"</code>、<code>"B" → "2"</code>、……、<code>"Z" → "26"</code> 编码成数字。解码时要把数字串分成若干组，每组恰好对应一个字母，例如 <code>"11106"</code> 可以分成 (1 1 10 6) 得到 <code>"AAJF"</code>，或分成 (11 10 6) 得到 <code>"KJF"</code>；<code>"06"</code> 不能解码成 F，因为 <code>"6"</code> 和 <code>"06"</code> 不是同一个编码。给一个只含数字的字符串 <code>s</code>，返回解码方法的总数；无法解码时返回 0。题目保证答案在 32 位整数范围内。</p>
+<p><b>例子</b>：输入 <code>s = "12"</code>，输出 <code>2</code>：(1 2) 解码成 <code>"AB"</code>，(12) 解码成 <code>"L"</code>。</p>
+<p><b>数据范围</b>：1 ≤ s.length ≤ 100；s 可能以 0 开头，也可能含有 0。</p>
+</details>
+<details id="lc-53"><summary>LeetCode 53 · 最大子数组和</summary>
+<p><b>题意</b>：给一个整数数组 <code>nums</code>，找出和最大的连续子数组（至少含一个元素），返回这个最大和。完整讲解见 <a href="#maximum-subarray">正文题 5</a>。</p>
+</details>
+<details id="lc-152"><summary>LeetCode 152 · 乘积最大子数组</summary>
+<p><b>题意</b>：给一个整数数组 <code>nums</code>，找出乘积最大的非空连续子数组，返回这个乘积。题目保证答案在 32 位整数范围内。</p>
+<p><b>例子</b>：输入 <code>nums = [2, 3, -2, 4]</code>，输出 <code>6</code>：子数组 <code>[2, 3]</code> 的乘积是 6；带上 -2 的子数组乘积都是负数，<code>[4]</code> 只有 4。</p>
+<p><b>数据范围</b>：1 ≤ nums.length ≤ 2 × 10<sup>4</sup>；-10 ≤ nums[i] ≤ 10，可以是负数或 0；任何子数组的乘积都保证在 32 位整数范围内。</p>
+</details>
 
 <h2>最容易错的地方</h2>
 <ul>

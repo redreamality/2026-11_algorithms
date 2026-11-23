@@ -15,6 +15,15 @@
 .bar-area .water { position: absolute; left: -3px; right: -3px; bottom: 0; background: #bbdefb; }
 .bar-area .pillar { position: absolute; left: calc(50% - 7px); width: 14px; bottom: 0; background: #90a4ae; border-radius: 2px 2px 0 0; }
 .bar-area .pillar.hot { background: #ff9800; }
+.wg-grid { display: grid; gap: 3px; margin: 8px 0; font-size: 13px; }
+.wg-head { color: #666; text-align: center; align-self: center; line-height: 1.2; }
+.wg-cell { height: 32px; border: 1px solid #ccc; border-radius: 3px; display: flex; align-items: center; justify-content: center; background: #fff; }
+.wg-cell.na { border: none; background: none; }
+.wg-cell.calc { background: #bbdefb; border-color: #1976d2; font-weight: bold; }
+.wg-cell.cut { background: #eee; color: #aaa; font-size: 11px; }
+.wg-cell.cut.fresh { background: #ffcdd2; border-color: #e57373; color: #b71c1c; }
+.wg-cell.now { outline: 3px solid #ff9800; }
+.wg-cell.top { background: #c8e6c9; border-color: #2e7d32; }
 </style>
 </head>
 <body>
@@ -92,8 +101,62 @@ def reconcile(ledger_ids: list[int], bank_ids: list[int]):
   <tr><td>141</td><td>环形链表</td><td>快慢（链表）</td></tr>
   <tr><td>42</td><td>接雨水（困难，第 28 课会用单调栈专门讲）</td><td>对撞</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-167"><summary>LeetCode 167 · 两数之和 II - 输入有序数组</summary>
+<p><b>题意</b>：在按非递减顺序排列的数组里找两个不同位置的数，使和等于 <code>target</code>，返回两个下标（恰好有一个答案，只能用常量级额外空间）。注意力扣原题的下标<b>从 1 开始</b>，示例返回 <code>[1, 2]</code>；正文为了和 Python 一致改成了从 0 开始。完整讲解见 <a href="#two-sum-sorted">正文第 1 题</a>。</p>
+</details>
+<details id="lc-11"><summary>LeetCode 11 · 盛最多水的容器</summary>
+<p><b>题意</b>：<code>height[i]</code> 是第 i 根竖线的高度，选两根竖线与 x 轴组成容器，返回容器能装的最多水量（容器不能倾斜）。完整讲解见 <a href="#container-most-water">正文第 2 题</a>。</p>
+</details>
+<details id="lc-15"><summary>LeetCode 15 · 三数之和</summary>
+<p><b>题意</b>：找出所有和为 0 且来自三个不同下标的三元组，答案中不能包含重复的三元组，三元组和答案的顺序都不重要。完整讲解见 <a href="#three-sum">正文第 3 题</a>。</p>
+</details>
+<details id="lc-283"><summary>LeetCode 283 · 移动零</summary>
+<p><b>题意</b>：原地把数组里所有 0 移到末尾，同时保持非零元素的相对顺序，不能复制数组。完整讲解见 <a href="#move-zeroes">正文第 4 题</a>。</p>
+</details>
+<details id="lc-26"><summary>LeetCode 26 · 删除有序数组中的重复项</summary>
+<p><b>题意</b>：数组 <code>nums</code> 按非递减顺序排列。<b>原地</b>删除重复出现的元素，使每个元素只出现一次，元素的相对顺序保持不变，返回不同元素的个数 k。判题只检查 <code>nums</code> 的前 k 个元素是否依次是这 k 个不同的值，下标 k 及之后的元素是什么都可以。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 1, 2]</code>，输出 <code>2</code>，nums 的前 2 个元素变成 <code>[1, 2]</code>：不同的值只有 1 和 2。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 3 × 10<sup>4</sup>；-10<sup>4</sup> ≤ nums[i] ≤ 10<sup>4</sup>。</p>
+</details>
+<details id="lc-27"><summary>LeetCode 27 · 移除元素</summary>
+<p><b>题意</b>：给数组 <code>nums</code> 和值 <code>val</code>，<b>原地</b>移除所有等于 <code>val</code> 的元素，返回剩下的元素个数 k。要求 <code>nums</code> 的前 k 个元素是所有不等于 <code>val</code> 的元素，它们的顺序<b>可以改变</b>；下标 k 及之后的元素是什么都可以。</p>
+<p><b>例子</b>：输入 <code>nums = [3, 2, 2, 3]</code>，<code>val = 3</code>，输出 <code>2</code>，nums 的前 2 个元素是 <code>[2, 2]</code>：两个 3 被移除，剩下两个 2。</p>
+<p><b>数据范围</b>：0 ≤ n ≤ 100；0 ≤ nums[i] ≤ 50；0 ≤ val ≤ 100。</p>
+</details>
+<details id="lc-125"><summary>LeetCode 125 · 验证回文串</summary>
+<p><b>题意</b>：给字符串 <code>s</code>。先把所有大写字母转成小写，再去掉所有非字母、非数字的字符，如果得到的字符串正着读和反着读一样，就是回文串，返回 <code>true</code>，否则返回 <code>false</code>。</p>
+<p><b>例子</b>：输入 <code>s = "A man, a plan, a canal: Panama"</code>，输出 <code>true</code>：处理后得到 <code>"amanaplanacanalpanama"</code>，是回文串。边界：<code>s = " "</code> 处理后是空字符串，空字符串也算回文串，输出 <code>true</code>。</p>
+<p><b>数据范围</b>：1 ≤ s.length ≤ 2 × 10<sup>5</sup>；s 只含可打印的 ASCII 字符。</p>
+</details>
+<details id="lc-977"><summary>LeetCode 977 · 有序数组的平方</summary>
+<p><b>题意</b>：给按非递减顺序排列的整数数组 <code>nums</code>，返回每个数的平方组成的新数组，新数组也要按非递减顺序排列。进阶要求 O(n) 时间。</p>
+<p><b>例子</b>：输入 <code>nums = [-4, -1, 0, 3, 10]</code>，输出 <code>[0, 1, 9, 16, 100]</code>：平方后是 [16, 1, 0, 9, 100]，排序后得到输出。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 10<sup>4</sup>；-10<sup>4</sup> ≤ nums[i] ≤ 10<sup>4</sup>，有负数，所以平方后不再有序。</p>
+</details>
+<details id="lc-16"><summary>LeetCode 16 · 最接近的三数之和</summary>
+<p><b>题意</b>：给整数数组 <code>nums</code> 和目标值 <code>target</code>，从三个不同下标各选一个数，使三数之和与 <code>target</code> 的差的绝对值最小，返回这个<b>和</b>（不是返回差，也不是返回下标）。题目保证答案唯一。</p>
+<p><b>例子</b>：输入 <code>nums = [-1, 2, 1, -4]</code>，<code>target = 1</code>，输出 <code>2</code>：-1 + 2 + 1 = 2，与 1 相差 1，其他组合都相差更多。</p>
+<p><b>数据范围</b>：3 ≤ n ≤ 1000；-1000 ≤ nums[i] ≤ 1000；-10<sup>4</sup> ≤ target ≤ 10<sup>4</sup>。</p>
+</details>
+<details id="lc-876"><summary>LeetCode 876 · 链表的中间结点</summary>
+<p><b>题意</b>：给单链表的头结点 <code>head</code>，返回链表的中间结点。如果有两个中间结点（结点数为偶数），返回<b>第二个</b>。</p>
+<p><b>例子</b>：输入 <code>head = [1, 2, 3, 4, 5]</code>，返回值为 3 的结点（力扣把它序列化成 <code>[3, 4, 5]</code>）。<code>head = [1, 2, 3, 4, 5, 6]</code> 有 3 和 4 两个中间结点，返回值为 4 的那个。</p>
+<p><b>数据范围</b>：结点数在 [1, 100] 之间。</p>
+</details>
+<details id="lc-141"><summary>LeetCode 141 · 环形链表</summary>
+<p><b>题意</b>：给链表的头结点 <code>head</code>，判断链表里有没有环：如果从某个结点出发，沿着 <code>next</code> 一直走能再次回到这个结点，就有环。有环返回 <code>true</code>，否则返回 <code>false</code>。示例里的 <code>pos</code> 只用来说明尾结点连到哪个下标，不会作为参数传进来。进阶要求 O(1) 额外空间。</p>
+<p><b>例子</b>：输入 <code>head = [3, 2, 0, -4]</code>，<code>pos = 1</code>，输出 <code>true</code>：尾结点 -4 的 <code>next</code> 指回下标 1 的结点 2。</p>
+<p><b>数据范围</b>：结点数在 [0, 10<sup>4</sup>] 之间，可以是空链表。</p>
+</details>
+<details id="lc-42"><summary>LeetCode 42 · 接雨水</summary>
+<p><b>题意</b>：给 n 个非负整数，表示每根宽度为 1 的柱子的高度。下雨之后，柱子之间能接住多少单位的雨水？返回总量。</p>
+<p><b>例子</b>：输入 <code>height = [0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1]</code>，输出 <code>6</code>：下标 2 接 1，下标 4、5、6 分别接 1、2、1，下标 9 接 1，共 1 + 4 + 1 = 6。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 2 × 10<sup>4</sup>；0 ≤ height[i] ≤ 10<sup>5</sup>。</p>
+</details>
 
-<h2>第 1 题：两数之和 II（对撞指针）</h2>
+<h2 id="two-sum-sorted">第 1 题：两数之和 II（对撞指针）</h2>
 <p><b>题意</b>：数组 <code>numbers</code> 已经从小到大排好序，找两个不同位置的数，使它们的和等于 <code>target</code>，返回这两个下标。题目保证恰好有一个答案。</p>
 <p><b>例子</b>：<code>numbers = [2, 7, 11, 15]</code>，<code>target = 9</code>。2 + 7 = 9，所以返回 <code>[0, 1]</code>。</p>
 <p><b>暴力做法为什么慢</b>：两层循环，外层选第一个数，内层选第二个数，把所有的对都试一遍。n 个数有 n(n-1)/2 对，时间 O(n²)。它完全没利用“数组有序”这个条件。</p>
@@ -125,7 +188,7 @@ while left &lt; right:
 <p><b>为什么是对的</b>：上面每次扔掉的数，都已经证明了它和候选范围里的任何数都凑不出 target。答案那两个数永远不会被扔掉，而候选范围每步缩小一格，最后一定会让 <code>left</code> 和 <code>right</code> 正好停在答案上。</p>
 <p><b>复杂度</b>：<code>left</code> 和 <code>right</code> 加起来最多走 n 步，时间 O(n)；只用了两个变量，额外空间 O(1)。</p>
 
-<h2>第 2 题：盛最多水的容器（对撞指针）</h2>
+<h2 id="container-most-water">第 2 题：盛最多水的容器（对撞指针）</h2>
 <p><b>题意</b>：<code>heights[i]</code> 是第 i 根竖线的高度，相邻竖线间距为 1。选两根竖线，和 x 轴一起组成一个容器。水面不能高过较矮的那一根，所以容器能装的水 = <code>min(heights[left], heights[right]) × (right - left)</code>。求最多能装多少水。</p>
 <p><b>例子</b>：<code>heights = [1, 8, 6, 2, 5, 4, 8, 3, 7]</code>。选下标 1（高 8）和下标 8（高 7）：高度取较矮的 7，宽度 8 - 1 = 7，面积 49，这是最大值。</p>
 <p><b>暴力做法为什么慢</b>：枚举所有的两根竖线组合，每对算一次面积，O(n²)。</p>
@@ -147,8 +210,17 @@ while left &lt; right:
         right -= 1     # 右边矮（或一样高）：扔掉右边</pre>
 <p><b>为什么是对的</b>：每扔掉一根竖线，都已经证明它和还没算过的任何一根组合都不可能比已经算过的面积更大。所以最大面积那一对在被扔掉之前，一定已经被算过一次。</p>
 <p><b>复杂度</b>：时间 O(n)，额外空间 O(1)。下面的动画里可以一步步看这个过程。</p>
+<h3 id="water-pruning">把搜索空间画出来：到底砍掉了哪些组合</h3>
+<p>把所有的两根竖线组合 (i, j) 摆成一张表：行是左竖线 i，列是右竖线 j，只有 i &lt; j 的格子有意义，9 根竖线一共 36 格。暴力做法就是把 36 格全部算一遍。</p>
+<p>对撞指针每一步只算<b>一格</b>：(left, right)，它总是剩下区域的右上角。算完以后：</p>
+<ul>
+  <li>左边矮，<code>left</code> 右移：第 left 行剩下的格子 (left, left+1) … (left, right-1) <b>一次全部砍掉</b>。</li>
+  <li>右边矮，<code>right</code> 左移：第 right 列剩下的格子 (left+1, right) … (right-1, right) <b>一次全部砍掉</b>。</li>
+</ul>
+<p>蓝色是算过的格子，红色是这一步刚砍掉的，灰色是之前砍掉的。被砍的格子里用小字写出它的真实面积，可以逐个核对：确实没有一个比同一步算过的那一格大。最后只算了 8 格，砍掉 28 格，答案 49 所在的格子在被砍之前已经算过了。</p>
+<div class="demo" id="water-grid"></div>
 
-<h2>第 3 题：三数之和（排序 + 对撞指针）</h2>
+<h2 id="three-sum">第 3 题：三数之和（排序 + 对撞指针）</h2>
 <p><b>题意</b>：给一个整数数组（没有排序），找出所有和为 0 的三元组，三个数要来自三个不同位置。每个三元组从小到大写，结果里不能有重复的三元组。</p>
 <p><b>例子</b>：<code>[-1, 0, 1, 2, -1, -4]</code> 返回 <code>[[-1, -1, 2], [-1, 0, 1]]</code>。注意数组里有两个 -1，[-1, 0, 1] 可以用第一个 -1 也可以用第二个，但结果里只能出现一次。</p>
 <p><b>暴力做法为什么慢</b>：三层循环 O(n³)，而且还要另外处理重复的三元组（比如把每个结果排序后放进集合）。</p>
@@ -186,7 +258,7 @@ for first_index in range(len(numbers) - 2):
 <p><b>为什么是对的</b>：任何一个答案三元组，排序后它的最小数一定出现在某个 <code>first_index</code> 上（重复值只取第一次出现的位置），剩下两个数在它右边，会被第 1 题的对撞指针找到。去重规则保证同一组值只在“第一次遇到”时记录一次。</p>
 <p><b>复杂度</b>：外层 n 次，每次对撞指针 O(n)，时间 O(n²)；除了结果列表和排序，额外空间 O(1)。</p>
 
-<h2>第 4 题：移动零（快慢指针）</h2>
+<h2 id="move-zeroes">第 4 题：移动零（快慢指针）</h2>
 <p><b>题意</b>：原地修改数组，把所有 0 挪到末尾，非零数保持原来的先后顺序。不能复制出一个新数组。</p>
 <p><b>例子</b>：<code>[0, 1, 0, 3, 12]</code> 变成 <code>[1, 3, 12, 0, 0]</code>。</p>
 <p><b>暴力做法为什么慢</b>：每遇到一个 0，就把它后面所有元素往前挪一格、把 0 放到最后。挪一次 O(n)，最多挪 n 次，O(n²)。</p>
@@ -233,5 +305,6 @@ slow 每次走一步，fast 每次走两步。fast 走到末尾时，slow 正好
 <div class="nav"><a href="24-balanced-tree.html">← 上一课：平衡树</a><a href="26-sliding-window.html">下一课：滑动窗口 →</a></div>
 <script src="anim.js"></script>
 <script src="js/25-two-pointers.js"></script>
+<script src="js/25-water-grid.js"></script>
 </body>
 </html>

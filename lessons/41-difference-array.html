@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 41 课 · 差分数组</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.grid-rows { display: grid; gap: 4px 4px; align-items: center; margin: 8px 0; }
+.grid-rows .box { min-width: 26px; padding: 6px 4px; }
+.grid-rows .label { text-align: right; padding-right: 6px; white-space: nowrap; }
+.grid-rows .index { font-size: 12px; color: #aaa; text-align: center; }
+.box.done { background: #c8e6c9; border-color: #2e7d32; }
+.box.range { background: #e3f2fd; border-color: #1565c0; }
+.box.plus { background: #c8e6c9; border-color: #2e7d32; }
+.box.minus { background: #ffcdd2; border-color: #c62828; }
+.box.over { background: #ffcdd2; border-color: #c62828; font-weight: bold; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 41 课 · 差分数组</h1>
+<p class="one-line">差分数组 = <b>只记“相邻两个数差了多少”</b>。给一整段数同时加上同一个值，在差分数组里只要改<b>两格</b>，O(1)；所有修改做完，再做一遍前缀和（第 27 课）就还原出最终数组。差分和前缀和是一对逆操作。</p>
+
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#itertools">itertools.accumulate</a>、<a href="python-basics.html#loop-tools"><code>enumerate</code>、<code>zip</code></a>、<a href="python-basics.html#unpack">解包（<code>for first, last, seats in bookings</code>）</a>、<a href="python-basics.html#class">类与 <code>__init__</code></a>、<a href="python-basics.html#dunder"><code>__len__</code></a>、<a href="python-basics.html#exceptions"><code>raise IndexError</code></a>、<a href="python-basics.html#dict-tools"><code>defaultdict</code></a>、<a href="python-basics.html#datetime"><code>date</code> 与 <code>timedelta</code></a>；前面的课 —— <a href="27-prefix-sum.html">第 27 课 · 前缀和</a>（本课处处用到，尤其是“多一格”的写法）、<a href="34-intervals.html">第 34 课 · 区间问题</a>（会议室 II 用堆做过一次，本课换一种做法）。</p>
+
+<h2>类比：公交车的上下车记录</h2>
+<p>想知道公交车开到每一站时车上有几个人，司机不用每站数一遍人头，只要记“这一站上了几个、下了几个”。从起点开始把这些变化量一路加起来，就得到每一站车上的人数。</p>
+<p>“每站的变化量”就是差分，“一路加起来”就是前缀和。一个乘客从第 2 站坐到第 5 站，在记录里只占两笔：第 2 站 +1，第 6 站（他已经下车）-1，中间那几站的记录一个字都不用改。这就是本课的全部想法。</p>
+
+<h2>实战里怎么写：先看真实代码里的差分</h2>
+<p>差分适合“<b>先攒一大批区间修改，最后才要结果</b>”的场景。标准库没有专门的差分工具，但还原那一步就是 <code>accumulate</code>：</p>
+<table>
+  <tr><th>场景</th><th>做法</th><th>代价</th></tr>
+  <tr><td>酒店每晚住了几间房、每天在线人数</td><td>每张订单在差分数组上改两格，最后 <code>accumulate</code> 还原</td><td>每单 O(1)，还原 O(天数)</td></tr>
+  <tr><td>时间戳很大很稀疏（秒级时间、坐标）</td><td>差分存进 dict：<code>change_at[start] += 1</code>、<code>change_at[end] -= 1</code>，按键排序后累加（也叫<b>扫描线</b>）</td><td>O(m log m)，m 是区间个数</td></tr>
+  <tr><td>批量调价、批量加分</td><td>每条规则改两格，最后一次还原</td><td>每条 O(1)，还原 O(n)</td></tr>
+</table>
+<pre>from itertools import accumulate
+
+def apply_price_rules(prices: list[int], rules: list[tuple[int, int, int]]) -&gt; list[int]:
+    """rules 里每项是 (第一个商品下标, 最后一个商品下标, 调价金额)，两端都包含。"""
+    difference = [0] * (len(prices) + 1)          # 多一格，下面解释为什么
+    for first, last, change in rules:
+        difference[first] += change               # 从 first 开始，每个都多了 change
+        difference[last + 1] -= change            # 到 last 为止，后面的再减回去
+    return [price + adjustment for price, adjustment in zip(prices, accumulate(difference))]
+
+apply_price_rules([3, 1, 4, 1, 5, 9, 2, 6], [(2, 5, 2), (4, 7, 3)])
+# [3, 1, 6, 3, 10, 14, 5, 9]</pre>
+<p>完整可运行的版本在 <code>examples/difference_array_in_practice.py</code>（<code>uv run examples/difference_array_in_practice.py</code>），里面还有酒店入住和“要几间会议室”的 dict 写法。<code>zip(prices, accumulate(difference))</code> 会在较短的 <code>prices</code> 走完时停下，所以多出来的那一格不会被用到。下面的练习里不许用 <code>accumulate</code>，要自己写循环，把“改两格为什么就够了”想清楚。</p>
+
+<h2>差分数组的定义</h2>
+<p>本课和下一课（第 42 课 · 树状数组）都用同一个数组当例子：<code>numbers = [3, 1, 4, 1, 5, 9, 2, 6]</code>，长度 n = 8。</p>
+<p>它的<b>差分数组</b> <code>difference</code> 比它多一格，长度 n + 1：</p>
+<ul>
+  <li><code>difference[0] = numbers[0]</code>：可以想成第一个数前面还有一个看不见的 0，差就是它本身。</li>
+  <li><code>difference[i] = numbers[i] - numbers[i - 1]</code>（1 ≤ i &lt; n）：第 i 个数比前一个多了多少。</li>
+  <li><code>difference[n] = 0</code>：多出来的这一格一开始是 0，作用后面讲。</li>
+</ul>
+<div class="grid-rows" style="grid-template-columns: 110px repeat(9, 40px)">
+  <span class="label">下标</span><span class="index">0</span><span class="index">1</span><span class="index">2</span><span class="index">3</span><span class="index">4</span><span class="index">5</span><span class="index">6</span><span class="index">7</span><span class="index">8</span>
+  <span class="label">numbers</span><span class="box">3</span><span class="box">1</span><span class="box">4</span><span class="box">1</span><span class="box">5</span><span class="box">9</span><span class="box">2</span><span class="box">6</span><span></span>
+  <span class="label">difference</span><span class="box">3</span><span class="box">-2</span><span class="box">3</span><span class="box">-3</span><span class="box">4</span><span class="box">4</span><span class="box">-7</span><span class="box">4</span><span class="box empty">0</span>
+</div>
+<p>例如 <code>difference[2] = numbers[2] - numbers[1] = 4 - 1 = 3</code>，<code>difference[6] = 2 - 9 = -7</code>。</p>
+
+<h2>差分和前缀和互为逆操作</h2>
+<p>反过来，把 <code>difference</code> 从头加到第 i 格，中间的项两两抵消：</p>
+<pre>difference[0] + difference[1] + ... + difference[i]
+= numbers[0] + (numbers[1] - numbers[0]) + ... + (numbers[i] - numbers[i - 1])
+= numbers[i]</pre>
+<p>所以<b>对差分数组做前缀和，就还原出原数组</b>；对原数组求差分，又能回到差分数组。这样一对“做完一个、再做另一个就回到原样”的操作，叫做<b>互为逆操作</b>，就像乘 2 和除以 2。</p>
+<p>和第 27 课对照着看：第 27 课的 <code>prefix_sum</code> 开头多放了一个 0，<code>prefix_sum[i]</code> 是<b>前 i 个</b>数的和，不含 <code>numbers[i]</code>。这里的还原公式是“加到第 i 格，<b>含</b> <code>difference[i]</code>”，所以写循环时是边加边输出，不需要开头的 0：</p>
+<pre>running_total = 0
+for index in range(n):
+    running_total += difference[index]
+    result.append(running_total)       # running_total 就是 numbers[index]</pre>
+
+<h2>区间整体加：只改两格</h2>
+<p>现在要把下标 2 到 5（两端都包含）这一段<b>整体加</b> 2，也就是每个数都加 2。直接改原数组要改 4 个数，一段长 n 就要 O(n)。在差分数组里只改两格：</p>
+<pre>difference[left] += delta          # difference[2] += 2
+difference[right + 1] -= delta     # difference[6] -= 2</pre>
+<div class="grid-rows" style="grid-template-columns: 110px repeat(9, 40px)">
+  <span class="label">下标</span><span class="index">0</span><span class="index">1</span><span class="index">2</span><span class="index">3</span><span class="index">4</span><span class="index">5</span><span class="index">6</span><span class="index">7</span><span class="index">8</span>
+  <span class="label">difference</span><span class="box">3</span><span class="box">-2</span><span class="box plus">5</span><span class="box">-3</span><span class="box">4</span><span class="box">4</span><span class="box minus">-9</span><span class="box">4</span><span class="box empty">0</span>
+  <span class="label">还原</span><span class="box">3</span><span class="box">1</span><span class="box range">6</span><span class="box range">3</span><span class="box range">7</span><span class="box range">11</span><span class="box">2</span><span class="box">6</span><span></span>
+</div>
+<p><b>为什么改两格就够了</b>：还原时第 i 个数等于 <code>difference[0..i]</code> 的和。</p>
+<ul>
+  <li>i &lt; 2：加的范围里没有 <code>difference[2]</code> 和 <code>difference[6]</code>，结果不变。</li>
+  <li>2 ≤ i ≤ 5：加的范围里有 <code>difference[2]</code>（多了 2），没有 <code>difference[6]</code>，结果多 2。</li>
+  <li>i ≥ 6：两格都在范围里，+2 和 -2 抵消，结果不变。</li>
+</ul>
+<p>再把下标 4 到 7 整体加 3：<code>difference[4] += 3</code>，<code>difference[8] -= 3</code>。这次 right + 1 = 8 = n，正好落在多出来的那一格上。<b>这就是多一格的作用</b>：不管 right 是不是最后一个下标，都能写同一行 <code>difference[right + 1] -= delta</code>，不用特判。还原时只算前 n 格，最后一格永远不会被读到。两次修改之后还原，得到 <code>[3, 1, 6, 3, 10, 14, 5, 9]</code>，和上面实战代码的输出一样。</p>
+<p><b>差分什么时候不好用</b>：它要求“改完再查”。如果改一次就要马上查某个数，每次都得 O(n) 还原一遍，就失去意义了。改和查交替进行的情况，下一课用树状数组解决。</p>
+
+<h2>动手玩</h2>
+<p>两个按钮。<b>区间加与还原</b>：先把 <code>numbers</code> 变成差分数组，再做上面的两次区间加（绿色格子 +delta，红色格子 -delta），最后一格格做前缀和还原，看结果和直接改原数组一样。<b>拼车</b>演示下面的题 2：每一单乘客改两格，再从位置 0 开始一格格累加出车上的人数，第一次超过容量就标红并返回 False，和题 2 的代码一样。</p>
+<div class="demo" id="difference"></div>
+
+<h2 id="corp-flight-bookings">题 1：航班预订统计（LeetCode 1109）</h2>
+<p><b>题意</b>：航班编号 1 到 n。<code>bookings[i] = [first, last, seats]</code> 表示第 first 到第 last 个航班（两端都包含）每个都订了 seats 个座位。返回每个航班的总预订数。</p>
+<p><b>例子</b>：<code>bookings = [[1, 2, 10], [2, 3, 20], [2, 5, 25]]</code>，n = 5，返回 <code>[10, 55, 45, 25, 25]</code>。第 2 个航班被三张订单都覆盖：10 + 20 + 25 = 55。</p>
+<p><b>暴力做法为什么慢</b>：每张订单把 first 到 last 逐个加一遍，一张 O(n)，m 张订单 O(m · n)。n 和 m 都是 2 万时，就是 4 亿次加法。</p>
+<p><b>关键观察</b>：所有订单都加完才要结果，正是差分的场景。每张订单在差分数组上改两格，最后还原一次。唯一要注意的是编号从 1 开始，换成下标要减 1：</p>
+<pre>def corp_flight_bookings(bookings, flight_count):
+    difference = [0] * (flight_count + 1)
+    for first, last, seats in bookings:
+        difference[first - 1] += seats      # 编号 first 是下标 first - 1
+        difference[last] -= seats           # 编号 last 是下标 last - 1，再 + 1 就是 last
+    answer = []
+    running_total = 0
+    for index in range(flight_count):
+        running_total += difference[index]
+        answer.append(running_total)
+    return answer</pre>
+<p><b>复杂度</b>：时间 O(n + m)，额外空间 O(n)。</p>
+
+<h2 id="car-pooling">题 2：拼车（LeetCode 1094）</h2>
+<p><b>题意</b>：车只往一个方向开。<code>trips[i] = [passengers, start, end]</code> 表示 passengers 个人在位置 start 上车、在位置 end 下车。车最多坐 capacity 人。问能不能接完所有乘客。</p>
+<p><b>例子</b>：<code>trips = [[2, 1, 5], [3, 3, 7]]</code>。位置 1～4 车上有第一批 2 人，位置 3～6 有第二批 3 人，位置 3 和 4 两批都在，共 5 人。capacity = 4 时返回 False，capacity = 5 时返回 True。</p>
+<p><b>关键观察</b>：在 end 下车的人到 end 时已经不占座，所以一单乘客占的是<b>位置 start 到 end - 1</b>，也就是“下标 start 到 end - 1 整体加 passengers”。全部加完还原，看每个位置的人数有没有超过 capacity。这正是开头公交车的类比。</p>
+<pre>def car_pooling(trips, capacity):
+    difference = [0] * 1002                 # 位置 0～1000，再多一格
+    for passengers, start, end in trips:
+        difference[start] += passengers     # 上车
+        difference[end] -= passengers       # 下车：end - 1 是最后一个占座的位置，再 + 1 就是 end
+    on_board = 0
+    for change in difference:
+        on_board += change
+        if on_board &gt; capacity:
+            return False
+    return True</pre>
+<p><b>为什么下车写在 end 而不是 end + 1</b>：区间是 start 到 end - 1，“right + 1”就是 end。这一步写错，会把恰好在同一个位置一下一上的两拨人算成同时在车上。</p>
+<p><b>复杂度</b>：时间 O(m + 位置的最大值)，额外空间 O(位置的最大值)。如果位置可以大到 10<sup>9</sup>，开不了这么长的数组，就像实战里那样把差分存进 dict、按位置排序后累加，时间 O(m log m)。</p>
+
+<h2>二维差分（简述）</h2>
+<p>同样的想法可以搬到矩阵上：要把一块子矩形（第 top～bottom 行、第 left～right 列）整体加 delta，在 (行数 + 1) × (列数 + 1) 的二维差分数组上改<b>四个角</b>：</p>
+<pre>difference[top][left]               += delta
+difference[top][right + 1]          -= delta
+difference[bottom + 1][left]        -= delta
+difference[bottom + 1][right + 1]   += delta    # 前两行把右下角多减了一次，加回来</pre>
+<p>还原时做一遍第 27 课提过的<b>二维前缀和</b>：每一格等于“它自己的差分 + 上面一格 + 左边一格 - 左上角一格”（左上角那一块被加了两次，要减掉一次）。练习里的 <code>add_to_submatrices</code> 是选做题，对应 LeetCode 2536。</p>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>操作</th><th>直接改原数组</th><th>差分数组</th></tr>
+  <tr><td>建差分数组</td><td>—</td><td>O(n)</td></tr>
+  <tr><td>区间整体加一次</td><td>O(区间长度)，最坏 O(n)</td><td>O(1)</td></tr>
+  <tr><td>m 次区间加之后拿到整个数组</td><td>O(m · n)</td><td>O(m + n)</td></tr>
+  <tr><td>改完马上查一个数</td><td>O(1)</td><td>O(n)，要先还原（交替进行就用第 42 课的树状数组）</td></tr>
+  <tr><td>二维子矩形加 m 次再还原</td><td>O(m · 行数 · 列数)</td><td>O(m + 行数 · 列数)</td></tr>
+</table>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li>“对很多个<b>区间</b>各加一个数，<b>最后</b>问每个位置的值”：差分 + 一次还原。</li>
+  <li>“每个时刻 / 位置被几个区间<b>覆盖</b>”“同一时刻最多几个”“车上最多几人”：每个区间是 +1 / -1 两格，还原后取最大值。</li>
+  <li>坐标很大但区间不多：差分存进 dict，按坐标排序再累加（扫描线）。</li>
+  <li>二维矩阵上反复给子矩形加数，最后看整个矩阵：二维差分。</li>
+  <li>改和查<b>交替</b>出现：差分单独不够，要差分 + 树状数组（第 42 课）。</li>
+</ul>
+<p>LeetCode 上可以练的题：</p>
+<table>
+  <tr><th>题号</th><th>题名</th><th>用到的技巧</th></tr>
+  <tr><td>1109</td><td>航班预订统计</td><td>差分（本课题 1）</td></tr>
+  <tr><td>1094</td><td>拼车</td><td>差分 + 还原时检查最大值（本课题 2）</td></tr>
+  <tr><td>370</td><td>区间加法（会员题）</td><td>差分的裸题，和 <code>DifferenceArray</code> 一模一样</td></tr>
+  <tr><td>1854</td><td>人口最多的年份</td><td>出生年 +1、死亡年 -1，还原后找最大</td></tr>
+  <tr><td>2381</td><td>字母移位 II</td><td>差分算每个字母总共移了几位，再对 26 取余</td></tr>
+  <tr><td>253</td><td>会议室 II（会员题）</td><td>第 34 课用堆做过；用 dict 差分（扫描线）也行</td></tr>
+  <tr><td>732</td><td>我的日程安排表 III</td><td>dict 差分 + 排序后累加</td></tr>
+  <tr><td>2536</td><td>子矩阵元素加 1</td><td>二维差分（本课选做）</td></tr>
+</table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-1109"><summary>LeetCode 1109 · 航班预订统计</summary>
+<p><b>题意</b>：n 个航班编号 1 到 n，<code>bookings[i] = [first, last, seats]</code> 表示第 first 到第 last 个航班（含两端）每个都预订了 seats 个座位，返回长度为 n 的数组，第 i 项是第 i + 1 个航班的预订总数（n 和订单数都 ≤ 2 × 10<sup>4</sup>）。完整讲解见 <a href="#corp-flight-bookings">正文题 1</a>。</p>
+</details>
+<details id="lc-1094"><summary>LeetCode 1094 · 拼车</summary>
+<p><b>题意</b>：车上有 capacity 个座位，只能向一个方向行驶；<code>trips[i] = [passengers, from, to]</code> 表示 passengers 位乘客在位置 from 上车、在位置 to 下车，同一位置先下后上。车内人数在任何位置都不超过 capacity 时返回 true，否则返回 false（0 ≤ from &lt; to ≤ 1000）。完整讲解见 <a href="#car-pooling">正文题 2</a>。</p>
+</details>
+<details id="lc-370"><summary>LeetCode 370 · 区间加法（会员题）</summary>
+<p><b>题意</b>：长度为 length 的数组初始全为 0。给 k 个更新操作，每个操作 <code>[startIndex, endIndex, inc]</code> 把下标 startIndex 到 endIndex（含两端）的每个元素加上 inc。返回执行完所有操作后的数组。</p>
+<p><b>例子</b>：输入 <code>length = 5, updates = [[1, 3, 2], [2, 4, 3], [0, 2, -2]]</code>，输出 <code>[-2, 0, 3, 5, 3]</code>。依次得到 [0, 2, 2, 2, 0]、[0, 2, 5, 5, 3]、[-2, 0, 3, 5, 3]。</p>
+<p><b>数据范围</b>：1 ≤ length ≤ 10<sup>5</sup>，0 ≤ k ≤ 10<sup>4</sup>，inc 可以是负数。</p>
+</details>
+<details id="lc-1854"><summary>LeetCode 1854 · 人口最多的年份</summary>
+<p><b>题意</b>：<code>logs[i] = [birth, death]</code> 是第 i 个人的出生和死亡年份。年份 x 的人口是那一年活着的人数：第 i 个人计入 x 年的人口，当且仅当 x 在闭区间 [birth, death − 1] 内，死亡当年不计入。返回人口最多的年份；有多个时返回最早的那一年。</p>
+<p><b>例子</b>：输入 <code>logs = [[1950, 1961], [1960, 1971], [1970, 1981]]</code>，输出 <code>1960</code>。1960 年前两人都活着，1970 年后两人都活着，人口都是 2；1961 年第一个人已经死亡不计入，取最早的 1960。</p>
+<p><b>数据范围</b>：1 ≤ logs.length ≤ 100，1950 ≤ birth &lt; death ≤ 2050。</p>
+</details>
+<details id="lc-2381"><summary>LeetCode 2381 · 字母移位 II</summary>
+<p><b>题意</b>：给小写字母字符串 <code>s</code> 和数组 <code>shifts</code>，<code>shifts[i] = [start, end, direction]</code> 表示把下标 start 到 end（含两端）的每个字符移位一次：direction = 1 向后移（换成字母表的下一个字母，'z' 变 'a'），direction = 0 向前移（换成上一个字母，'a' 变 'z'）。返回所有移位完成后的字符串。</p>
+<p><b>例子</b>：输入 <code>s = "abc", shifts = [[0, 1, 0], [1, 2, 1], [0, 2, 1]]</code>，输出 <code>"ace"</code>。依次得到 "zac"、"zbd"、"ace"。</p>
+<p><b>数据范围</b>：1 ≤ s.length, shifts.length ≤ 5 × 10<sup>4</sup>。</p>
+</details>
+<details id="lc-253"><summary>LeetCode 253 · 会议室 II（会员题）</summary>
+<p><b>题意</b>：给会议时间数组 <code>intervals</code>，<code>intervals[i] = [start, end]</code>，返回同时安排所有会议所需的最少会议室数量。一场会议在 end 时刻结束，另一场恰好在 end 时刻开始，两者可以用同一间会议室。</p>
+<p><b>例子</b>：输入 <code>intervals = [[0, 30], [5, 10], [15, 20]]</code>，输出 <code>2</code>。[5, 10] 和 [15, 20] 都与 [0, 30] 重叠，但彼此不重叠，可以先后用同一间。</p>
+<p><b>数据范围</b>：1 ≤ intervals.length ≤ 10<sup>4</sup>，0 ≤ start &lt; end ≤ 10<sup>6</sup>。</p>
+</details>
+<details id="lc-732"><summary>LeetCode 732 · 我的日程安排表 III</summary>
+<p><b>题意</b>：实现类 <code>MyCalendarThree</code>，方法 <code>book(startTime, endTime)</code> 添加一个日程 [startTime, endTime)（左闭右开），并返回到目前为止所有日程中“有 k 个日程同时包含某个时刻”的最大 k。</p>
+<p><b>例子</b>：依次调用 <code>book(10, 20)</code>、<code>book(50, 60)</code>、<code>book(10, 40)</code>、<code>book(5, 15)</code>、<code>book(5, 10)</code>、<code>book(25, 55)</code>，返回 <code>1, 1, 2, 3, 3, 3</code>。第 4 次之后，时刻 10～14 同时被 [10, 20)、[10, 40)、[5, 15) 覆盖，k = 3；之后的日程没有让任何时刻被 4 个覆盖。</p>
+<p><b>数据范围</b>：0 ≤ startTime &lt; endTime ≤ 10<sup>9</sup>，book 最多调用 400 次。</p>
+</details>
+<details id="lc-2536"><summary>LeetCode 2536 · 子矩阵元素加 1</summary>
+<p><b>题意</b>：n × n 矩阵 <code>mat</code> 初始全为 0。对每个查询 <code>[row1, col1, row2, col2]</code>，把左上角 (row1, col1)、右下角 (row2, col2) 的子矩阵（含边界）中每个元素加 1。返回执行完所有查询后的矩阵。</p>
+<p><b>例子</b>：输入 <code>n = 3, queries = [[1, 1, 2, 2], [0, 0, 1, 1]]</code>，输出 <code>[[1, 1, 0], [1, 2, 1], [0, 1, 1]]</code>。格子 (1, 1) 同时在两个子矩阵里，所以是 2。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 500，1 ≤ queries.length ≤ 10<sup>4</sup>。</p>
+</details>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>差分数组没有多一格</b>：right 是最后一个下标时，<code>difference[right + 1]</code> 越界报错。要么多开一格，要么特判，多开一格最省事。</li>
+  <li><b>编号从 1 开始</b>（题 1）：下标是编号减 1，<code>right + 1</code> 换算后正好是 <code>last</code>，容易多减或少减一个 1。动手前先用一个小例子算一遍。</li>
+  <li><b>区间是左闭右开</b>（题 2，<code>[start, end)</code>）：减回去的那格是 end，不是 end + 1。</li>
+  <li><b>还原时加错范围</b>：还原是“加到第 i 格，含第 i 格”。和第 27 课前缀和“前 i 个，不含第 i 个”差一位，写混了整体错开一格。</li>
+  <li><b>边改边查</b>：差分只适合“改完再查”。每次查都还原一遍，总复杂度又回到 O(m · n)。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/difference_array.py</code>。建议顺序：<code>DifferenceArray</code> → <code>corp_flight_bookings</code> → <code>car_pooling</code> →（选做）<code>add_to_submatrices</code>。后两题可以直接用你写好的 <code>DifferenceArray</code>。每写完一个，跑一遍测试：</p>
+<pre>uv run pytest tests/test_difference_array.py</pre>
+<p>测试里的主线例子就是上面的 <code>[3, 1, 4, 1, 5, 9, 2, 6]</code>，会检查 <code>difference</code> 每一格的值，可以对照上面两张图排错。</p>
+
+<h2>自测</h2>
+<details><summary>1. 对 numbers 做一次差分、再做一次前缀和，会得到什么？反过来先做前缀和、再做差分呢？</summary>
+两种顺序都回到 numbers 本身，因为差分和前缀和互为逆操作。先前缀和再差分：相邻两个前缀和相减，剩下的正好是中间那一个数。</details>
+<details><summary>2. 一共有 m 次区间加、q 次“查某个下标的当前值”，而且两种操作穿插出现。只用差分数组，最坏复杂度是多少？</summary>
+每次查询都要从头加到那个下标，最坏 O(n)，总共 O(m + q · n)。如果查询很多，这和暴力差不多。第 42 课把差分数组放进树状数组，加和查都变成 O(log n)。</details>
+<details><summary>3. 拼车如果改成“end 那一站下车的人还占着座位”（区间变成两端都包含），代码要改哪里？</summary>
+减回去的那一格从 end 改成 end + 1，也就是 <code>difference[end + 1] -= passengers</code>。数组长度要能放下下标 end + 1：end 最大是 1000，下标 1001，上面开的 1002 格正好够，不用再加长。</details>
+
+<div class="nav"><a href="40-number-theory.html">← 上一课：数论模板</a><a href="42-fenwick-tree.html">下一课：树状数组 →</a></div>
+<script src="anim.js"></script>
+<script src="js/41-difference-array.js"></script>
+</body>
+</html>

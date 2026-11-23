@@ -96,7 +96,7 @@ def lowest_common_manager(first_person, second_person, manager_of):
   <li>出现“二叉搜索树”“验证”“第 K 小”：利用中序遍历是有序的，或者往下传上下界。</li>
 </ul>
 
-<h2>题一：最大深度（LeetCode 104）</h2>
+<h2 id="max-depth">题一：最大深度（LeetCode 104）</h2>
 <div class="problem">
 <p><b>题意：</b>从根走到最远的叶子，路上一共经过几个节点。例如 <code>[3, 9, 20, None, None, 15, 7]</code>：3 的左孩子是 9，右孩子是 20，20 下面还有 15 和 7。最长的一条是 3 → 20 → 15，经过 3 个节点，所以答案是 3。</p>
 <p><b>套路怎么用：</b>这是套路最小的例子，没有更慢的“暴力做法”可以对比，正好用来熟悉三步。</p>
@@ -109,7 +109,7 @@ def lowest_common_manager(first_person, second_person, manager_of):
 <p><b>复杂度：</b>每个节点只被访问一次，时间 O(n)；调用栈最深等于树高 h，额外空间 O(h)。</p>
 </div>
 
-<h2>题二：翻转二叉树（LeetCode 226）</h2>
+<h2 id="invert-tree">题二：翻转二叉树（LeetCode 226）</h2>
 <div class="problem">
 <p><b>题意：</b>把每个节点的左孩子和右孩子对调，相当于让整棵树照镜子。例如 <code>[4, 2, 7, 1, 3, 6, 9]</code> 翻转后变成 <code>[4, 7, 2, 9, 6, 3, 1]</code>。</p>
 <p><b>关键观察：</b>“整棵树照镜子”等于“左子树照镜子、右子树照镜子，再把两棵子树换个位置”。这句话本身就是递归定义。</p>
@@ -118,7 +118,7 @@ def lowest_common_manager(first_person, second_person, manager_of):
 <p><b>复杂度：</b>时间 O(n)，额外空间 O(h)。</p>
 </div>
 
-<h2>题三：对称二叉树（LeetCode 101）</h2>
+<h2 id="symmetric-tree">题三：对称二叉树（LeetCode 101）</h2>
 <div class="problem">
 <p><b>题意：</b>判断一棵树是不是左右镜像对称。例如 <code>[1, 2, 2, 3, 4, 4, 3]</code> 是对称的：第二层是 2、2，第三层从左到右是 3、4、4、3。而 <code>[1, 2, 2, None, 3, None, 3]</code> 不对称：两个 3 都挂在右边。</p>
 <p><b>直接的做法：</b>先把树复制一份并翻转（题二），再逐个节点比较两棵树是否完全相同。这样是对的，时间也是 O(n)，但要多复制一整棵树。</p>
@@ -133,7 +133,7 @@ def lowest_common_manager(first_person, second_person, manager_of):
 <p><b>复杂度：</b>每对节点只比一次，时间 O(n)，额外空间 O(h)。</p>
 </div>
 
-<h2>题四：二叉树的直径（LeetCode 543）——本课重点</h2>
+<h2 id="tree-diameter">题四：二叉树的直径（LeetCode 543）——本课重点</h2>
 <div class="problem">
 <p><b>题意：</b>树里任意两个节点之间的最长路径有几条<b>边</b>。这条路径可以不经过根。例如 <code>[1, 2, 3, 4, 5]</code>：4 → 2 → 1 → 3 有 3 条边，是最长的，答案是 3。</p>
 <p><b>先看任意一条路径的形状：</b>树上的一条路径一定先往上走、再往下走，中间有一个<b>最高点</b>（“拐弯的那个节点”）。以节点 X 为最高点的最长路径 = 从 X 往左子树一路走到最深处 + 从 X 往右子树一路走到最深处。左边那段有 <code>left_depth</code> 条边（左子树有多深，就要走几条边），右边同理，所以长度是 <code>left_depth + right_depth</code>。</p>
@@ -165,7 +165,7 @@ def lowest_common_manager(first_person, second_person, manager_of):
 <p>再点<b>找最近公共祖先(8, 7)</b>，看同一个套路换一种返回值：蓝字变成“在这棵子树里找到了谁”。</p>
 <div class="demo" id="tree-patterns"></div>
 
-<h2>题五：最近公共祖先（LeetCode 236）</h2>
+<h2 id="lowest-common-ancestor">题五：最近公共祖先（LeetCode 236）</h2>
 <div class="problem">
 <p><b>题意：</b>给出树里的两个节点 <code>first_node</code> 和 <code>second_node</code>，找出离它们最近的共同祖先。一个节点也算自己的祖先。例如在 <code>[3, 5, 1, 6, 2, 0, 8, None, None, 7, 4]</code> 里：5 和 1 的最近公共祖先是根 3；5 和 4 的最近公共祖先是 5（4 在 5 的下面，而 5 是它自己的祖先）。</p>
 <p><b>直接的做法：</b>先从根找到两个节点，各记下一条“从根到它”的路径，再从头比较两条路径，最后一个相同的节点就是答案。这是对的，时间 O(n)，但要走两遍、还要存路径。更慢的做法是对每个节点都检查“它的子树里是否两个都有”，最坏 O(n<sup>2</sup>)。</p>
@@ -180,7 +180,7 @@ def lowest_common_manager(first_person, second_person, manager_of):
 <p><b>复杂度：</b>每个节点最多访问一次，时间 O(n)，额外空间 O(h)。</p>
 </div>
 
-<h2>题六：右视图（LeetCode 199）</h2>
+<h2 id="right-side-view">题六：右视图（LeetCode 199）</h2>
 <div class="problem">
 <p><b>题意：</b>站在树的右边往左看，从上到下能看到哪些节点。例如 <code>[1, 2, 3, None, 5, None, 4]</code> 看到的是 <code>[1, 3, 4]</code>。注意：看到的不一定是“右孩子”。<code>[1, 2, 3, 4]</code> 的第三层只有一个节点 4，它挂在左边的 2 下面，但从右边看过去，这一层没有别的东西挡住它，所以答案是 <code>[1, 3, 4]</code>。只沿着右孩子一路走下去是错的。</p>
 <p><b>关键观察：</b>“从右边看到的”就是<b>每一层最右边的那个节点</b>。题目问的是“每一层”，这正是层序遍历的信号。</p>
@@ -189,7 +189,7 @@ def lowest_common_manager(first_person, second_person, manager_of):
 <p><b>复杂度：</b>两种做法都是每个节点访问一次，时间 O(n)。</p>
 </div>
 
-<h2>题七：验证二叉搜索树（LeetCode 98）</h2>
+<h2 id="validate-bst">题七：验证二叉搜索树（LeetCode 98）</h2>
 <div class="problem">
 <p><b>题意：</b>判断一棵树是不是二叉搜索树（第 11 课）：任何节点<b>左子树里的所有值</b>都严格小于它，<b>右子树里的所有值</b>都严格大于它。</p>
 <p><b>最常见的错误：</b>只拿每个节点和它的两个孩子比。看 <code>[5, 4, 6, None, None, 3, 7]</code>：根 5，右孩子 6，6 的左孩子是 3。每个节点和孩子比都没问题（3 &lt; 6），但 3 在 5 的右子树里，却比 5 小，所以这棵树不是二叉搜索树。“和孩子比”只检查了局部，而定义要求的是整棵子树。</p>
@@ -239,6 +239,54 @@ def lowest_common_manager(first_person, second_person, manager_of):
   <tr><td>102</td><td>二叉树的层序遍历</td><td>右视图的基础</td></tr>
   <tr><td>230</td><td>二叉搜索树中第 K 小的元素</td><td>进阶：中序遍历数到第 K 个</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-104"><summary>LeetCode 104 · 二叉树的最大深度</summary>
+<p><b>题意</b>：给定二叉树的根节点 <code>root</code>，返回它的最大深度，即从根节点到最远叶子节点的最长路径上的节点数。完整讲解见 <a href="#max-depth">正文第 1 题</a>。</p>
+</details>
+<details id="lc-226"><summary>LeetCode 226 · 翻转二叉树</summary>
+<p><b>题意</b>：给定二叉树的根节点 <code>root</code>，把每个节点的左右子树对调，返回翻转后的根节点。完整讲解见 <a href="#invert-tree">正文第 2 题</a>。</p>
+</details>
+<details id="lc-101"><summary>LeetCode 101 · 对称二叉树</summary>
+<p><b>题意</b>：给定二叉树的根节点 <code>root</code>，判断它是否轴对称（左子树与右子树互为镜像）。完整讲解见 <a href="#symmetric-tree">正文第 3 题</a>。</p>
+</details>
+<details id="lc-543"><summary>LeetCode 543 · 二叉树的直径</summary>
+<p><b>题意</b>：给定二叉树的根节点 <code>root</code>，返回任意两个节点之间最长路径的长度（按边数计），这条路径不一定经过根节点。完整讲解见 <a href="#tree-diameter">正文第 4 题</a>。</p>
+</details>
+<details id="lc-236"><summary>LeetCode 236 · 二叉树的最近公共祖先</summary>
+<p><b>题意</b>：给定二叉树和树中两个不同的节点 <code>p</code>、<code>q</code>，返回它们深度最大的公共祖先（一个节点也可以是它自己的祖先）。完整讲解见 <a href="#lowest-common-ancestor">正文第 5 题</a>。</p>
+</details>
+<details id="lc-199"><summary>LeetCode 199 · 二叉树的右视图</summary>
+<p><b>题意</b>：站在二叉树的右侧，按从顶部到底部的顺序，返回每一层能看到的节点值（即每层最右边的节点）。完整讲解见 <a href="#right-side-view">正文第 6 题</a>。</p>
+</details>
+<details id="lc-98"><summary>LeetCode 98 · 验证二叉搜索树</summary>
+<p><b>题意</b>：判断二叉树是否为有效的二叉搜索树：每个节点的左子树只含严格小于它的值，右子树只含严格大于它的值，且左右子树本身也是二叉搜索树。完整讲解见 <a href="#validate-bst">正文第 7 题</a>。</p>
+</details>
+<details id="lc-110"><summary>LeetCode 110 · 平衡二叉树</summary>
+<p><b>题意</b>：给定二叉树的根节点 <code>root</code>，判断它是否是高度平衡的二叉树，即每个节点的左右两棵子树的高度差的绝对值都不超过 1。返回 <code>true</code> 或 <code>false</code>。空树算平衡。</p>
+<p><b>例子</b>：输入 <code>root = [3, 9, 20, null, null, 15, 7]</code>（根 3，左孩子 9 是叶子，右孩子 20 下面挂着 15 和 7），输出 <code>true</code>。根节点的左子树高 1、右子树高 2，差为 1；其余节点的差都是 0。</p>
+<p><b>数据范围</b>：节点数在 [0, 5000] 之间，-10<sup>4</sup> ≤ 节点值 ≤ 10<sup>4</sup>。</p>
+</details>
+<details id="lc-124"><summary>LeetCode 124 · 二叉树中的最大路径和</summary>
+<p><b>题意</b>：二叉树中的路径是一个节点序列，序列中每对相邻节点之间都有一条边相连，同一个节点在一条路径中最多出现一次。路径至少包含一个节点，不一定经过根节点。路径和是路径上所有节点值之和。给定根节点 <code>root</code>，返回所有路径中最大的路径和。</p>
+<p><b>例子</b>：输入 <code>root = [-10, 9, 20, null, null, 15, 7]</code>（根 -10，左孩子 9 是叶子，右孩子 20 下面挂着 15 和 7），输出 <code>42</code>。最优路径是 15 → 20 → 7，和为 42；它不经过根，因为加上 -10 只会变小。</p>
+<p><b>数据范围</b>：节点数在 [1, 3 × 10<sup>4</sup>] 之间，-1000 ≤ 节点值 ≤ 1000，节点值可以是负数。</p>
+</details>
+<details id="lc-235"><summary>LeetCode 235 · 二叉搜索树的最近公共祖先</summary>
+<p><b>题意</b>：给定一棵二叉搜索树和树中两个不同的节点 <code>p</code>、<code>q</code>，返回它们的最近公共祖先：同时是 <code>p</code> 和 <code>q</code> 的祖先、且深度最大的节点（一个节点也可以是它自己的祖先）。</p>
+<p><b>例子</b>：输入 <code>root = [6, 2, 8, 0, 4, 7, 9, null, null, 3, 5]</code>，<code>p = 2</code>，<code>q = 8</code>，输出 <code>6</code>。这棵树的根是 6，左孩子 2（下面挂着 0 和 4，4 下面又挂着 3 和 5），右孩子 8（下面挂着 7 和 9）；2 和 8 分别在 6 的两侧，所以最近公共祖先是 6。</p>
+<p><b>数据范围</b>：节点数在 [2, 10<sup>5</sup>] 之间，所有节点值互不相同，<code>p ≠ q</code>，且 <code>p</code>、<code>q</code> 都在树中。</p>
+</details>
+<details id="lc-102"><summary>LeetCode 102 · 二叉树的层序遍历</summary>
+<p><b>题意</b>：给定二叉树的根节点 <code>root</code>，按层返回节点值：从上到下每一层一个列表，层内从左到右。</p>
+<p><b>例子</b>：输入 <code>root = [3, 9, 20, null, null, 15, 7]</code>（根 3，左孩子 9 是叶子，右孩子 20 下面挂着 15 和 7），输出 <code>[[3], [9, 20], [15, 7]]</code>。</p>
+<p><b>数据范围</b>：节点数在 [0, 2000] 之间，空树返回 <code>[]</code>。</p>
+</details>
+<details id="lc-230"><summary>LeetCode 230 · 二叉搜索树中第 K 小的元素</summary>
+<p><b>题意</b>：给定二叉搜索树的根节点 <code>root</code> 和整数 <code>k</code>，返回树中第 <code>k</code> 小的节点值（<code>k</code> 从 1 开始计数）。</p>
+<p><b>例子</b>：输入 <code>root = [3, 1, 4, null, 2]</code>，<code>k = 1</code>，输出 <code>1</code>。这棵树的根是 3，左孩子 1，右孩子 4，1 的右孩子是 2；所有值从小到大是 1、2、3、4，第 1 小是 1。</p>
+<p><b>数据范围</b>：节点数为 n，1 ≤ k ≤ n ≤ 10<sup>4</sup>，0 ≤ 节点值 ≤ 10<sup>4</sup>。</p>
+</details>
 
 <h2>练习</h2>
 <p>补全 <code>dsa/tree_patterns.py</code>。建议顺序：<code>max_depth</code> → <code>invert_tree</code> → <code>is_symmetric</code> → <code>diameter_of_binary_tree</code> → <code>lowest_common_ancestor</code> → <code>right_side_view</code> → <code>is_valid_bst</code>。建树、打印树的工具函数已经写好，不用动。写完一题就运行一次，看打印出来的「输入、期望、实际」是否一致：</p>

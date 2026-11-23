@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>计算机基础 第 3 课 · 并发、锁与死锁</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="cs.css">
+<style>
+/* 本课两个线程的固定配色，插图和动画共用：T1 蓝、T2 橙 */
+.t1 { fill: #e3f2fd; stroke: #0b62c4; } .t2 { fill: #ffe0b2; stroke: #e65100; }
+.box.t1 { background: #e3f2fd; } .box.t2 { background: #ffe0b2; }
+.demo .vec { font-family: Consolas, monospace; }
+.demo td.dim { color: #aaa; }
+.demo .verdict, .demo .safe-sequence { font-weight: bold; }
+.demo .verdict.ok { color: #2e7d32; } .demo .verdict.bad { color: #c62828; }
+.demo .code-line { font-family: Consolas, monospace; padding: 1px 6px; border-radius: 3px; }
+.demo .code-line.now { background: #ffe0b2; }
+.demo .race-cols { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+.demo .race-cols > div { min-width: 170px; }
+</style>
+</head>
+<body>
+<!-- 全页共用的箭头。SVG 里写 marker-end="url(#arrow)" 即可 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+  <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0b62c4"/></marker>
+  <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c62828"/></marker>
+  <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e7d32"/></marker>
+</defs></svg>
+
+<p><a href="index.html">← 计算机基础目录</a></p>
+<h1>第 3 课 · 并发、锁与死锁</h1>
+<p class="one-line">多个线程同时改同一份数据会出错，所以要<b>加锁</b>，让它们一个一个来。可锁用得不对，线程之间又会互相等对方放手、谁也动不了，这就是<b>死锁</b>。</p>
+<p class="prereq">开始前要会：<a href="01-process-scheduling.html">第 1 课</a>里的<a href="01-process-scheduling.html#threads">线程</a>（同一进程的线程共享全局变量，各有自己的寄存器）、<a href="01-process-scheduling.html#states">阻塞状态</a>、<a href="01-process-scheduling.html#context-switch">上下文切换</a>，以及<a href="01-process-scheduling.html#ipc">进程间通信</a>那张表里预告的「信号量」。<a href="02-virtual-memory.html">第 2 课</a>本课基本用不到。</p>
+
+<p>还是那家小网店。服务器上的网店进程开了很多线程，每个线程服务一位顾客。这天，某款商品只剩<b>最后 1 件</b>，两位顾客几乎同时点了「下单」。两个线程会不会把这一件卖两次？本课从这个问题出发，一路讲到锁、信号量、死锁，最后用银行家算法给网店的后台任务分配资源。</p>
+
+<p class="roadmap"><b>本课的路线</b>：竞态（卖最后一件）→ 临界区与互斥 → 互斥锁 → 信号量与 P/V → 生产者-消费者 → 哲学家就餐 → 死锁（两把锁互相等）→ 四个必要条件 → 资源分配图 → 预防 / 避免 / 检测 → 安全状态与银行家算法 → 至少要几个资源 → 动手玩 → 题单怎么考。</p>
+
+<h2 id="race-condition">1. 竞态：两个线程卖最后一件商品</h2>
+<p>网店进程里有一个全局变量 <code>stock</code>，记着这款商品的库存，现在是 1。全局变量放在进程的数据区里，第 1 课讲过，<b>同一进程的所有线程共享它</b>。每个下单线程执行同样的代码：</p>
+<pre>if (stock &gt; 0) {         // 检查：还有货吗
+    stock = stock - 1;   // 扣库存
+    创建订单;
+}</pre>
+<p>看上去 <code>stock = stock - 1</code> 只是一行，CPU 却要分三步做，因为 CPU 只能对寄存器里的数做运算：</p>
+<ol>
+  <li><b>读</b>：把内存里 <code>stock</code> 的值读进本线程的寄存器，记作 r；</li>
+  <li><b>减</b>：r = r − 1，这一步只改寄存器，内存里的 <code>stock</code> 没变；</li>
+  <li><b>写</b>：把 r 写回内存里的 <code>stock</code>。</li>
+</ol>
+<p>每个线程有自己的一套寄存器（第 1 课），所以 T1 的 r 和 T2 的 r 是两个不同的数。而线程随时可能被时钟中断换下 CPU（多核时两个线程甚至真的同时在跑），所以两个线程的这几步可以按任意顺序<b>交错</b>。下面是一种很不走运的交错：</p>
+
+<figure class="fig">
+<svg viewBox="0 0 640 300" width="640" role="img" aria-label="两个线程交错执行检查、读、减、写，最后卖出两件">
+  <text x="40" y="24" text-anchor="middle" class="title">步骤</text>
+  <text x="200" y="24" text-anchor="middle" class="title">线程 T1（顾客甲）</text>
+  <text x="390" y="24" text-anchor="middle" class="title">线程 T2（顾客乙）</text>
+  <text x="560" y="24" text-anchor="middle" class="title">内存里的 stock</text>
+  <text x="40" y="54" text-anchor="middle">1</text><rect x="120" y="38" width="160" height="22" class="t1"/><text x="200" y="54" text-anchor="middle">检查：1 &gt; 0，有货</text><text x="560" y="54" text-anchor="middle" class="mono">1</text>
+  <text x="40" y="82" text-anchor="middle">2</text><rect x="310" y="66" width="160" height="22" class="t2"/><text x="390" y="82" text-anchor="middle">检查：1 &gt; 0，有货</text><text x="560" y="82" text-anchor="middle" class="mono">1</text>
+  <text x="40" y="110" text-anchor="middle">3</text><rect x="120" y="94" width="160" height="22" class="t1"/><text x="200" y="110" text-anchor="middle">读：r = 1</text><text x="560" y="110" text-anchor="middle" class="mono">1</text>
+  <text x="40" y="138" text-anchor="middle">4</text><rect x="310" y="122" width="160" height="22" class="t2"/><text x="390" y="138" text-anchor="middle">读：r = 1</text><text x="560" y="138" text-anchor="middle" class="mono">1</text>
+  <text x="40" y="166" text-anchor="middle">5</text><rect x="120" y="150" width="160" height="22" class="t1"/><text x="200" y="166" text-anchor="middle">减：r = 0</text><text x="560" y="166" text-anchor="middle" class="mono">1</text>
+  <text x="40" y="194" text-anchor="middle">6</text><rect x="310" y="178" width="160" height="22" class="t2"/><text x="390" y="194" text-anchor="middle">减：r = 0</text><text x="560" y="194" text-anchor="middle" class="mono">1</text>
+  <text x="40" y="222" text-anchor="middle">7</text><rect x="120" y="206" width="160" height="22" class="t1"/><text x="200" y="222" text-anchor="middle">写：stock = 0</text><rect x="520" y="206" width="80" height="22" class="muted"/><text x="560" y="222" text-anchor="middle" class="mono">0</text>
+  <text x="40" y="250" text-anchor="middle">8</text><rect x="310" y="234" width="160" height="22" class="t2"/><text x="390" y="250" text-anchor="middle">写：stock = 0</text><rect x="520" y="234" width="80" height="22" class="bad"/><text x="560" y="250" text-anchor="middle" class="mono">0</text>
+  <line x1="300" y1="34" x2="300" y2="260" class="dash"/>
+  <line x1="490" y1="34" x2="490" y2="260" class="dash"/>
+  <text x="320" y="286" text-anchor="middle">两人都下单成功，可货只有 1 件；做了两次「减 1」，stock 却只少了 1</text>
+</svg>
+<figcaption>第 2 步时 T1 还没来得及写回，T2 看到的仍是 1。第 8 步 T2 用旧值算出的 0 盖掉了 T1 写的 0：T1 那次修改等于白做了</figcaption>
+</figure>
+
+<p>如果 T1 把四步做完、T2 再开始，T2 检查时会看到 0，提示「已售罄」，结果完全正确。错误只在某些交错下出现，所以这种 bug 时有时无、很难复现。</p>
+<div class="term"><b>竞态条件</b>（race condition）：多个线程（或进程）并发地读写同一份共享数据，最终结果取决于它们执行的先后交错顺序。</div>
+<p>本课后面说的「线程」，换成「进程」道理完全一样（多个进程通过共享内存共用数据时也会竞态）。教材和考题多用「进程」这个词，本课两种说法混用。</p>
+
+<h2 id="critical-section">2. 临界区与互斥</h2>
+<p>要治竞态，就得保证：T1 在「检查、读、减、写」这一段里时，T2 不能插进来动 <code>stock</code>。先给几个名词：</p>
+<div class="term"><b>临界资源</b>：一次只允许一个线程使用的资源，例如这里的 <code>stock</code>，或者一台打印机。</div>
+<div class="term"><b>临界区</b>：每个线程里<b>访问临界资源的那段代码</b>。注意临界区是代码，不是资源本身。这里就是从检查到写回那几行。</div>
+<div class="term"><b>互斥</b>：同一时刻最多只有一个线程在临界区里执行。</div>
+<p>为了做到互斥，每个线程的代码都按下面的四段来组织：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 245" width="640" role="img" aria-label="进入区、临界区、退出区、剩余区；T1 在临界区，T2 被挡在进入区">
+  <text x="160" y="24" text-anchor="middle" class="title">T1：正在临界区里</text>
+  <text x="480" y="24" text-anchor="middle" class="title">T2：被挡在进入区</text>
+  <rect x="40" y="40" width="240" height="36" class="t1"/><text x="160" y="63" text-anchor="middle">进入区：lock()，拿到锁</text>
+  <rect x="40" y="84" width="240" height="56" class="hot"/><text x="160" y="106" text-anchor="middle" class="title">临界区</text><text x="160" y="127" text-anchor="middle" class="small">检查、读、减、写 stock</text>
+  <rect x="40" y="148" width="240" height="36" class="t1"/><text x="160" y="171" text-anchor="middle">退出区：unlock()，放锁</text>
+  <rect x="40" y="192" width="240" height="36" class="muted"/><text x="160" y="215" text-anchor="middle">剩余区：发确认邮件等</text>
+  <rect x="360" y="40" width="240" height="36" class="bad"/><text x="480" y="63" text-anchor="middle">进入区：lock()，拿不到</text>
+  <rect x="360" y="84" width="240" height="56" class="muted"/><text x="480" y="106" text-anchor="middle" class="title">临界区</text><text x="480" y="127" text-anchor="middle" class="small">要等 T1 放锁才能进</text>
+  <rect x="360" y="148" width="240" height="36" class="muted"/><text x="480" y="171" text-anchor="middle">退出区</text>
+  <rect x="360" y="192" width="240" height="36" class="muted"/><text x="480" y="215" text-anchor="middle">剩余区</text>
+  <line x1="358" y1="64" x2="284" y2="104" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="322" y="124" text-anchor="middle" class="small">锁在 T1 手里</text>
+</svg>
+<figcaption>进入区负责「检查能不能进、能进就把门关上」，退出区负责「出来时把门打开」</figcaption>
+</figure>
+<p>一个合格的互斥机制要满足四条准则，选择题常考：</p>
+<table>
+  <tr><th>准则</th><th>意思</th></tr>
+  <tr><td>空闲让进</td><td>临界区里没人时，想进的线程应该马上能进</td></tr>
+  <tr><td>忙则等待</td><td>临界区里有人时，别的线程必须等（这就是互斥本身）</td></tr>
+  <tr><td>有限等待</td><td>想进的线程等待的时间必须有上限，不能永远进不去（不能<a href="01-process-scheduling.html#sjf">饥饿</a>）</td></tr>
+  <tr><td>让权等待</td><td>进不去时应该让出 CPU（进入阻塞状态），不要占着 CPU 空转。这一条是「应该」，不是「必须」</td></tr>
+</table>
+
+<h3 id="atomic">原子操作：为什么不能自己用一个变量当门闩</h3>
+<p>最自然的想法：设一个变量 <code>busy</code>，进门前 <code>while (busy) {}</code> 等它变成 0，然后 <code>busy = 1</code>。可这本身又是「先检查、再修改」两步：T1 看到 <code>busy</code> 是 0、还没来得及改成 1 就被换下，T2 也看到 0，两人一起进门。门闩自己也竞态了。</p>
+<div class="term"><b>原子操作</b>：执行过程不会被打断的操作。要么还没开始，要么一次做完，别的线程看不到它做了一半的样子。</div>
+<p>所以 CPU 专门提供了<b>原子指令</b>，例如 TestAndSet（读出旧值并把它设成 1，一条指令完成）、CAS（比较并交换：「如果现在是 0 就改成 1」一次完成）。锁就是用这些原子指令搭起来的。</p>
+
+<h2 id="mutex">3. 互斥锁</h2>
+<div class="term"><b>互斥锁</b>（mutex）：一个只有「空闲」和「被占用」两种状态的对象，提供两个操作。<code>lock()</code>：锁空闲就占住它并返回；被别人占着就等。<code>unlock()</code>：放开锁，如果有人在等，让其中一个拿到。lock 和 unlock 本身都是原子的。</div>
+<pre>lock(stock_lock);         // 进入区
+if (stock &gt; 0) {          // ┐
+    stock = stock - 1;    // │ 临界区
+    创建订单;             // ┘
+}
+unlock(stock_lock);       // 退出区</pre>
+<p>现在 T2 想在 T1 的临界区中间插进来，会卡在 <code>lock</code> 上，等 T1 <code>unlock</code> 之后才能进去检查，这时它看到的是 0。「拿不到锁时怎么等」有两种做法：</p>
+<ul>
+  <li><b>阻塞</b>：线程进入阻塞状态，让出 CPU，锁放开时由内核把它唤醒（回到就绪队列）。满足「让权等待」，但睡下和唤醒都要上下文切换。</li>
+  <li><b>自旋</b>：线程一直循环检查锁是否空闲，叫<b>忙等</b>，这种锁叫<b>自旋锁</b>。不满足「让权等待」，白占 CPU；但不用切换，在多核上、而且临界区很短时反而更快。</li>
+</ul>
+<p>下面的动画把两个线程的每一步都摊开：先看不加锁时的交错，再看加锁之后。</p>
+<div class="demo" id="race"></div>
+
+<h2 id="semaphore">4. 信号量与 P/V 操作</h2>
+<p>互斥锁只能表达「最多 1 个」。网店的数据库只允许同时开 <b>3 个连接</b>，第 4 个想连的线程得等别人用完，这就需要能数数的工具。</p>
+<div class="term"><b>信号量</b>（semaphore）：内核维护的一个整数 S，加上一个等在它上面的线程队列（<b>等待队列</b>）。只能用下面两个原子操作来改它，不能直接赋值。</div>
+<pre>P(S):  S = S - 1;
+       if (S &lt; 0)  本线程阻塞，排进 S 的等待队列;
+
+V(S):  S = S + 1;
+       if (S &lt;= 0) 从 S 的等待队列里唤醒一个线程（让它进入就绪状态）;</pre>
+<p>P 是「申请一个」，V 是「归还一个」。名字来自荷兰语，也常写作 <code>wait(S)</code> / <code>signal(S)</code>。V 里的条件是 <code>S &lt;= 0</code>：加 1 之后还不大于 0，说明加之前 S 是负的，也就是有人在排队，所以要叫醒一个。</p>
+<p>把网店的 3 个数据库连接交给信号量 S 管理，初值 3。线程 T1～T5 依次执行 P(S)：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 215" width="640" role="img" aria-label="信号量初值 3，五个线程依次 P，值变为 2、1、0、-1、-2">
+  <text x="20" y="22" class="title">S 初值 3（3 个数据库连接），T1～T5 依次执行 P(S)</text>
+  <rect x="20" y="40" width="90" height="50" class="plain"/><text x="65" y="60" text-anchor="middle">初始</text><text x="65" y="81" text-anchor="middle" class="mono">S = 3</text>
+  <rect x="120" y="40" width="90" height="50" class="ok"/><text x="165" y="60" text-anchor="middle">T1 做 P</text><text x="165" y="81" text-anchor="middle" class="mono">S = 2</text>
+  <rect x="220" y="40" width="90" height="50" class="ok"/><text x="265" y="60" text-anchor="middle">T2 做 P</text><text x="265" y="81" text-anchor="middle" class="mono">S = 1</text>
+  <rect x="320" y="40" width="90" height="50" class="ok"/><text x="365" y="60" text-anchor="middle">T3 做 P</text><text x="365" y="81" text-anchor="middle" class="mono">S = 0</text>
+  <rect x="420" y="40" width="90" height="50" class="bad"/><text x="465" y="60" text-anchor="middle">T4 做 P</text><text x="465" y="81" text-anchor="middle" class="mono">S = −1</text>
+  <rect x="520" y="40" width="90" height="50" class="bad"/><text x="565" y="60" text-anchor="middle">T5 做 P</text><text x="565" y="81" text-anchor="middle" class="mono">S = −2</text>
+  <text x="165" y="108" text-anchor="middle" class="small">拿到连接</text><text x="265" y="108" text-anchor="middle" class="small">拿到连接</text><text x="365" y="108" text-anchor="middle" class="small">拿到最后一个</text>
+  <text x="465" y="108" text-anchor="middle" class="small">S &lt; 0，阻塞</text><text x="565" y="108" text-anchor="middle" class="small">S &lt; 0，阻塞</text>
+  <text x="20" y="148">连接池：</text>
+  <rect x="80" y="130" width="50" height="26" class="obj"/><text x="105" y="148" text-anchor="middle">T1</text>
+  <rect x="136" y="130" width="50" height="26" class="obj"/><text x="161" y="148" text-anchor="middle">T2</text>
+  <rect x="192" y="130" width="50" height="26" class="obj"/><text x="217" y="148" text-anchor="middle">T3</text>
+  <text x="340" y="148">S 的等待队列：</text>
+  <rect x="440" y="130" width="50" height="26" class="bad"/><text x="465" y="148" text-anchor="middle">T4</text>
+  <rect x="496" y="130" width="50" height="26" class="bad"/><text x="521" y="148" text-anchor="middle">T5</text>
+  <text x="320" y="196" text-anchor="middle">S = −2 &lt; 0：它的绝对值 2，正好是等待队列里的线程数</text>
+</svg>
+<figcaption>S ≥ 0 时，S 是还剩几个资源；S &lt; 0 时，资源已经分完，|S| 是在排队的线程数</figcaption>
+</figure>
+<p>接着 T1 用完连接，执行 V(S)：S 从 −2 变成 −1，−1 ≤ 0，于是唤醒队头的 T4，T4 拿到 T1 让出的那个连接。T4 不需要再做一次 P，它当初那次 P 已经把账记上了。</p>
+<p>这就引出一道常考的计算：<b>信号量的取值范围</b>。n 个线程共享 m 个资源，信号量初值 m。没人用时最大，是 m；n 个线程全都做了 P、还没人做 V 时最小，是 m − n。本例 m = 3、n = 5，取值范围是 <b>−2 ～ 3</b>。</p>
+<p>信号量的<b>初值</b>决定了它的用途，记住三种：</p>
+<table>
+  <tr><th>初值</th><th>用途</th><th>网店里的例子</th></tr>
+  <tr><td>1</td><td><b>互斥</b>：当锁用，P 是加锁，V 是解锁</td><td>保护 <code>stock</code>：<code>P(mutex); 检查、扣库存; V(mutex);</code></td></tr>
+  <tr><td>n</td><td><b>资源计数</b>：同一种资源有 n 个</td><td>3 个数据库连接，初值 3</td></tr>
+  <tr><td>0</td><td><b>同步</b>：规定先后顺序，「B 必须等 A 做完某件事」</td><td>发货线程必须等下单线程把订单写好</td></tr>
+</table>
+<p>互斥那一行走一遍：mutex = 1。T1 做 P，1 → 0，不小于 0，进入临界区；T2 做 P，0 → −1，阻塞；T1 出来做 V，−1 → 0，0 ≤ 0，唤醒 T2；T2 进入临界区，出来做 V，0 → 1，回到初始状态。</p>
+<p>同步那一行也走一遍。设信号量 <code>written</code> 初值 0：下单线程写完订单后做 <code>V(written)</code>，发货线程发货前先做 <code>P(written)</code>。</p>
+<ul>
+  <li>发货线程先跑到：P 把 0 变成 −1，阻塞。下单线程写完做 V，−1 → 0，唤醒发货线程。</li>
+  <li>下单线程先写完：V 把 0 变成 1。发货线程来做 P，1 → 0，不阻塞，直接发货。</li>
+</ul>
+<p>两种情况下，发货都发生在写好订单之后。口诀：<b>同步信号量，「前面那件事」做 V，「后面那件事」做 P</b>。</p>
+
+<h2 id="producer-consumer">5. 生产者-消费者：P 的顺序不能颠倒</h2>
+<p>网店的下单线程把新订单放进一个<b>订单缓冲区</b>（只有 3 格的数组），发货线程从里面取订单去发货。放数据的一方叫<b>生产者</b>，取数据的一方叫<b>消费者</b>。要满足三件事：缓冲区满了，生产者得等；缓冲区空了，消费者得等；放和取都要改这个数组，不能同时进行。用三个信号量分别管：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 210" width="640" role="img" aria-label="生产者把订单放进 3 格缓冲区，消费者取出；三个信号量 empty、full、mutex">
+  <rect x="20" y="40" width="140" height="60" rx="6" class="t1"/><text x="90" y="65" text-anchor="middle">下单线程</text><text x="90" y="87" text-anchor="middle" class="small">生产者</text>
+  <line x1="162" y1="70" x2="216" y2="70" class="line" marker-end="url(#arrow)"/><text x="189" y="60" text-anchor="middle" class="small">放入</text>
+  <rect x="220" y="40" width="66" height="60" class="hot"/><text x="253" y="75" text-anchor="middle">订单</text>
+  <rect x="286" y="40" width="67" height="60" class="hot"/><text x="319" y="75" text-anchor="middle">订单</text>
+  <rect x="353" y="40" width="67" height="60" class="plain"/><text x="386" y="75" text-anchor="middle" class="small">空</text>
+  <text x="320" y="120" text-anchor="middle" class="small">订单缓冲区（3 格，此刻放了 2 个）</text>
+  <line x1="422" y1="70" x2="476" y2="70" class="line" marker-end="url(#arrow)"/><text x="449" y="60" text-anchor="middle" class="small">取出</text>
+  <rect x="480" y="40" width="140" height="60" rx="6" class="t2"/><text x="550" y="65" text-anchor="middle">发货线程</text><text x="550" y="87" text-anchor="middle" class="small">消费者</text>
+  <text x="120" y="152"><tspan class="mono">empty = 1</tspan>：还有几个空格（初值 3）</text>
+  <text x="120" y="174"><tspan class="mono">full&#160;&#160;= 2</tspan>：已经有几个订单（初值 0）</text>
+  <text x="120" y="196"><tspan class="mono">mutex = 1</tspan>：同一时刻只许一个线程动缓冲区（初值 1）</text>
+</svg>
+<figcaption>empty 是生产者要的资源（空格），full 是消费者要的资源（订单），mutex 管互斥。任何时刻 empty + full = 3（不算正在放、正在取的那一瞬间）</figcaption>
+</figure>
+<table>
+  <tr><th>生产者（下单线程）</th><th>消费者（发货线程）</th></tr>
+  <tr><td><pre>while (true) {
+    生成一个订单;
+    P(empty);   // 要一个空格
+    P(mutex);
+    放进缓冲区;
+    V(mutex);
+    V(full);    // 订单数 +1
+}</pre></td><td><pre>while (true) {
+    P(full);    // 要一个订单
+    P(mutex);
+    取出一个订单;
+    V(mutex);
+    V(empty);   // 空格数 +1
+    发货;
+}</pre></td></tr>
+</table>
+<p>考点在于：<b>每一方都要先 P 资源信号量（empty 或 full），再 P(mutex)</b>。如果生产者写反了，先 <code>P(mutex)</code> 再 <code>P(empty)</code>，在缓冲区已满时一步步推演（满时 empty = 0、full = 3、mutex = 1）：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 255" width="640" role="img" aria-label="生产者先 P(mutex) 再 P(empty) 导致死锁的推演">
+  <text x="30" y="24" text-anchor="middle" class="title">步骤</text>
+  <text x="200" y="24" text-anchor="middle" class="title">生产者（写反了）</text>
+  <text x="400" y="24" text-anchor="middle" class="title">消费者（正确）</text>
+  <text x="520" y="24" text-anchor="middle" class="mono">mutex</text><text x="572" y="24" text-anchor="middle" class="mono">empty</text><text x="618" y="24" text-anchor="middle" class="mono">full</text>
+  <text x="30" y="52" text-anchor="middle" class="small">初始</text><text x="300" y="52" text-anchor="middle" class="small">缓冲区已满</text>
+  <text x="520" y="52" text-anchor="middle" class="mono">1</text><text x="572" y="52" text-anchor="middle" class="mono">0</text><text x="618" y="52" text-anchor="middle" class="mono">3</text>
+  <text x="30" y="80" text-anchor="middle">1</text><rect x="110" y="64" width="180" height="22" class="t1"/><text x="200" y="80" text-anchor="middle">P(mutex)：1→0，进入</text>
+  <text x="520" y="80" text-anchor="middle" class="mono">0</text><text x="572" y="80" text-anchor="middle" class="mono">0</text><text x="618" y="80" text-anchor="middle" class="mono">3</text>
+  <text x="30" y="108" text-anchor="middle">2</text><rect x="110" y="92" width="180" height="22" class="bad"/><text x="200" y="108" text-anchor="middle">P(empty)：0→−1，阻塞</text>
+  <text x="520" y="108" text-anchor="middle" class="mono">0</text><text x="572" y="108" text-anchor="middle" class="mono">−1</text><text x="618" y="108" text-anchor="middle" class="mono">3</text>
+  <text x="30" y="136" text-anchor="middle">3</text><rect x="310" y="120" width="180" height="22" class="t2"/><text x="400" y="136" text-anchor="middle">P(full)：3→2，继续</text>
+  <text x="520" y="136" text-anchor="middle" class="mono">0</text><text x="572" y="136" text-anchor="middle" class="mono">−1</text><text x="618" y="136" text-anchor="middle" class="mono">2</text>
+  <text x="30" y="164" text-anchor="middle">4</text><rect x="310" y="148" width="180" height="22" class="bad"/><text x="400" y="164" text-anchor="middle">P(mutex)：0→−1，阻塞</text>
+  <text x="520" y="164" text-anchor="middle" class="mono">−1</text><text x="572" y="164" text-anchor="middle" class="mono">−1</text><text x="618" y="164" text-anchor="middle" class="mono">2</text>
+  <line x1="498" y1="34" x2="498" y2="172" class="dash"/>
+  <text x="320" y="206" text-anchor="middle">生产者在等消费者的 V(empty)，可消费者要先拿到 mutex 才走得到那一步；</text>
+  <text x="320" y="230" text-anchor="middle">消费者在等生产者的 V(mutex)，可生产者要先拿到空格才走得到那一步。</text>
+</svg>
+<figcaption>两个线程都阻塞了，而能唤醒对方的那一步都在自己后面：永远等下去。这就是下面要讲的死锁</figcaption>
+</figure>
+<p>毛病出在第 2 步：生产者<b>占着 mutex 去等空格</b>。正确的顺序是先确认有空格（P(empty)），再去占 mutex，这样占着 mutex 的线程一定马上能干完活并放开。同理，消费者写成先 P(mutex) 再 P(full)，在缓冲区为空时也会死锁。</p>
+<p>V 的顺序则可以随便换：V 从不阻塞，换了顺序只会让别人早一点或晚一点被唤醒，不会卡住谁。</p>
+
+<h2 id="philosophers">6. 哲学家就餐</h2>
+<p>另一个经典问题，常以选择题出现：5 位哲学家围着圆桌，每两人之间放 1 根筷子，共 5 根。吃饭要同时拿到左右两根。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 240" width="640" role="img" aria-label="5 位哲学家各拿起左手的筷子，等右手的，形成一圈等待">
+  <circle cx="170" cy="120" r="40" class="muted"/><text x="170" y="125" text-anchor="middle" class="small">餐桌</text>
+  <line x1="198.2" y1="81.2" x2="212.3" y2="61.8" stroke="#e65100" stroke-width="5" stroke-linecap="round"/>
+  <line x1="215.6" y1="134.8" x2="238.5" y2="142.2" stroke="#e65100" stroke-width="5" stroke-linecap="round"/>
+  <line x1="170" y1="168" x2="170" y2="192" stroke="#e65100" stroke-width="5" stroke-linecap="round"/>
+  <line x1="124.4" y1="134.8" x2="101.5" y2="142.2" stroke="#e65100" stroke-width="5" stroke-linecap="round"/>
+  <line x1="141.8" y1="81.2" x2="127.7" y2="61.8" stroke="#e65100" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="170" cy="35" r="18" class="obj"/><text x="170" y="40" text-anchor="middle">0</text>
+  <circle cx="251" cy="94" r="18" class="obj"/><text x="251" y="99" text-anchor="middle">1</text>
+  <circle cx="220" cy="189" r="18" class="obj"/><text x="220" y="194" text-anchor="middle">2</text>
+  <circle cx="120" cy="189" r="18" class="obj"/><text x="120" y="194" text-anchor="middle">3</text>
+  <circle cx="89" cy="94" r="18" class="obj"/><text x="89" y="99" text-anchor="middle">4</text>
+  <text x="170" y="230" text-anchor="middle" class="small">蓝圈：哲学家　橙条：筷子</text>
+  <text x="320" y="60">规则：每人先拿左手边的筷子，再拿右手边的。</text>
+  <text x="320" y="90">5 人同时拿起左边那根：5 根全被拿走。</text>
+  <text x="320" y="120">每人都在等右边那根，可它在邻居左手里，</text>
+  <text x="320" y="142">而邻居也在等他自己右边的那根……</text>
+  <text x="320" y="172" class="title">一圈人互相等：死锁。</text>
+</svg>
+<figcaption>每个人都「拿着一根、等着另一根」，等待关系首尾相接成了一个圈</figcaption>
+</figure>
+<p>常见的三种解法，每种都是把这个「圈」拆掉：</p>
+<ol>
+  <li>最多只许 4 人同时去拿筷子（用一个初值为 4 的信号量）。5 根筷子分给 4 个人，至少有一人能拿到两根，吃完放下，别人就能接着吃。</li>
+  <li>奇数号先拿左边、偶数号先拿右边。相邻两人会先抢同一根，抢不到的那位手里什么也没拿，不会形成一圈。</li>
+  <li>只有左右两根都空闲时，才一次拿起两根（把「检查并拿两根」放进临界区）。</li>
+</ol>
+
+<h2 id="deadlock">7. 死锁：两把锁互相等</h2>
+<p>回到网店。为了让「下单」和「取消订单」互不干扰，程序里有两把互斥锁：<b>库存锁</b>保护 <code>stock</code>，<b>订单锁</b>保护订单表。两个线程各要两把锁，但拿的顺序不一样：</p>
+<table>
+  <tr><th>T1：下单</th><th>T2：取消订单</th></tr>
+  <tr><td><pre>lock(库存锁);   // 先扣库存
+lock(订单锁);   // 再写订单
+……
+unlock(订单锁);
+unlock(库存锁);</pre></td><td><pre>lock(订单锁);   // 先把订单改成「已取消」
+lock(库存锁);   // 再把库存加回去
+……
+unlock(库存锁);
+unlock(订单锁);</pre></td></tr>
+</table>
+<p>不走运的交错：T1 拿到库存锁，正要拿订单锁时被换下；T2 上来拿到订单锁，接着去要库存锁，发现在 T1 手里，阻塞；T1 回来要订单锁，发现在 T2 手里，也阻塞。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 220" width="640" role="img" aria-label="T1 持有库存锁等订单锁，T2 持有订单锁等库存锁">
+  <rect x="40" y="85" width="140" height="50" rx="6" class="t1"/><text x="110" y="107" text-anchor="middle" class="title">T1 下单</text><text x="110" y="126" text-anchor="middle" class="small">阻塞</text>
+  <rect x="460" y="85" width="140" height="50" rx="6" class="t2"/><text x="530" y="107" text-anchor="middle" class="title">T2 取消订单</text><text x="530" y="126" text-anchor="middle" class="small">阻塞</text>
+  <rect x="250" y="20" width="140" height="40" class="plain"/><text x="320" y="45" text-anchor="middle">库存锁</text>
+  <rect x="250" y="160" width="140" height="40" class="plain"/><text x="320" y="185" text-anchor="middle">订单锁</text>
+  <line x1="248" y1="45" x2="182" y2="92" class="arrow-green" marker-end="url(#arrow-green)"/><text x="196" y="56" text-anchor="middle" class="small">归 T1</text>
+  <line x1="182" y1="128" x2="248" y2="175" class="arrow-red" marker-end="url(#arrow-red)" stroke-dasharray="6 4"/><text x="196" y="170" text-anchor="middle" class="small">T1 等它</text>
+  <line x1="392" y1="175" x2="458" y2="128" class="arrow-green" marker-end="url(#arrow-green)"/><text x="444" y="170" text-anchor="middle" class="small">归 T2</text>
+  <line x1="458" y1="92" x2="392" y2="45" class="arrow-red" marker-end="url(#arrow-red)" stroke-dasharray="6 4"/><text x="444" y="56" text-anchor="middle" class="small">T2 等它</text>
+</svg>
+<figcaption>顺着箭头走：T1 → 订单锁 → T2 → 库存锁 → T1，绕回了起点。每人手里攥着对方要的东西，又在等对方手里的东西</figcaption>
+</figure>
+<div class="term"><b>死锁</b>：一组线程（或进程）中的每一个，都在等待只有这组里另一个成员才能释放的资源，结果全都无法继续推进。没有外力干预，它们会永远等下去。</div>
+<p>和第 1 课说的<b>饥饿</b>区分开：饥饿是某个线程一直轮不到（别人还在正常运行），换个时机可能就轮到了；死锁是一组线程<b>全部</b>卡住，而且永远不会自己解开。上一节生产者-消费者写反、哲学家各拿左筷子，都是死锁。</p>
+
+<h2 id="conditions">8. 死锁的四个必要条件</h2>
+<p>把上面三个死锁放在一起看，它们都同时具备下面四条。反过来，<b>只要有一条不成立，就不会死锁</b>，所以这四条叫死锁的<b>必要条件</b>。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 190" width="640" role="img" aria-label="死锁四个必要条件">
+  <rect x="10" y="20" width="145" height="150" rx="6" class="obj"/>
+  <text x="82" y="46" text-anchor="middle" class="title">① 互斥</text>
+  <text x="82" y="76" text-anchor="middle" class="small">一把锁同一时刻</text><text x="82" y="94" text-anchor="middle" class="small">只能归一个线程</text>
+  <text x="82" y="140" text-anchor="middle" class="small">库存锁只能给 T1</text>
+  <rect x="165" y="20" width="145" height="150" rx="6" class="obj"/>
+  <text x="237" y="46" text-anchor="middle" class="title">② 占有并等待</text>
+  <text x="237" y="76" text-anchor="middle" class="small">手里拿着资源，</text><text x="237" y="94" text-anchor="middle" class="small">又去要新的</text>
+  <text x="237" y="140" text-anchor="middle" class="small">T1 拿着库存锁等订单锁</text>
+  <rect x="320" y="20" width="145" height="150" rx="6" class="obj"/>
+  <text x="392" y="46" text-anchor="middle" class="title">③ 不可抢占</text>
+  <text x="392" y="76" text-anchor="middle" class="small">别人拿到的资源</text><text x="392" y="94" text-anchor="middle" class="small">不能强行夺走</text>
+  <text x="392" y="140" text-anchor="middle" class="small">T2 不能抢 T1 的锁</text>
+  <rect x="475" y="20" width="155" height="150" rx="6" class="hot"/>
+  <text x="552" y="46" text-anchor="middle" class="title">④ 循环等待</text>
+  <text x="552" y="76" text-anchor="middle" class="small">等待关系首尾相接</text><text x="552" y="94" text-anchor="middle" class="small">成一个圈</text>
+  <text x="552" y="140" text-anchor="middle" class="small">T1 等 T2，T2 等 T1</text>
+</svg>
+<figcaption>前三条是「资源和锁本身的性质」，很多系统天然满足；第 ④ 条是「这一次运气不好，凑成了圈」</figcaption>
+</figure>
+<p>注意「必要」不是「充分」：四条都满足也不一定死锁（在资源有多个实例时，见下一节）。但单个实例的资源（例如一把锁）下，出现循环等待就一定死锁。</p>
+
+<h2 id="rag">9. 资源分配图</h2>
+<p>题目常把资源的占用情况画成一张图，让你判断有没有死锁。这张图叫<b>资源分配图</b>，规则如下：</p>
+<ul>
+  <li>圆圈表示线程（进程），方框表示一类资源，方框里的每个黑点是这类资源的一个<b>实例</b>（例如 3 个数据库连接就画 3 个点）。</li>
+  <li><b>请求边</b>：线程 → 资源，表示「这个线程在等这类资源的一个实例」。</li>
+  <li><b>分配边</b>：资源里的某个点 → 线程，表示「这个实例已经分给了这个线程」。</li>
+</ul>
+<figure class="fig">
+<svg viewBox="0 0 640 260" width="640" role="img" aria-label="左：单实例资源成环，死锁；右：多实例资源成环，但不死锁">
+  <text x="150" y="20" text-anchor="middle" class="title">左：第 7 节的死锁</text>
+  <circle cx="50" cy="120" r="20" class="t1"/><text x="50" y="125" text-anchor="middle">T1</text>
+  <circle cx="250" cy="120" r="20" class="t2"/><text x="250" y="125" text-anchor="middle">T2</text>
+  <rect x="120" y="36" width="60" height="40" class="plain"/><circle cx="150" cy="56" r="5" fill="#222"/>
+  <text x="150" y="98" text-anchor="middle" class="small">R1 库存锁</text>
+  <rect x="120" y="164" width="60" height="40" class="plain"/><circle cx="150" cy="184" r="5" fill="#222"/>
+  <text x="150" y="222" text-anchor="middle" class="small">R2 订单锁</text>
+  <line x1="118" y1="62" x2="66" y2="106" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="66" y1="134" x2="118" y2="176" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <line x1="182" y1="176" x2="234" y2="134" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="234" y1="106" x2="182" y2="62" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="150" y="248" text-anchor="middle" class="small">每类只有 1 个实例，有环 → 死锁</text>
+  <line x1="320" y1="10" x2="320" y2="250" class="dash"/>
+  <text x="490" y="20" text-anchor="middle" class="title">右：有环，但不死锁</text>
+  <circle cx="380" cy="120" r="20" class="t1"/><text x="380" y="125" text-anchor="middle">T1</text>
+  <circle cx="600" cy="120" r="20" class="t2"/><text x="600" y="125" text-anchor="middle">T2</text>
+  <circle cx="600" cy="46" r="20" class="ok"/><text x="600" y="51" text-anchor="middle">T3</text>
+  <rect x="460" y="36" width="70" height="40" class="plain"/><circle cx="482" cy="56" r="5" fill="#222"/><circle cx="508" cy="56" r="5" fill="#222"/>
+  <text x="495" y="98" text-anchor="middle" class="small">R1（2 个实例）</text>
+  <rect x="460" y="164" width="70" height="40" class="plain"/><circle cx="495" cy="184" r="5" fill="#222"/>
+  <text x="495" y="222" text-anchor="middle" class="small">R2（1 个实例）</text>
+  <line x1="396" y1="108" x2="458" y2="66" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <line x1="532" y1="50" x2="578" y2="46" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="532" y1="66" x2="584" y2="106" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="584" y1="134" x2="532" y2="176" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <line x1="458" y1="176" x2="396" y2="134" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="490" y="248" text-anchor="middle" class="small">T3 不等任何东西，跑完放回 R1，T1 就能拿到</text>
+</svg>
+<figcaption>红色：请求边（线程 → 资源）。蓝色：分配边（资源 → 线程）。右图的环是 T1 → R1 → T2 → R2 → T1，但 R1 还有一个实例在 T3 手里，T3 会放手</figcaption>
+</figure>
+<p>判断规则：</p>
+<ul>
+  <li>图里<b>没有环</b>：一定没有死锁。</li>
+  <li>有环，且环上每类资源都只有 1 个实例：一定死锁。</li>
+  <li>有环，但资源有多个实例：可能死锁，也可能不。要用<b>化简</b>来判断：找一个请求都能被满足的线程（例如右图的 T3），假设它跑完、放回所有资源，擦掉它的边；再找下一个……能把所有边都擦掉，就没有死锁；擦到某一步再也找不到，剩下的线程就是死锁的。右图依次擦掉 T3、T1、T2，所以不死锁。</li>
+</ul>
+
+<h2 id="handling">10. 对付死锁的四种办法</h2>
+<table>
+  <tr><th>办法</th><th>什么时候动手</th><th>怎么做</th></tr>
+  <tr><td><b>预防</b></td><td>写程序 / 设计系统时</td><td>让四个必要条件中的某一条<b>永远不成立</b>（见下）</td></tr>
+  <tr><td><b>避免</b></td><td>每次分配资源前</td><td>先算一算：这次分了以后，系统还安不安全？不安全就先不给。代表是<b>银行家算法</b>（第 11 节）</td></tr>
+  <tr><td><b>检测与解除</b></td><td>死锁发生之后</td><td>平时随便分配；定期用资源分配图化简等办法检测，发现死锁就解除：撤销（杀掉）其中一个或几个线程、或者抢占它们的资源、或者把它们回滚到之前的某个状态</td></tr>
+  <tr><td><b>忽略</b></td><td>不管</td><td>认为死锁极少发生，出了事重启。Windows、Linux 对普通程序的锁就是这样（叫「鸵鸟策略」）</td></tr>
+</table>
+<p>预防具体破坏哪一条：</p>
+<ul>
+  <li><b>破坏互斥</b>：通常做不到，锁的意义就是互斥。</li>
+  <li><b>破坏占有并等待</b>：一次性申请全部资源，拿不全就一个也不拿。缺点是资源被长时间闲占，利用率低。</li>
+  <li><b>破坏不可抢占</b>：申请新资源失败时，把手里已有的全部放掉，以后重新申请。实现复杂，已做的工作可能白费。</li>
+  <li><b>破坏循环等待</b>：给所有资源编号，规定只能<b>按编号从小到大</b>申请（叫<b>有序资源分配法</b>）。网店里只要规定「所有线程都先拿库存锁、再拿订单锁」，T2 就会先在库存锁上排队，手里什么也没有，圈就成不了。这是实际编程最常用的办法。</li>
+</ul>
+<p>死锁<b>预防</b>和死锁<b>避免</b>的区别常考：预防是事先立规矩，四个条件之一根本不可能出现；避免不限制申请方式，四个条件都可能出现，只是每次分配前算一下，绕开会走向死锁的那条路。</p>
+
+<h2 id="bankers-algorithm">11. 安全状态与银行家算法</h2>
+<p>网店后台每晚跑 5 个任务 P0～P4（导出报表、同步物流、清理缓存……），它们要用三类资源：</p>
+<table>
+  <tr><th>资源类</th><th>是什么</th><th>系统总量</th></tr>
+  <tr><td>A</td><td>数据库连接</td><td>10</td></tr>
+  <tr><td>B</td><td>工作线程</td><td>5</td></tr>
+  <tr><td>C</td><td>缓存槽</td><td>7</td></tr>
+</table>
+<p>每个任务启动时声明「我最多会同时要多少」，之后边跑边一点点申请。银行家算法用四张表（每行一个任务，每列一类资源，写成向量 (A, B, C)）：</p>
+<div class="term"><b>Max</b>：任务声明的最大需求。<b>Allocation</b>：此刻已经分给它的。<b>Need</b>：它还可能再要的，<b>Need = Max − Allocation</b>。<b>Available</b>：系统里还没分出去的，= 总量 − 所有 Allocation 之和。</div>
+<p>两个向量比大小，规定为<b>每一个分量都满足</b>才算：(1,2,2) ≤ (3,3,2) 成立；(7,4,3) ≤ (3,3,2) 不成立，因为 7 &gt; 3。</p>
+<table>
+  <tr><th>任务</th><th>Allocation</th><th>Max</th><th>Need = Max − Allocation</th></tr>
+  <tr><td>P0</td><td>(0,1,0)</td><td>(7,5,3)</td><td>(7,4,3)</td></tr>
+  <tr><td>P1</td><td>(2,0,0)</td><td>(3,2,2)</td><td>(1,2,2)</td></tr>
+  <tr><td>P2</td><td>(3,0,2)</td><td>(9,0,2)</td><td>(6,0,0)</td></tr>
+  <tr><td>P3</td><td>(2,1,1)</td><td>(2,2,2)</td><td>(0,1,1)</td></tr>
+  <tr><td>P4</td><td>(0,0,2)</td><td>(4,3,3)</td><td>(4,3,1)</td></tr>
+  <tr><th>合计</th><td>(7,2,5)</td><td></td><td></td></tr>
+</table>
+<p>Available = (10,5,7) − (7,2,5) = <b>(3,3,2)</b>。</p>
+
+<h3 id="safe-state">安全状态</h3>
+<div class="term"><b>安全序列</b>：把所有任务排成一个顺序 &lt;Pa, Pb, …&gt;，使得按这个顺序，每个任务的 Need 都能用「当时空闲的资源 + 排在它前面的任务跑完后放回的资源」满足。<b>安全状态</b>：至少存在一个安全序列的状态。否则叫<b>不安全状态</b>。</div>
+<p>直观地说：安全状态就是「哪怕每个任务都把 Need 要满，系统也有办法排个先后，让大家全部跑完」。任务拿够 Max 后一定会在有限时间内跑完并<b>放回全部 Allocation</b>，这是银行家算法的前提。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 190" width="640" role="img" aria-label="安全状态、不安全状态、死锁的包含关系">
+  <rect x="20" y="20" width="600" height="150" rx="8" class="plain"/>
+  <text x="34" y="42" class="small">所有可能的状态</text>
+  <rect x="40" y="54" width="250" height="100" rx="8" class="ok"/>
+  <text x="165" y="100" text-anchor="middle" class="title">安全状态</text>
+  <text x="165" y="124" text-anchor="middle" class="small">一定不会死锁</text>
+  <rect x="310" y="54" width="290" height="100" rx="8" class="hot"/>
+  <text x="380" y="80" text-anchor="middle" class="title">不安全状态</text>
+  <text x="380" y="104" text-anchor="middle" class="small">可能死锁，</text>
+  <text x="380" y="122" text-anchor="middle" class="small">也可能侥幸不死</text>
+  <ellipse cx="520" cy="104" rx="66" ry="34" class="bad"/>
+  <text x="520" y="109" text-anchor="middle" class="title">死锁</text>
+</svg>
+<figcaption>死锁 ⊂ 不安全状态。不安全不等于已经死锁（任务可能不会真把 Need 要满），但银行家算法不冒这个险：只让系统停留在绿色区域里</figcaption>
+</figure>
+
+<h3 id="safety-algorithm">安全性检查：怎么找安全序列</h3>
+<p>设一个向量 <b>Work</b> 表示「此刻手头可用的资源」，初值 = Available，再给每个任务一个「已完成」标记，初值都是「否」。然后反复做：</p>
+<ol>
+  <li><b>从 P0 开始往后扫</b>，找<b>第一个</b>未完成、且 Need ≤ Work 的任务；</li>
+  <li>找到了：假设它拿到资源跑完，放回 Allocation：<b>Work = Work + Allocation</b>，标为已完成，写进序列，回到第 1 步（又从 P0 扫起）；</li>
+  <li>扫完一遍都找不到：停。如果全部任务都已完成，状态安全；否则不安全。</li>
+</ol>
+<p>注意第 2 步加的是 <b>Allocation</b>，不是 Need：任务跑完放回的是它全部持有的东西（Allocation + 刚借给它的 Need），而借给它的 Need 本来就是从 Work 里出的，一出一进抵消，净增的就是 Allocation。</p>
+<p>按这个规则，在本例上逐轮推一遍：</p>
+<table>
+  <tr><th>轮</th><th>Work</th><th>从 P0 起扫描</th><th>选中</th><th>Work + Allocation</th></tr>
+  <tr><td>1</td><td>(3,3,2)</td><td>P0 (7,4,3)：A 7 &gt; 3 ✗；P1 (1,2,2) ≤ (3,3,2) ✓</td><td>P1</td><td>(3,3,2) + (2,0,0) = (5,3,2)</td></tr>
+  <tr><td>2</td><td>(5,3,2)</td><td>P0 ✗（7 &gt; 5）；P1 已完成；P2 (6,0,0)：6 &gt; 5 ✗；P3 (0,1,1) ✓</td><td>P3</td><td>(5,3,2) + (2,1,1) = (7,4,3)</td></tr>
+  <tr><td>3</td><td>(7,4,3)</td><td>P0 (7,4,3) ≤ (7,4,3) ✓（相等也算）</td><td>P0</td><td>(7,4,3) + (0,1,0) = (7,5,3)</td></tr>
+  <tr><td>4</td><td>(7,5,3)</td><td>P0、P1 已完成；P2 (6,0,0) ✓</td><td>P2</td><td>(7,5,3) + (3,0,2) = (10,5,5)</td></tr>
+  <tr><td>5</td><td>(10,5,5)</td><td>只剩 P4 (4,3,1) ✓</td><td>P4</td><td>(10,5,5) + (0,0,2) = (10,5,7)</td></tr>
+</table>
+<p>全部完成，安全序列是 <b>&lt;P1, P3, P0, P2, P4&gt;</b>。最后的 Work 等于总量 (10,5,7)，正好可以用来检查有没有算错。</p>
+<p>安全序列<b>不唯一</b>，换一种扫描规则就会得出别的序列。例如「找到一个后从它的下一个接着扫」会得到 &lt;P1, P3, P4, P0, P2&gt;，教材上还常见 &lt;P1, P3, P4, P2, P0&gt;，它们都对。做选择题时，把选项里的序列逐个按上表的方法验证即可；本页和下面的动画统一用「每轮从 P0 开始，选第一个满足的」。</p>
+
+<h3 id="request-algorithm">资源请求：给不给</h3>
+<p>某个任务 Pi 发来请求向量 Request，系统按四步处理：</p>
+<ol>
+  <li><b>Request ≤ Need[i]</b>？不满足，说明它要的超过了自己声明的最大值，<b>出错</b>，拒绝。</li>
+  <li><b>Request ≤ Available</b>？不满足，说明现在空闲的资源不够，Pi <b>等待</b>。</li>
+  <li><b>试分配</b>：Available −= Request，Allocation[i] += Request，Need[i] −= Request。</li>
+  <li>对试分配后的状态做<b>安全性检查</b>。安全：<b>批准</b>，试分配正式生效。不安全：<b>拒绝</b>，把第 3 步的修改全部撤回，Pi 等待。</li>
+</ol>
+<p>用三个请求各走一遍：</p>
+<p><b>① P1 请求 (1,0,2)</b>（从初始状态出发）。(1,0,2) ≤ Need[1] = (1,2,2) ✓；(1,0,2) ≤ Available = (3,3,2) ✓。试分配：Available = (2,3,0)，Allocation[1] = (3,0,2)，Need[1] = (0,2,0)。安全性检查：第 1 轮 Work = (2,3,0)，P0 ✗，P1 (0,2,0) ✓，Work = (2,3,0) + (3,0,2) = (5,3,2)，此后和上表第 2～5 轮完全一样。得到安全序列 &lt;P1, P3, P0, P2, P4&gt;，<b>批准</b>。</p>
+<p>下面两个请求都发生在<b>P1 的请求已经批准之后</b>，此时 Available = (2,3,0)。</p>
+<p><b>② P4 请求 (3,3,0)</b>。(3,3,0) ≤ Need[4] = (4,3,1) ✓；(3,3,0) ≤ Available = (2,3,0)？A 类 3 &gt; 2 ✗。资源不够，<b>P4 等待</b>，连试分配都走不到。</p>
+<p><b>③ P0 请求 (0,2,0)</b>。(0,2,0) ≤ Need[0] = (7,4,3) ✓；(0,2,0) ≤ (2,3,0) ✓。试分配：Available = (2,1,0)，Need[0] = (7,2,3)。安全性检查，Work = (2,1,0)：</p>
+<ul>
+  <li>P0 Need (7,2,3)：A 7 &gt; 2 ✗</li>
+  <li>P1 Need (0,2,0)：B 2 &gt; 1 ✗</li>
+  <li>P2 Need (6,0,0)：A 6 &gt; 2 ✗</li>
+  <li>P3 Need (0,1,1)：C 1 &gt; 0 ✗</li>
+  <li>P4 Need (4,3,1)：A 4 &gt; 2 ✗</li>
+</ul>
+<p>第一轮就一个也找不到，状态不安全，<b>拒绝</b>，撤回试分配，P0 等待。这里资源明明「够分」，却不能分：分了以后，B 类只剩 1 个、C 类一个不剩，没有任何任务能保证跑完。这正是「避免」和「检测」的不同：银行家算法在可能出事<b>之前</b>就拒绝了。</p>
+<p>银行家算法的缺点也常考：要事先知道每个任务的最大需求，任务数和资源数要固定，每次分配都要做一遍 O(m·n²) 的检查（m 类资源、n 个任务），所以实际系统很少用，主要出现在考题里。</p>
+
+<h2 id="min-resources">12. 至少要几个资源才不会死锁</h2>
+<p>高频计算题：<b>n 个进程，每个最多需要 k 个同类资源，系统至少要有多少个资源，才保证不会死锁？</b></p>
+<p>用网店的例子推：3 个导出任务（n = 3），每个最多同时需要 4 个数据库连接（k = 4）。</p>
+<ol>
+  <li>先找<b>最坏情况</b>：资源被分得最「平均」、每个任务都差一个。每个任务拿 k − 1 = 3 个，3 个任务共占 n(k − 1) = 9 个。</li>
+  <li>如果总共只有 9 个，此时一个空闲的都没有，每个任务都在等第 4 个：死锁。所以 9 个不够。</li>
+  <li>如果有 10 个，最坏情况下还剩 1 个空闲。不管给了谁，那个任务都凑齐了 4 个，能跑完，放回 4 个；剩下的任务接着就能凑齐。所以 10 个够了。</li>
+  <li>再看「不是最坏」的分法：如果有任务拿得多于 3 个，它已经凑齐、能跑完；拿得少于 3 个，空闲的就更多。都不会比最坏情况更糟。</li>
+</ol>
+<figure class="fig">
+<svg viewBox="0 0 640 200" width="640" role="img" aria-label="3 个任务各需 4 个连接：9 个时各拿 3 个死锁，10 个时多出的一个让一个任务跑完">
+  <text x="160" y="22" text-anchor="middle" class="title">9 个连接：死锁</text>
+  <text x="480" y="22" text-anchor="middle" class="title">10 个连接：不会死锁</text>
+  <line x1="320" y1="10" x2="320" y2="190" class="dash"/>
+  <g>
+    <text x="20" y="58">任务 1</text><rect x="80" y="42" width="40" height="24" class="obj"/><rect x="124" y="42" width="40" height="24" class="obj"/><rect x="168" y="42" width="40" height="24" class="obj"/><rect x="212" y="42" width="40" height="24" class="bad"/><text x="232" y="59" text-anchor="middle" class="small">缺</text>
+    <text x="20" y="98">任务 2</text><rect x="80" y="82" width="40" height="24" class="obj"/><rect x="124" y="82" width="40" height="24" class="obj"/><rect x="168" y="82" width="40" height="24" class="obj"/><rect x="212" y="82" width="40" height="24" class="bad"/><text x="232" y="99" text-anchor="middle" class="small">缺</text>
+    <text x="20" y="138">任务 3</text><rect x="80" y="122" width="40" height="24" class="obj"/><rect x="124" y="122" width="40" height="24" class="obj"/><rect x="168" y="122" width="40" height="24" class="obj"/><rect x="212" y="122" width="40" height="24" class="bad"/><text x="232" y="139" text-anchor="middle" class="small">缺</text>
+    <text x="160" y="178" text-anchor="middle" class="small">3 × 3 = 9 个全分完，人人等第 4 个</text>
+  </g>
+  <g>
+    <text x="340" y="58">任务 1</text><rect x="400" y="42" width="40" height="24" class="obj"/><rect x="444" y="42" width="40" height="24" class="obj"/><rect x="488" y="42" width="40" height="24" class="obj"/><rect x="532" y="42" width="40" height="24" class="ok"/><text x="552" y="59" text-anchor="middle" class="small">第 10</text>
+    <text x="340" y="98">任务 2</text><rect x="400" y="82" width="40" height="24" class="obj"/><rect x="444" y="82" width="40" height="24" class="obj"/><rect x="488" y="82" width="40" height="24" class="obj"/>
+    <text x="340" y="138">任务 3</text><rect x="400" y="122" width="40" height="24" class="obj"/><rect x="444" y="122" width="40" height="24" class="obj"/><rect x="488" y="122" width="40" height="24" class="obj"/>
+    <text x="480" y="178" text-anchor="middle" class="small">任务 1 凑齐 4 个，跑完放回 4 个，其余跟上</text>
+  </g>
+</svg>
+<figcaption>每个小格是一个数据库连接。最坏情况是「人人差一个」，再多 1 个就能打破僵局</figcaption>
+</figure>
+<p>所以答案是 <b>n(k − 1) + 1</b>。本例 3 × (4 − 1) + 1 = <b>10</b>。</p>
+<p>题目也会反着问，都从「n(k − 1) + 1 ≤ 资源总数 m」这个不等式解：</p>
+<ul>
+  <li>m = 8 个资源，每个进程最多要 3 个，最多允许几个进程？n × 2 + 1 ≤ 8，n ≤ 3.5，所以最多 <b>3</b> 个。验算：3 个进程最坏占 6 个，还剩 2 个，不会死锁；4 个进程最坏占 8 个，一个不剩，会死锁。</li>
+  <li>m = 4 个资源，3 个进程，每个进程最多能要几个？3(k − 1) + 1 ≤ 4，k ≤ 2，所以最多 <b>2</b> 个。</li>
+</ul>
+
+<h2 id="demo">13. 动手玩：银行家算法</h2>
+<p>先点 <b>安全性检查</b>，看算法怎样一轮轮从 P0 扫起、挑出任务、回收资源，对照上面那张表。再依次点三个请求按钮：<b>P1 请求</b>从初始状态出发；<b>P4 请求</b>和 <b>P0 请求</b>都是在 P1 已获批的状态上提出的，和第 11 节讲的一样。表里橙色是本步正在检查的任务，绿色是已经完成的任务。</p>
+<div class="demo" id="banker"></div>
+
+<h2 id="exam">题单怎么考</h2>
+<p>牛客「操作系统专项」里和本课有关的题，基本就是下面这几类。做题卡住时，回到右边那一节：</p>
+<table class="qmap">
+  <tr><th>题型</th><th>怎么想</th><th>回看</th></tr>
+  <tr><td>两个线程各做一次 x++，结果可能是多少</td><td>把 x++ 拆成读、改、写三步，列出交错</td><td><a href="#race-condition">1</a>、<a href="#mutex">动画</a></td></tr>
+  <tr><td>临界区、临界资源的概念，同步机制四准则</td><td>临界区是代码；空闲让进、忙则等待、有限等待、让权等待</td><td><a href="#critical-section">2</a></td></tr>
+  <tr><td>信号量当前值是多少 / 有几个在等 / 取值范围</td><td>S &lt; 0 时 |S| = 等待数；范围 m − n ～ m</td><td><a href="#semaphore">4</a></td></tr>
+  <tr><td>信号量初值该设多少</td><td>互斥 1、n 个资源 n、同步 0</td><td><a href="#semaphore">4</a></td></tr>
+  <tr><td>生产者-消费者代码填空、哪种顺序会死锁</td><td>先 P 资源信号量，再 P(mutex)；V 的顺序无所谓</td><td><a href="#producer-consumer">5</a></td></tr>
+  <tr><td>哲学家就餐怎么避免死锁</td><td>限 4 人、奇偶反着拿、两根一起拿</td><td><a href="#philosophers">6</a></td></tr>
+  <tr><td>死锁的四个必要条件、某方法破坏了哪一条</td><td>一次性申请 → 占有并等待；有序分配 → 循环等待</td><td><a href="#conditions">8</a>、<a href="#handling">10</a></td></tr>
+  <tr><td>给资源分配图，判断是否死锁</td><td>无环不死锁；单实例有环必死锁；多实例要化简</td><td><a href="#rag">9</a></td></tr>
+  <tr><td>预防、避免、检测的区别，银行家算法属于哪种</td><td>银行家算法是<b>避免</b></td><td><a href="#handling">10</a></td></tr>
+  <tr><td>给 Max、Allocation、Available，求 Need、判断安全、找安全序列</td><td>Need = Max − Allocation；Work 逐个加 Allocation</td><td><a href="#safety-algorithm">11</a>、<a href="#demo">动画</a></td></tr>
+  <tr><td>某进程提出请求，能否批准</td><td>≤ Need、≤ Available、试分配、安全性检查</td><td><a href="#request-algorithm">11</a>、<a href="#demo">动画</a></td></tr>
+  <tr><td>n 个进程各需 k 个资源，至少几个不死锁（或反着问）</td><td>n(k − 1) + 1</td><td><a href="#min-resources">12</a></td></tr>
+</table>
+
+<h2 id="self-test">自测</h2>
+<details><summary>1. 全局变量 x 初值 0，两个线程各执行一次 <code>x = x + 1</code>，不加锁。结束后 x 可能是多少？</summary>
+可能是 1 或 2。每个线程分读、加、写三步。如果一个做完三步另一个才开始，结果是 2；如果两个都先读到 0、各自算出 1 再写回，后写的覆盖先写的，结果是 1。不可能是 0（至少有一次写回了 1），也不会大于 2。</details>
+<details><summary>2. 4 个进程共享 2 台打印机，用信号量 S 管理。S 的初值和取值范围是多少？S = −1 表示什么？</summary>
+初值 2（资源计数）。没人用时最大是 2；4 个进程全做了 P 时最小是 2 − 4 = −2，所以范围是 −2 ～ 2。S = −1：2 台打印机都被占了，还有 1 个进程在等待队列里。</details>
+<details><summary>3. 生产者-消费者问题中，把下面哪一处交换后可能导致死锁？A. 生产者的 P(empty) 和 P(mutex)　B. 生产者的 V(mutex) 和 V(full)　C. 消费者的 V(mutex) 和 V(empty)</summary>
+A。交换后生产者先占住 mutex，缓冲区满时再在 P(empty) 上阻塞；消费者要先拿 mutex 才能取订单、做 V(empty)，于是两边互相等。B、C 交换的都是 V，V 不会阻塞，最多让对方晚一点被唤醒。</details>
+<details><summary>4. 系统有 4 个进程，每个最多需要 3 台同类设备。至少要配几台设备才保证不会死锁？</summary>
+4 × (3 − 1) + 1 = 9。最坏情况每个进程各拿 2 台，占掉 8 台、都在等第 3 台；第 9 台给谁，谁就能跑完并放回 3 台。</details>
+<details><summary>5. 系统有 6 台同类设备，每个进程最多需要 2 台。最多允许几个进程并发，保证不会死锁？</summary>
+n × (2 − 1) + 1 ≤ 6，n ≤ 5，最多 5 个。验算：5 个进程各拿 1 台，还剩 1 台，给谁谁就能跑完；6 个进程各拿 1 台就一台不剩，死锁。</details>
+<details><summary>6. 「规定所有线程必须按资源编号从小到大申请资源」破坏的是死锁的哪个必要条件？「一次性申请全部资源」呢？</summary>
+前者破坏<b>循环等待</b>：大家都按同一个顺序拿，等待关系只会从小号指向大号，不可能绕回来成圈。后者破坏<b>占有并等待</b>：拿不全就一个都不拿，不会出现手里拿着又去等的情况。</details>
+<details><summary>7. 用本课的银行家数据（初始状态，Available = (3,3,2)），如果 P4 一上来就请求 (3,3,0)，能批准吗？</summary>
+不能。(3,3,0) ≤ Need[4] = (4,3,1) ✓，(3,3,0) ≤ Available ✓，可以试分配：Available 变成 (0,0,2)，Need[4] 变成 (1,0,1)。安全性检查，Work = (0,0,2)：P0 (7,4,3)、P1 (1,2,2)、P2 (6,0,0) 的 A 类都大于 0；P3 (0,1,1) 的 B 类 1 &gt; 0；P4 (1,0,1) 的 A 类 1 &gt; 0。一个也找不到，不安全，拒绝。</details>
+<details><summary>8. 判断：「系统处于不安全状态就一定会发生死锁」「资源分配图里有环就一定死锁」。</summary>
+都错。不安全状态只是「没法保证」，任务不一定真把 Need 要满，可能侥幸不死锁；但死锁状态一定是不安全的。资源分配图有环时，只有环上每类资源都是单实例才一定死锁，多实例时要化简才能判断（见第 9 节右图）。</details>
+
+<div class="nav"><a href="02-virtual-memory.html">← 上一课：内存管理与虚拟内存</a><a href="04-network-layers.html">下一课：网络分层与 IP →</a></div>
+<script src="../anim.js"></script>
+<script src="js/03-deadlock.js"></script>
+</body>
+</html>

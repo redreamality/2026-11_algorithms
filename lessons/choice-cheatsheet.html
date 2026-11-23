@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>附录 · 选择题速查</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stack-col { display: flex; flex-direction: column-reverse; gap: 4px; min-height: 40px; min-width: 60px;
+    border: 2px solid #555; border-top: none; padding: 4px; align-items: center; }
+  .pop-board { display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap; margin: 8px 0; }
+  .pop-board .part { display: flex; flex-direction: column; gap: 4px; }
+  .box.done { background: #c8e6c9; border-color: #2e7d32; }
+  .box.blocked { background: #ffcdd2; border-color: #c62828; }
+  .verdict.ok { color: #2e7d32; font-weight: bold; }
+  .verdict.bad { color: #c62828; font-weight: bold; }
+  input[type=text] { width: 160px; }
+  .toc li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>附录 · 选择题速查</h1>
+<p class="one-line">笔试选择题里，有一批题要在纸上手算：出栈序列、还原二叉树、数叶子、背排序复杂度。这一页把每种题型的<b>手算步骤</b>写成几行，各配一道带答案的例题，并链接回讲原理的那一课。</p>
+<p>这页是附录，不是新课，按需要查。第一次看到某个结构时，先回对应的课读讲解。配套代码 <code>dsa/cheatsheet.py</code> 把几种手算写成了函数，可以用来核对答案（<code>uv run pytest tests/test_cheatsheet.py</code>）；真实代码里的样子见 <code>examples/cheatsheet_in_practice.py</code>。</p>
+<ol class="toc">
+  <li><a href="#stack">栈：出栈序列合不合法、一共几种</a></li>
+  <li><a href="#rebuild">二叉树：由两种遍历还原</a></li>
+  <li><a href="#tree-facts">二叉树性质：叶子数、完全二叉树、堆的下标</a></li>
+  <li><a href="#sorts">排序算法对照表</a></li>
+  <li><a href="#structures">常见结构的操作复杂度</a></li>
+  <li><a href="#graphs">图：边数、存储空间、遍历复杂度</a></li>
+</ol>
+
+<h2 id="stack">1. 栈：出栈序列（第 3 课）</h2>
+<p>回顾：<a href="03-stack-queue.html">第 3 课</a>的栈是后进先出。题目的设定是：元素按固定顺序（例如 1, 2, 3, …, n）<b>依次进栈</b>，进栈过程中<b>随时可以出栈</b>。出栈的先后顺序叫<b>出栈序列</b>。</p>
+
+<h3>判断一个出栈序列合不合法：模拟栈</h3>
+<ol>
+  <li>拿一个空栈。从左到右看出栈序列里的每个数 x。</li>
+  <li>栈顶不是 x，就按顺序继续进栈，直到栈顶是 x，或者已经没有可进栈的数。</li>
+  <li>栈顶是 x 就弹出，看下一个数；所有数都进栈了、栈顶还不是 x，说明 x 被压在下面出不来，<b>不合法</b>。</li>
+</ol>
+<p><b>速判规则。</b>进栈顺序里有三个数 a &lt; b &lt; c（按进栈先后），出栈序列里如果出现“c 在最前，然后 a，然后 b”（中间可以夹别的数），就不合法。原因：c 出栈时，a 和 b 都还在栈里，b 压在 a 上面，b 必须先于 a 出来。记成“<b>大、小、中</b>不行”。</p>
+<details><summary>例题：a, b, c, d, e 依次进栈，下列哪个<b>不可能</b>是出栈序列？ A. d c e b a　B. d e c a b　C. a b c d e　D. e d c b a</summary>
+选 B。模拟 B：进 a b c d，弹 d；进 e，弹 e；弹 c；这时栈里从底到顶是 a、b，要弹 a，可栈顶是 b，不合法。也可以用速判规则：c、a、b 正好是“大、小、中”。A 是进 a b c d → 弹 d c → 进 e 弹 e → 弹 b a，合法；C 进一个弹一个；D 全进再全弹。</details>
+
+<h3>n 个元素一共有几种出栈序列：卡特兰数</h3>
+<p>答案是第 n 个<b>卡特兰数</b>（Catalan number）：</p>
+<pre>C(n) = (2n)! / ((n + 1)! × n!)  =  组合数 C(2n, n) ÷ (n + 1)</pre>
+<p>前几项：n = 1, 2, 3, 4, 5 时是 1, 2, 5, 14, 42。n = 3 时，1 2 3 进栈能得到 123、132、213、231、321 五种，唯一不行的 312 正是“大、小、中”。同一个数还回答另外两类选择题：n 个节点能组成几种<b>不同形状的二叉树</b>、n 对括号有几种<b>合法的括号序列</b>，答案都是 C(n)。</p>
+<details><summary>例题：1, 2, 3, 4 依次进栈，可能的出栈序列有几种？</summary>
+C(4) = C(8, 4) ÷ 5 = 70 ÷ 5 = 14 种。</details>
+
+<h3>动手玩：出栈序列判定器</h3>
+<p>输入一个 1～n 的排列（用空格隔开，n 不超过 9），1, 2, …, n 依次进栈，看模拟栈一步步走。最右一栏是已经弹出的数。</p>
+<div class="demo" id="pop-check"></div>
+
+<h2 id="rebuild">2. 二叉树：由两种遍历还原（第 10 课）</h2>
+<p>回顾<a href="10-binary-tree.html">第 10 课</a>：前、中、后说的是根排第几，左永远在右前面。前序 = 根左右，中序 = 左根右，后序 = 左右根。下面一直用第 10 课那棵树：</p>
+<div class="row" style="justify-content:center;max-width:300px"><span class="box">1</span></div>
+<div class="row" style="justify-content:center;gap:90px;max-width:300px"><span class="box">2</span><span class="box">3</span></div>
+<div class="row" style="justify-content:center;gap:22px;max-width:300px"><span class="box">4</span><span class="box">5</span><span class="box empty">·</span><span class="box">6</span></div>
+<p>前序 1 2 4 5 3 6，中序 4 2 5 1 3 6，后序 4 5 2 6 3 1。</p>
+
+<h3>前序 + 中序 → 树 → 后序</h3>
+<ol>
+  <li><b>前序的第一个是根。</b>前序 <code>1 2 4 5 3 6</code>，根是 1。</li>
+  <li><b>在中序里找到根，左边是左子树，右边是右子树。</b>中序 <code>4 2 5 | 1 | 3 6</code>：左子树 {4, 2, 5}，右子树 {3, 6}。</li>
+  <li><b>按个数切前序。</b>左子树 3 个节点，所以前序里根后面的 3 个 <code>2 4 5</code> 是左子树的前序，剩下的 <code>3 6</code> 是右子树的前序。</li>
+  <li><b>对两边重复。</b>左边：前序 <code>2 4 5</code>、中序 <code>4 2 5</code>，根 2，左 4、右 5。右边：前序 <code>3 6</code>、中序 <code>3 6</code>，根 3，中序里 3 左边没有东西，所以 6 是 3 的<b>右</b>孩子。</li>
+  <li>画出树后按“左右根”写后序：<code>4 5 2 6 3 1</code>。</li>
+</ol>
+<p><b>后序 + 中序</b>完全对称：后序的<b>最后一个</b>是根，其余步骤一样。</p>
+<details><summary>例题：前序 A B D E C F，中序 D B E A C F，求后序。</summary>
+根 A；中序切成 D B E | A | C F。左边前序 B D E、中序 D B E：根 B，左 D 右 E。右边前序 C F、中序 C F：根 C，F 是右孩子。后序：D E B F C A。</details>
+<details><summary>例题：后序 4 5 2 6 3 1，中序 4 2 5 1 3 6，求前序。</summary>
+后序最后一个 1 是根；中序切成 4 2 5 | 1 | 3 6；后序前 3 个 <code>4 5 2</code> 是左子树，<code>6 3</code> 是右子树。左边根 2（后序最后），右边根 3，6 在中序里排在 3 右边，是右孩子。前序：1 2 4 5 3 6。</details>
+
+<h3>为什么前序 + 后序不能唯一确定</h3>
+<p>中序的作用是<b>分开左右</b>：根左边的是左子树，右边的是右子树。前序和后序都只告诉你“谁是根”，不告诉你剩下的哪些在左、哪些在右。最小的反例：</p>
+<div class="row">
+  <span class="label">树甲：1 只有左孩子 2</span><span class="box">1</span><span>↙</span><span class="box">2</span>
+  <span class="label">　树乙：1 只有右孩子 2</span><span class="box">1</span><span>↘</span><span class="box">2</span>
+</div>
+<p>两棵树的前序都是 1 2，后序都是 2 1，可它们不是同一棵树（中序分别是 2 1 和 1 2）。只要有节点只有一个孩子，就分不清它在左还是在右。反过来，如果每个节点要么没有孩子、要么有两个孩子，前序 + 后序就够了。</p>
+<p>速记：<b>能唯一确定的组合里一定有中序</b>（前+中、后+中、层序+中）。</p>
+
+<h2 id="tree-facts">3. 二叉树性质（第 10、12 课）</h2>
+<p>先定义两个词。节点的<b>度</b>：它有几个孩子，二叉树里只能是 0、1、2。记 n<sub>0</sub>、n<sub>1</sub>、n<sub>2</sub> 分别是度为 0（叶子）、1、2 的节点个数，n 是节点总数。<b>层数</b>：根在第 1 层，往下每层加 1；树的<b>深度</b>（也叫高度）就是层数的最大值（有的教材从 0 开始数，做题前看清题目的约定）。</p>
+
+<h3>n<sub>0</sub> = n<sub>2</sub> + 1</h3>
+<p>任何二叉树，叶子数都比度为 2 的节点数多 1。推导用“数两遍边”：</p>
+<ul>
+  <li>从下往上数：除了根，每个节点有一条连向父亲的边，共 n − 1 条。</li>
+  <li>从上往下数：每个节点往下连出的边数就是它的度，共 n<sub>1</sub> + 2n<sub>2</sub> 条。</li>
+  <li>两边相等：n<sub>0</sub> + n<sub>1</sub> + n<sub>2</sub> − 1 = n<sub>1</sub> + 2n<sub>2</sub>，化简得 n<sub>0</sub> = n<sub>2</sub> + 1。</li>
+</ul>
+<p>第 10 课那棵树：叶子 4、5、6 共 3 个，度为 2 的 1、2 共 2 个，3 = 2 + 1。</p>
+<details><summary>例题：一棵二叉树有 15 个度为 2 的节点、10 个度为 1 的节点，叶子有几个？总共几个节点？</summary>
+叶子 n<sub>0</sub> = 15 + 1 = 16；总数 16 + 10 + 15 = 41。</details>
+
+<h3>满二叉树和完全二叉树</h3>
+<p><b>满二叉树</b>：每一层都排满。第 i 层有 2<sup>i−1</sup> 个节点，k 层一共 2<sup>k</sup> − 1 个。<b>完全二叉树</b>（<a href="12-heap.html">第 12 课</a>的堆就是）：除了最后一层都排满，最后一层从左往右连续排，中间不空。n 个节点的完全二叉树：</p>
+<table>
+  <tr><th>问什么</th><th>公式</th><th>n = 6</th></tr>
+  <tr><td>层数（深度）</td><td>⌊log<sub>2</sub> n⌋ + 1</td><td>3</td></tr>
+  <tr><td>叶子数 n<sub>0</sub></td><td>⌈n / 2⌉</td><td>3</td></tr>
+  <tr><td>度为 1 的节点 n<sub>1</sub></td><td>n 是偶数时 1 个，奇数时 0 个</td><td>1</td></tr>
+  <tr><td>度为 2 的节点 n<sub>2</sub></td><td>n<sub>0</sub> − 1</td><td>2</td></tr>
+</table>
+<p>⌊ ⌋ 是向下取整，⌈ ⌉ 是向上取整。层数公式的来历：前 k 层最多 2<sup>k</sup> − 1 个节点，所以 n 个节点要满足 2<sup>k−1</sup> ≤ n &lt; 2<sup>k</sup>。</p>
+<details><summary>例题：一棵完全二叉树有 1000 个节点，几层？几个叶子？度为 1 和度为 2 的各几个？</summary>
+2<sup>9</sup> = 512 ≤ 1000 &lt; 1024 = 2<sup>10</sup>，所以 10 层。叶子 ⌈1000 / 2⌉ = 500。1000 是偶数，n<sub>1</sub> = 1。n<sub>2</sub> = 500 − 1 = 499。核对：500 + 1 + 499 = 1000。</details>
+<details><summary>例题：一棵完全二叉树的第 6 层有 8 个叶子，这棵树最多有几个节点？</summary>
+要最多，就让第 6 层排满（2<sup>5</sup> = 32 个），其中 8 个是叶子，另外 24 个都有两个孩子，第 7 层有 48 个。前 6 层 2<sup>6</sup> − 1 = 63 个，加 48，最多 111 个。（最少的情况是第 6 层就是最后一层、只有 8 个：31 + 8 = 39 个。）</details>
+
+<h3>堆（数组存完全二叉树）的下标关系</h3>
+<p>第 12 课用的是从 0 开始的下标；不少教材和考题从 1 开始，两套都要会：</p>
+<table>
+  <tr><th></th><th>下标从 0 开始（Python heapq）</th><th>下标从 1 开始（很多教材）</th></tr>
+  <tr><td>父亲</td><td>(i − 1) // 2</td><td>i // 2</td></tr>
+  <tr><td>左孩子</td><td>2i + 1</td><td>2i</td></tr>
+  <tr><td>右孩子</td><td>2i + 2</td><td>2i + 1</td></tr>
+  <tr><td>最后一个非叶子节点</td><td>n // 2 − 1</td><td>n // 2</td></tr>
+</table>
+<p>建堆（heapify）是 O(n)，不是 O(n log n)：大部分节点在底层，往下沉不了几步。插入、删堆顶 O(log n)。</p>
+<details><summary>例题：用数组存一棵 20 个节点的完全二叉树，下标从 1 开始。下标 9 的节点，父亲和孩子的下标是多少？它是叶子吗？</summary>
+父亲 9 // 2 = 4；左孩子 18，右孩子 19，都 ≤ 20，所以它有两个孩子，不是叶子。最后一个非叶子是 20 // 2 = 10，下标 11～20 都是叶子。</details>
+
+<h2 id="sorts">4. 排序算法对照表（第 7、8、9、12 课）</h2>
+<p>表里有四种排序课程里没讲，各用一句话定义：</p>
+<ul>
+  <li><b>冒泡排序</b>：从左往右比较相邻的两个数，前面的大就交换，一趟把最大的“冒”到末尾；重复 n − 1 趟。某一趟一次交换都没有，说明已经有序，可以提前停。</li>
+  <li><b>希尔排序</b>：先按一个较大的间隔（增量）把数组分成几组，组内做插入排序，再逐步缩小间隔，最后间隔为 1 时就是一次普通插入排序。前面几轮让数组“基本有序”，最后一轮就很快。</li>
+  <li><b>计数排序</b>：数值都是 0～k 的整数时，数一数每个值出现几次，再按值从小到大写回去。不比较大小。</li>
+  <li><b>基数排序</b>：按个位、十位、百位……一位一位排，每一位用稳定的计数排序。d 是位数，r 是每一位的取值个数（十进制是 10）。</li>
+</ul>
+<table>
+  <tr><th>排序</th><th>最好</th><th>平均</th><th>最坏</th><th>额外空间</th><th>稳定</th></tr>
+  <tr><td><a href="07-simple-sorts.html">插入</a></td><td>O(n)</td><td>O(n²)</td><td>O(n²)</td><td>O(1)</td><td>是</td></tr>
+  <tr><td><a href="07-simple-sorts.html">选择</a></td><td>O(n²)</td><td>O(n²)</td><td>O(n²)</td><td>O(1)</td><td><b>否</b></td></tr>
+  <tr><td>冒泡</td><td>O(n)</td><td>O(n²)</td><td>O(n²)</td><td>O(1)</td><td>是</td></tr>
+  <tr><td>希尔</td><td>看增量</td><td>约 O(n<sup>1.3</sup>)</td><td>O(n²)</td><td>O(1)</td><td><b>否</b></td></tr>
+  <tr><td><a href="08-merge-sort.html">归并</a></td><td>O(n log n)</td><td>O(n log n)</td><td>O(n log n)</td><td>O(n)</td><td>是</td></tr>
+  <tr><td><a href="09-quick-sort.html">快速</a></td><td>O(n log n)</td><td>O(n log n)</td><td>O(n²)</td><td>O(log n)（递归栈），最坏 O(n)</td><td><b>否</b></td></tr>
+  <tr><td><a href="12-heap.html">堆</a></td><td>O(n log n)</td><td>O(n log n)</td><td>O(n log n)</td><td>O(1)</td><td><b>否</b></td></tr>
+  <tr><td>计数</td><td>O(n + k)</td><td>O(n + k)</td><td>O(n + k)</td><td>O(n + k)</td><td>是</td></tr>
+  <tr><td>基数</td><td>O(d(n + r))</td><td>O(d(n + r))</td><td>O(d(n + r))</td><td>O(n + r)</td><td>是</td></tr>
+</table>
+<p>希尔排序的时间取决于增量序列怎么选，没有统一的结论，考题一般按“平均约 O(n<sup>1.3</sup>)、最坏 O(n²)”算。</p>
+<p><b>常考的几条结论：</b></p>
+<ul>
+  <li><b>不稳定的四个：快排、希尔、选择、堆</b>，口诀“<b>快些选堆</b>”。其余都稳定（稳定性的含义见<a href="07-simple-sorts.html">第 7 课</a>）。</li>
+  <li>额外空间不是 O(1) 的：归并 O(n)、快排 O(log n)、计数和基数要额外的数组。</li>
+  <li>初始数据<b>已经有序</b>时：插入和冒泡最快（O(n)）；快排如果总拿第一个数当基准，退化成 O(n²)。</li>
+  <li>比较次数和初始顺序<b>无关</b>的：选择排序（总是 n(n − 1)/2 次）。</li>
+  <li>每一趟结束都能把<b>一个元素放到最终位置</b>的：冒泡（最大的到末尾）、选择（最小的到开头）、堆（堆顶到末尾）、快排（基准到它的最终位置）。插入排序不行：前面排好的部分后来还会被插进别的数。</li>
+  <li>基于比较的排序，最坏情况下至少要 O(n log n) 次比较；计数、基数不比较，所以能更快，但要求数据是范围不大的整数（或能拆成位）。</li>
+</ul>
+<details><summary>例题：对已经从小到大排好的 n 个数排序，下列哪个最快？ A. 快速排序（取第一个数作基准）　B. 插入排序　C. 堆排序　D. 选择排序</summary>
+选 B，O(n)：每个数只和左边比一次就停。A 每次分区都切成 0 和 n − 1 两半，退化成 O(n²)；C 仍是 O(n log n)；D 不管什么输入都是 O(n²)。</details>
+<details><summary>例题：下列排序中，哪组全是稳定的？ A. 插入、冒泡、归并　B. 选择、插入、堆　C. 快速、归并、基数　D. 希尔、冒泡、计数</summary>
+选 A。B 里选择、堆不稳定；C 里快速不稳定；D 里希尔不稳定。</details>
+
+<h2 id="structures">5. 常见结构的操作复杂度</h2>
+<table>
+  <tr><th>结构</th><th>按位置访问</th><th>查找某个值</th><th>插入</th><th>删除</th></tr>
+  <tr><td><a href="01-dynamic-array.html">数组（动态数组）</a></td><td>O(1)</td><td>O(n)；有序时二分 O(log n)</td><td>末尾均摊 O(1)，中间 O(n)</td><td>末尾 O(1)，中间 O(n)</td></tr>
+  <tr><td><a href="02-linked-list.html">单链表</a></td><td>O(n)</td><td>O(n)</td><td>头部 O(1)；已知前一个节点后 O(1)</td><td>已知前一个节点后 O(1)</td></tr>
+  <tr><td><a href="04-hash-table.html">哈希表</a></td><td>—</td><td>平均 O(1)，最坏 O(n)</td><td>平均 O(1)</td><td>平均 O(1)</td></tr>
+  <tr><td><a href="11-bst.html">二叉搜索树</a></td><td>—</td><td>平均 O(log n)，最坏 O(n)</td><td>同左</td><td>同左</td></tr>
+  <tr><td><a href="24-balanced-tree.html">平衡树（AVL、红黑树）</a></td><td>—</td><td>O(log n)</td><td>O(log n)</td><td>O(log n)</td></tr>
+  <tr><td><a href="12-heap.html">二叉堆</a></td><td>看堆顶 O(1)</td><td>任意值 O(n)</td><td>O(log n)</td><td>删堆顶 O(log n)；建堆 O(n)</td></tr>
+</table>
+<ul>
+  <li>BST 的最坏 O(n)：按顺序插入 1, 2, 3, …，树退化成一条链。平衡树靠旋转把高度控制在 O(log n)。</li>
+  <li>哈希表的最坏 O(n)：所有键都落进同一个桶。</li>
+  <li>单链表“删除节点 p”：知道 p 的前一个节点才是 O(1)；只给 p 本身，要从头找前一个节点，O(n)。</li>
+  <li>中序遍历 BST 得到从小到大的序列，所以“BST 的中序是有序的”常被拿来出题。</li>
+</ul>
+<details><summary>例题：在一个有 n 个节点的单链表里，已知指针 p 指向某个节点，下列哪个操作是 O(1) 的？ A. 删除 p 的后一个节点　B. 删除 p 的前一个节点　C. 找到倒数第 k 个节点　D. 在表尾插入（没有尾指针）</summary>
+选 A：<code>p.next = p.next.next</code> 一步完成。B 要从头找到 p 前面的前面；C 要走到表尾附近；D 没有尾指针就得从头走到尾，都是 O(n)。</details>
+
+<h2 id="graphs">6. 图：边数、存储空间、遍历复杂度（第 13 课）</h2>
+<p>V 是顶点数，E 是边数（<a href="13-graph-traversal.html">第 13 课</a>）。顶点的<b>度</b>：无向图里，连着它的边数；有向图里分成<b>入度</b>（指向它的边数）和<b>出度</b>（从它出发的边数）。<b>完全图</b>：任意两个顶点之间都有边。<b>简单图</b>：没有自环（自己连自己）、没有重复边，下面都按简单图算。</p>
+<table>
+  <tr><th>问什么</th><th>无向图</th><th>有向图</th></tr>
+  <tr><td>最多几条边（完全图）</td><td>V(V − 1) / 2</td><td>V(V − 1)</td></tr>
+  <tr><td>所有度之和</td><td>2E（每条边被两头各数一次）</td><td>入度之和 = 出度之和 = E</td></tr>
+  <tr><td>连通至少要几条边</td><td>V − 1（就是一棵树）</td><td>强连通至少 V 条（连成一个环）</td></tr>
+  <tr><td>邻接矩阵空间</td><td>O(V²)，矩阵对称</td><td>O(V²)</td></tr>
+  <tr><td>邻接表空间</td><td>O(V + E)，表里共 2E 个邻居项</td><td>O(V + E)，表里共 E 个</td></tr>
+  <tr><td>BFS / DFS 时间</td><td colspan="2">邻接表 O(V + E)；邻接矩阵 O(V²)（每个点都要扫一整行找邻居）</td></tr>
+</table>
+<p>最短路、最小生成树这些算法的复杂度：Dijkstra O((V + E) log V)（<a href="16-dijkstra.html">第 16 课</a>）、Kruskal O(E log E)（<a href="17-kruskal.html">第 17 课</a>）、拓扑排序 O(V + E)（<a href="14-topological-sort.html">第 14 课</a>）、Floyd O(V³)、Bellman-Ford O(V × E)；该用哪种最短路，见<a href="46-shortest-path-variants.html">第 46 课</a>的选择表。</p>
+<details><summary>例题：无向完全图有 10 个顶点，有几条边？每个顶点的度是多少？</summary>
+10 × 9 / 2 = 45 条；每个顶点连着其他 9 个，度为 9。核对：度之和 10 × 9 = 90 = 2 × 45。</details>
+<details><summary>例题：一个无向图有 10 个顶点，至少要几条边，才能保证<b>不管边怎么连</b>它都是连通的？</summary>
+37。最“浪费”的连法是：把 9 个顶点连成完全图，用掉 9 × 8 / 2 = 36 条边，第 10 个顶点孤零零的，图仍不连通。再多 1 条边，就只能连到第 10 个顶点上，图一定连通。所以是 36 + 1 = 37。（注意和“连通至少要 V − 1 = 9 条边”区分：9 条是“能连通”的最少边数，37 条是“一定连通”的最少边数。）</details>
+<details><summary>例题：用邻接矩阵存一个有 n 个顶点、e 条边的有向图，做一次 DFS 的时间是？</summary>
+O(n²)。找一个顶点的所有邻居要扫它那一行的 n 个格子，n 个顶点就是 n²，和边数 e 无关。用邻接表才是 O(n + e)。</details>
+
+<div class="nav"><a href="46-shortest-path-variants.html">← 第 46 课 · 最短路变种</a><a href="index.html">回到目录</a><a href="#stack">回到顶部 ↑</a></div>
+<script src="anim.js"></script>
+<script src="js/choice-cheatsheet.js"></script>
+</body>
+</html>

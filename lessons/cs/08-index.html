@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>计算机基础 第 8 课 · 索引与查询优化</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="cs.css">
+<style>
+/* 动画 1：B+ 树 */
+.demo input.num { width: 56px; }
+.demo svg.bptree { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+/* 动画 2：最左前缀 */
+.demo .sql-where { font-family: Consolas, monospace; background: #fafafa; border: 1px solid #ddd; border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
+.demo .col-chip { display: inline-flex; flex-direction: column; align-items: center; min-width: 150px; padding: 4px 8px; border: 2px solid #888; border-radius: 6px; background: #fff; }
+.demo .col-chip b { font-family: Consolas, monospace; }
+.demo .col-chip .chip-note { font-size: 13px; color: #555; }
+.demo .col-chip.used { background: #c8e6c9; border-color: #2e7d32; }
+.demo .col-chip.stop { background: #ffcdd2; border-color: #c62828; }
+.demo .col-chip.skip { background: #f5f5f5; border-color: #bbb; color: #999; }
+.demo table.idx-entries { font-family: Consolas, monospace; font-size: 14px; }
+.demo table.idx-entries td, .demo table.idx-entries th { padding: 1px 10px; }
+.demo table.idx-entries tr.scan td { background: #ffe0b2; }
+.demo table.idx-entries tr.match td { background: #c8e6c9; font-weight: bold; }
+</style>
+</head>
+<body>
+<!-- 全页共用的箭头。SVG 里写 marker-end="url(#arrow)" 即可 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+  <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0b62c4"/></marker>
+  <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c62828"/></marker>
+  <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e7d32"/></marker>
+</defs></svg>
+
+<p><a href="index.html">← 计算机基础目录</a></p>
+<h1>第 8 课 · 索引与查询优化</h1>
+<p class="one-line">表的数据存在磁盘上，按页读写，读一页很慢。<b>索引</b>是按某几列排好序、组织成 <b>B+ 树</b>的一份额外数据：查一行只要读 3～4 页，而不是把几十万页全读一遍。会不会用上索引，取决于 WHERE 条件写得对不对。</p>
+<p class="prereq">开始前要会：<a href="07-sql.html">第 7 课</a>的表、主键、SELECT / WHERE / ORDER BY 和网店的 users / products / orders 三张表；<a href="02-virtual-memory.html">第 2 课</a>的「页」，以及「磁盘比内存慢得多、读写以页为单位」。本课会用到「树」，第 3 节从头讲，不需要事先学过。</p>
+
+<p>第 7 课的网店只有 8 笔订单。一年过去，网店做大了：orders 表长到了 <b>3000 万行</b>。顾客点开「我的订单」，网店程序发出 <code>SELECT * FROM orders WHERE user_id = 7</code>，要等好几秒；运营查「11 月的订单」也一样慢。SQL 没写错，结果也对，就是慢。这一课找出慢在哪里，以及怎么用<b>索引</b>让它快起来。为了下面的例子，本课给 orders 表加了一列 <code>status</code>（订单状态：<code>unpaid</code> 待付款、<code>paid</code> 已付款、<code>shipped</code> 已发货、<code>refund</code> 已退款），其余各列和第 7 课一样：<code>id, user_id, product_id, quantity, created_at</code>。</p>
+
+<p class="roadmap"><b>本课的路线</b>：数据在磁盘上按页读 → 全表扫描为什么慢 → 索引是什么 → 先认识树，看哈希表和二叉搜索树为什么不合适 → B 树与 B+ 树 → 三层能存多少行 → 动画 1 → 聚簇索引、二级索引与回表 → 覆盖索引 → 联合索引与最左前缀 → 动画 2 → 索引失效 → 索引的代价 → EXPLAIN → 自增主键与页分裂 → InnoDB 与 MyISAM → 题单怎么考。</p>
+
+<h2 id="disk-page">1. 数据在磁盘上，按页读写</h2>
+<p>第 2 课讲过：内存装不下的东西放在磁盘上，磁盘比内存慢得多，而且读写不是一个字节一个字节来，而是<b>一次一整页</b>。数据库也是这样存表的。</p>
+<div class="term"><b>存储引擎</b>：DBMS 里负责「把表存到磁盘上、再读出来」的那部分。MySQL 可以换不同的存储引擎，默认（5.5 起）是 <b>InnoDB</b>，本课以它为准。第 15 节和老引擎 MyISAM 对比。</div>
+<div class="term"><b>页（数据页）</b>：InnoDB 读写磁盘的最小单位，默认大小 <b>16KB</b>（是操作系统 4KB 页的 4 倍）。表里的行一行行地放在页里；要读某一行，就得把它所在的整页从磁盘读进内存。</div>
+<div class="term"><b>缓冲池（Buffer Pool）</b>：InnoDB 在内存里划出的一大块区域，存放最近读进来的页。要的页已经在缓冲池里，就不用再读磁盘。</div>
+<p>算一下 3000 万行的 orders 表占多少页。一行订单（6 个列，加上 InnoDB 给每行附带的管理信息）约 160 字节，一页能放 16384 ÷ 160 ≈ <b>100 行</b>，于是 3000 万 ÷ 100 = <b>30 万页</b>，合 300000 × 16KB = 4 800 000 KB，约 4.6 GB。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 240" width="640" role="img" aria-label="orders 表在磁盘上分成 30 万页，全表扫描要把每一页都读进内存">
+  <rect x="20" y="14" width="600" height="128" rx="6" class="plain"/>
+  <text x="32" y="36" class="title">磁盘：orders 表的数据（3000 万行）</text>
+  <rect x="40" y="50" width="80" height="70" class="obj"/><text x="80" y="72" text-anchor="middle">页 1</text><text x="80" y="92" text-anchor="middle" class="small">id 1～100</text><text x="80" y="108" text-anchor="middle" class="small">16KB</text>
+  <rect x="135" y="50" width="80" height="70" class="obj"/><text x="175" y="72" text-anchor="middle">页 2</text><text x="175" y="92" text-anchor="middle" class="small">id 101～200</text><text x="175" y="108" text-anchor="middle" class="small">16KB</text>
+  <rect x="230" y="50" width="80" height="70" class="obj"/><text x="270" y="72" text-anchor="middle">页 3</text><text x="270" y="92" text-anchor="middle" class="small">id 201～300</text><text x="270" y="108" text-anchor="middle" class="small">16KB</text>
+  <rect x="325" y="50" width="80" height="70" class="obj"/><text x="365" y="72" text-anchor="middle">页 4</text><text x="365" y="92" text-anchor="middle" class="small">id 301～400</text><text x="365" y="108" text-anchor="middle" class="small">16KB</text>
+  <text x="445" y="90" text-anchor="middle" class="title">……</text>
+  <rect x="490" y="50" width="110" height="70" class="obj"/><text x="545" y="72" text-anchor="middle">页 30 万</text><text x="545" y="92" text-anchor="middle" class="small">最后 100 行</text><text x="545" y="108" text-anchor="middle" class="small">16KB</text>
+  <line x1="40" y1="132" x2="598" y2="132" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="610" y="160" text-anchor="end" fill="#c62828">全表扫描：30 万页从头读到尾</text>
+  <rect x="20" y="186" width="260" height="44" rx="6" class="hot"/>
+  <text x="150" y="206" text-anchor="middle" class="title">内存：缓冲池</text>
+  <text x="150" y="222" text-anchor="middle" class="small">放读进来的页</text>
+  <line x1="80" y1="122" x2="80" y2="182" class="line" marker-end="url(#arrow)"/>
+  <text x="92" y="174" class="small">一次读一整页</text>
+</svg>
+<figcaption>想要的只有一行，也得把它所在的 16KB 整页读进内存。读磁盘的次数，也就是<b>读页次数</b>，决定了查询有多慢</figcaption>
+</figure>
+<div class="term"><b>全表扫描</b>：把表的所有页逐页读一遍，对每一行检查 WHERE 条件。没有可用的索引时，DBMS 只能这样做。</div>
+<p>第 7 课的 <code>WHERE user_id = 7</code> 就是这样执行的：表是按 id 的顺序存的，7 号用户的那几笔订单散落在 30 万页里的某几页，不知道在哪几页，只好 30 万页全读一遍、对 3000 万行逐个比较。<b>找 5 行，读 4.6 GB</b>，这就是慢的原因。</p>
+<p>所以本课衡量快慢只看一件事：<b>读了几页</b>。</p>
+
+<h2 id="what-index">2. 索引是什么</h2>
+<p>一本 500 页的书，要找「死锁」在哪讲，没人从第 1 页翻起，而是翻到书末的「索引」：词条按拼音排好序，后面写着页码。数据库的索引是同一个思路。</p>
+<div class="term"><b>索引</b>：按表里某一列（或某几列）的值<b>排好序</b>的一份额外数据，每一项是「列的值 + 能找到那一行的位置」。例如在 user_id 上建的索引，每一项是 (user_id, 那一行的主键 id)。建法：<code>CREATE INDEX idx_user_id ON orders(user_id);</code></div>
+<p>为了能画出来，下面把 orders 表缩小成 <b>27 行、9 页</b>（一页 3 行），本课的图和动画都用这张缩小版。其中 7 号用户有 5 笔订单：id 2、7、8、15、18。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 360" width="640" role="img" aria-label="user_id 上的索引按 user_id 排好序，user_id = 7 的 5 项挨在一起，各自指向表里不同的页">
+  <text x="110" y="24" text-anchor="middle" class="title">索引 idx_user_id</text>
+  <text x="110" y="42" text-anchor="middle" class="small">按 user_id 排好序</text>
+  <rect x="20" y="52" width="180" height="22" class="plain"/><text x="110" y="68" text-anchor="middle" class="mono">user_id 5 → id 3</text>
+  <rect x="20" y="76" width="180" height="22" class="plain"/><text x="110" y="92" text-anchor="middle" class="mono">user_id 5 → id 9</text>
+  <rect x="20" y="100" width="180" height="22" class="plain"/><text x="110" y="116" text-anchor="middle" class="mono">user_id 6 → id 12</text>
+  <rect x="20" y="124" width="180" height="22" class="hot"/><text x="110" y="140" text-anchor="middle" class="mono">user_id 7 → id 2</text>
+  <rect x="20" y="148" width="180" height="22" class="hot"/><text x="110" y="164" text-anchor="middle" class="mono">user_id 7 → id 7</text>
+  <rect x="20" y="172" width="180" height="22" class="hot"/><text x="110" y="188" text-anchor="middle" class="mono">user_id 7 → id 8</text>
+  <rect x="20" y="196" width="180" height="22" class="hot"/><text x="110" y="212" text-anchor="middle" class="mono">user_id 7 → id 15</text>
+  <rect x="20" y="220" width="180" height="22" class="hot"/><text x="110" y="236" text-anchor="middle" class="mono">user_id 7 → id 18</text>
+  <rect x="20" y="244" width="180" height="22" class="plain"/><text x="110" y="260" text-anchor="middle" class="mono">user_id 8 → id 5</text>
+  <rect x="20" y="268" width="180" height="22" class="plain"/><text x="110" y="284" text-anchor="middle" class="mono">user_id 8 → id 20</text>
+  <rect x="20" y="292" width="180" height="22" class="plain"/><text x="110" y="308" text-anchor="middle" class="mono">user_id 9 → id 4</text>
+  <text x="110" y="334" text-anchor="middle" class="small">……（其余用户）</text>
+  <text x="520" y="24" text-anchor="middle" class="title">表（按 id 存放）</text>
+  <rect x="430" y="36" width="180" height="28" class="hot"/><text x="520" y="55" text-anchor="middle">页 1：id 1、2、3</text>
+  <rect x="430" y="70" width="180" height="28" class="plain"/><text x="520" y="89" text-anchor="middle">页 2：id 4、5、6</text>
+  <rect x="430" y="104" width="180" height="28" class="hot"/><text x="520" y="123" text-anchor="middle">页 3：id 7、8、9</text>
+  <rect x="430" y="138" width="180" height="28" class="plain"/><text x="520" y="157" text-anchor="middle">页 4：id 10、11、12</text>
+  <rect x="430" y="172" width="180" height="28" class="hot"/><text x="520" y="191" text-anchor="middle">页 5：id 13、14、15</text>
+  <rect x="430" y="206" width="180" height="28" class="hot"/><text x="520" y="225" text-anchor="middle">页 6：id 16、17、18</text>
+  <rect x="430" y="240" width="180" height="28" class="plain"/><text x="520" y="259" text-anchor="middle">页 7：id 19、20、21</text>
+  <rect x="430" y="274" width="180" height="28" class="plain"/><text x="520" y="293" text-anchor="middle">页 8：id 22、23、24</text>
+  <rect x="430" y="308" width="180" height="28" class="plain"/><text x="520" y="327" text-anchor="middle">页 9：id 25、26、27</text>
+  <line x1="202" y1="135" x2="426" y2="50" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="202" y1="159" x2="426" y2="114" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="202" y1="183" x2="426" y2="120" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="202" y1="207" x2="426" y2="186" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="202" y1="231" x2="426" y2="220" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+</svg>
+<figcaption>因为排好了序，user_id = 7 的 5 项挨在一起，找到第一项就找到了全部；再按 id 去读页 1、3、5、6，一共 4 页，不用读其余 5 页</figcaption>
+</figure>
+<p>有了索引，DBMS 就有了两种做法：全表扫描，或者先查索引再按 id 取行。选哪种由它自己决定：</p>
+<div class="term"><b>查询优化器</b>：DBMS 里给每条 SQL 挑执行办法的部分。它估算每种办法大约要读多少页，挑最省的。第 7 课说 SQL「只说要什么，不说怎么找」，「怎么找」就是优化器定的。</div>
+<p>剩下的问题是：「排好序的一份数据」在磁盘上具体怎么组织？如果只是一个按 user_id 排序的长数组，查找可以用二分（每次和中间那项比，砍掉一半），但网店每秒都在下新订单，往有序数组中间插一项，后面几千万项都得往后挪，太慢。我们要的结构得同时满足：<b>有序、查得快、插得快、读的页少</b>。答案是一种树。</p>
+
+<h2 id="why-btree">3. 先认识树；为什么不用哈希表和二叉搜索树</h2>
+<h3 id="tree-terms">树的几个名词</h3>
+<div class="term"><b>树</b>：由<b>节点</b>和连接节点的边组成的结构，像一棵倒过来的树。最上面的节点叫<b>根</b>；一个节点往下连着的节点叫它的<b>子节点</b>；没有子节点的节点叫<b>叶子</b>。从根走到叶子要经过几层节点，叫树的<b>高度</b>（本课按层数算，只有一个根的树高度为 1）。</div>
+<div class="term"><b>二叉搜索树（BST）</b>：每个节点存一个键、最多两个子节点，并且<b>左边子树的键都比它小，右边子树的键都比它大</b>。查找时从根开始，比它小就往左、比它大就往右，每层只比一次。<b>平衡</b>的二叉搜索树（各条从根到叶子的路径长度差不多）存 n 个键，高度约为 log<sub>2</sub>n。想深入看：<a href="../11-bst.html">算法课 · 二叉搜索树</a>、<a href="../24-balanced-tree.html">算法课 · 平衡树</a>。</div>
+<p>树放在磁盘上时，一个节点就存在一页里，<b>从父节点走到子节点 = 多读一页</b>。所以对数据库来说，树的高度就是查一行要读的页数。</p>
+
+<h3 id="why-not-hash">为什么不用哈希表</h3>
+<div class="term"><b>哈希表</b>：用一个<b>哈希函数</b>把键算成一个桶号，直接到那个桶里去找。例如 桶号 = user_id ÷ 4 的余数。等值查找只算一次，非常快。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 215" width="640" role="img" aria-label="哈希表：user_id = 7 直接算出桶 3；user_id 大于 5 的键散落在所有桶里">
+  <text x="20" y="24" class="title">桶号 = user_id ÷ 4 的余数</text>
+  <rect x="20" y="40" width="130" height="30" class="plain"/><text x="85" y="60" text-anchor="middle">桶 0：8</text>
+  <rect x="20" y="76" width="130" height="30" class="plain"/><text x="85" y="96" text-anchor="middle">桶 1：5、9</text>
+  <rect x="20" y="112" width="130" height="30" class="plain"/><text x="85" y="132" text-anchor="middle">桶 2：6</text>
+  <rect x="20" y="148" width="130" height="30" class="ok"/><text x="85" y="168" text-anchor="middle">桶 3：7</text>
+  <text x="200" y="60" class="title">user_id = 7</text>
+  <text x="200" y="82">7 ÷ 4 余 3 → 直接去桶 3</text>
+  <line x1="300" y1="92" x2="156" y2="160" class="arrow-green" marker-end="url(#arrow-green)"/>
+  <text x="330" y="112" fill="#2e7d32">✓ 一步到位</text>
+  <text x="400" y="150" class="title">user_id &gt; 5</text>
+  <text x="400" y="172">6、7、8、9 散在各个桶里</text>
+  <text x="400" y="194" fill="#c62828">✗ 只能每个桶都翻一遍</text>
+</svg>
+<figcaption>哈希函数故意把相邻的键打散，所以键之间的大小顺序丢了。范围查询（&gt;、&lt;、BETWEEN）、ORDER BY 排序、下文的最左前缀，哈希表都帮不上</figcaption>
+</figure>
+<p>网店到处是范围查询：「11 月的订单」「金额大于 100 的订单」「最近 10 笔订单」。所以 InnoDB 默认的索引不用哈希表。（MySQL 的 MEMORY 引擎可以显式建哈希索引；InnoDB 内部有一个「自适应哈希索引」，是它自动给热点数据加的辅助结构，不能手动建。）</p>
+
+<h3 id="why-not-bst">为什么不用二叉搜索树</h3>
+<p>二叉搜索树有序，能做范围查询。问题出在<b>太高</b>。每个节点只有一个键、两个分叉，3000 万行要多少层？2<sup>24</sup> ≈ 1678 万，2<sup>25</sup> ≈ 3355 万，所以即使完全平衡也要约 <b>25 层</b>，查一行读 25 页。机械硬盘随机读一页约 10 毫秒，25 页就是 0.25 秒，一个页面查几次就要一两秒。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 250" width="640" role="img" aria-label="二叉搜索树每个节点占一页，只放一个键；3000 万行要 25 层，B+ 树只要 3 层">
+  <text x="170" y="22" text-anchor="middle" class="title">二叉搜索树（一个节点 = 一页）</text>
+  <line x1="170" y1="58" x2="95" y2="102" class="line"/><line x1="170" y1="58" x2="245" y2="102" class="line"/>
+  <line x1="95" y1="128" x2="55" y2="172" class="line"/><line x1="95" y1="128" x2="135" y2="172" class="line"/>
+  <line x1="245" y1="128" x2="205" y2="172" class="line"/><line x1="245" y1="128" x2="285" y2="172" class="line"/>
+  <rect x="145" y="34" width="50" height="26" class="hot"/><text x="170" y="52" text-anchor="middle" class="mono">14</text>
+  <rect x="70" y="102" width="50" height="26" class="hot"/><text x="95" y="120" text-anchor="middle" class="mono">6</text>
+  <rect x="220" y="102" width="50" height="26" class="plain"/><text x="245" y="120" text-anchor="middle" class="mono">22</text>
+  <rect x="30" y="172" width="50" height="26" class="plain"/><text x="55" y="190" text-anchor="middle" class="mono">2</text>
+  <rect x="110" y="172" width="50" height="26" class="hot"/><text x="135" y="190" text-anchor="middle" class="mono">10</text>
+  <rect x="180" y="172" width="50" height="26" class="plain"/><text x="205" y="190" text-anchor="middle" class="mono">18</text>
+  <rect x="260" y="172" width="50" height="26" class="plain"/><text x="285" y="190" text-anchor="middle" class="mono">26</text>
+  <text x="170" y="226" text-anchor="middle" class="small">找 10：14 → 6 → 10，每层读一页。</text>
+  <text x="170" y="242" text-anchor="middle" class="small">一页 16KB 只放一个键，太浪费</text>
+  <text x="490" y="22" text-anchor="middle" class="title">3000 万行要读几页</text>
+  <rect x="400" y="40" width="40" height="175" class="bad"/>
+  <text x="420" y="34" text-anchor="middle" class="small">25 页</text>
+  <rect x="540" y="194" width="40" height="21" class="ok"/>
+  <text x="560" y="188" text-anchor="middle" class="small">3 页</text>
+  <line x1="380" y1="215" x2="610" y2="215" class="line"/>
+  <text x="420" y="234" text-anchor="middle">二叉搜索树</text>
+  <text x="560" y="234" text-anchor="middle">B+ 树</text>
+</svg>
+<figcaption>树的高度 = 读页次数。要让树变矮，就得让每个节点多分几个叉：一页 16KB 能装上千个键，那就让一个节点有上千个子节点</figcaption>
+</figure>
+<p>还有一个问题：二叉搜索树按插入顺序长，订单 id 是一个比一个大地插入的，不做平衡就会长成一条向右的长链，高度等于行数。平衡树能解决这一点，但解决不了「每页只放一个键」的浪费。</p>
+
+<h2 id="bplus">4. B 树与 B+ 树：让每个节点多分叉</h2>
+<div class="term"><b>多路搜索树</b>：二叉搜索树的推广。一个节点里存好几个排好序的键，k 个键把取值切成 k + 1 段，每段对应一个子节点。一个节点最多有几个子节点，叫这棵树的<b>阶</b>；实际有几个子节点叫它的<b>扇出</b>。扇出越大，树越矮。</div>
+<p>例如一个节点里存键 10、19，就把 id 切成三段：<b>小于 10</b>、<b>10～18</b>、<b>大于等于 19</b>，分别走第 1、2、3 个指针。查找时在节点里比较几次（这是在内存里比，很快），然后往下读一页。</p>
+<div class="term"><b>B 树</b>：一种保持平衡的多路搜索树：所有叶子都在同一层；插入和删除时自动拆分、合并节点，保证不会长歪。<b>每个节点里既存键，也存这个键对应的整行数据</b>。</div>
+<div class="term"><b>B+ 树</b>：B 树的变种，InnoDB 的索引用的就是它。和 B 树有三点不同：① <b>非叶子节点只存键和指针，不存数据</b>；② <b>所有数据都在叶子里</b>，非叶子里的键在叶子里会再出现一次；③ <b>叶子之间用链表按顺序串起来</b>，每个叶子都记着右边（InnoDB 里左右都记）的邻居在哪一页。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 250" width="640" role="img" aria-label="B 树每个节点都存数据；B+ 树只有叶子存数据，叶子用链表串起来">
+  <text x="160" y="22" text-anchor="middle" class="title">B 树</text>
+  <line x1="160" y1="70" x2="60" y2="110" class="line"/><line x1="160" y1="70" x2="160" y2="110" class="line"/><line x1="160" y1="70" x2="260" y2="110" class="line"/>
+  <rect x="100" y="40" width="120" height="30" class="hot"/><text x="160" y="60" text-anchor="middle" class="mono">10■  19■</text>
+  <rect x="15" y="110" width="90" height="30" class="hot"/><text x="60" y="130" text-anchor="middle" class="mono">4■  7■</text>
+  <rect x="115" y="110" width="90" height="30" class="hot"/><text x="160" y="130" text-anchor="middle" class="mono">13■ 16■</text>
+  <rect x="215" y="110" width="90" height="30" class="hot"/><text x="260" y="130" text-anchor="middle" class="mono">22■ 25■</text>
+  <text x="160" y="170" text-anchor="middle" class="small">■ = 整行数据，每个节点都有</text>
+  <text x="160" y="188" text-anchor="middle" class="small">数据占地方，一页放的键少，扇出小</text>
+  <text x="160" y="206" text-anchor="middle" class="small">找 10 在根就停；找 11 要到最底层</text>
+  <text x="160" y="224" text-anchor="middle" class="small">范围查询要在各层之间来回跳</text>
+  <line x1="322" y1="14" x2="322" y2="236" class="dash"/>
+  <text x="480" y="22" text-anchor="middle" class="title">B+ 树</text>
+  <line x1="480" y1="70" x2="378" y2="110" class="line"/><line x1="480" y1="70" x2="478" y2="110" class="line"/><line x1="480" y1="70" x2="578" y2="110" class="line"/>
+  <rect x="430" y="40" width="100" height="30" class="obj"/><text x="480" y="60" text-anchor="middle" class="mono">10   19</text>
+  <rect x="336" y="110" width="84" height="44" class="ok"/><text x="378" y="128" text-anchor="middle" class="mono">1～9</text><text x="378" y="146" text-anchor="middle" class="small">整行数据</text>
+  <rect x="436" y="110" width="84" height="44" class="ok"/><text x="478" y="128" text-anchor="middle" class="mono">10～18</text><text x="478" y="146" text-anchor="middle" class="small">整行数据</text>
+  <rect x="536" y="110" width="84" height="44" class="ok"/><text x="578" y="128" text-anchor="middle" class="mono">19～27</text><text x="578" y="146" text-anchor="middle" class="small">整行数据</text>
+  <line x1="421" y1="132" x2="434" y2="132" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="521" y1="132" x2="534" y2="132" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="480" y="188" text-anchor="middle" class="small">非叶子只有键和指针 → 一页装上千个，扇出大、树矮</text>
+  <text x="480" y="206" text-anchor="middle" class="small">每次都走到叶子 → 查任何一行读的页数都一样</text>
+  <text x="480" y="224" text-anchor="middle" class="small">蓝色箭头：叶子链表 → 范围查询顺着往右读</text>
+</svg>
+<figcaption>同样的键，B+ 树把数据全部「下沉」到叶子。为了画得下，右边只画了两层，叶子里实际是一页页的行</figcaption>
+</figure>
+<p>这三点各自解决一个问题：</p>
+<table>
+  <tr><th>B+ 树的设计</th><th>带来的好处</th></tr>
+  <tr><td>非叶子只存键和指针</td><td>一页能放上千个键，<b>扇出大 → 树矮 → 读页少</b>（下一节算具体数）</td></tr>
+  <tr><td>数据只在叶子</td><td>任何查找都走到叶子，读页次数<b>稳定</b>，等于树的高度</td></tr>
+  <tr><td>叶子用链表串起来</td><td><b>范围查询</b>：找到起点所在的叶子后，顺着链表往右读，不用回到上层；按索引顺序 ORDER BY 也是这样免掉排序</td></tr>
+</table>
+
+<h2 id="capacity">5. 三层 B+ 树能存多少行</h2>
+<p>这是常考的估算题。按 InnoDB 的典型配置一步步算：</p>
+<ol>
+  <li><b>非叶子节点里的一项多大</b>：主键用 <code>BIGINT</code>，占 8 字节；指向子页的指针占 6 字节。一项 = 8 + 6 = <b>14 字节</b>。</li>
+  <li><b>一个非叶子节点能有多少个子节点</b>：一页 16KB = 16 × 1024 = 16384 字节，16384 ÷ 14 ≈ 1170.3，取 <b>1170</b>。也就是扇出约为 1170。</li>
+  <li><b>一个叶子放多少行</b>：叶子存整行。教材通常假设一行 1KB，一页放 16384 ÷ 1024 = <b>16 行</b>。</li>
+  <li><b>每层有多少页</b>：第 1 层（根）1 页；第 2 层 1170 页；第 3 层（叶子）1170 × 1170 = <b>1 368 900 页</b>。</li>
+  <li><b>总行数</b>：1 368 900 × 16 = <b>21 902 400 行</b>，约 <b>2000 万行</b>。</li>
+</ol>
+<figure class="fig">
+<svg viewBox="0 0 640 280" width="640" role="img" aria-label="三层 B+ 树：根 1 页，第 2 层 1170 页，第 3 层 1170 乘 1170 页，每页 16 行">
+  <text x="10" y="45">第 1 层</text><text x="10" y="123">第 2 层</text><text x="10" y="210">第 3 层</text>
+  <line x1="320" y1="58" x2="135" y2="100" class="line"/><line x1="320" y1="58" x2="245" y2="100" class="line"/>
+  <line x1="320" y1="58" x2="445" y2="100" class="line"/><line x1="320" y1="58" x2="555" y2="100" class="line"/>
+  <rect x="260" y="22" width="120" height="36" class="hot"/><text x="320" y="45" text-anchor="middle">根：1 页</text>
+  <text x="392" y="36" class="small">存 1170 个（键, 指针）</text>
+  <text x="392" y="52" class="small">每个指针指向下一层的一页</text>
+  <rect x="90" y="100" width="90" height="36" class="obj"/><text x="135" y="123" text-anchor="middle">页 1</text>
+  <rect x="200" y="100" width="90" height="36" class="obj"/><text x="245" y="123" text-anchor="middle">页 2</text>
+  <text x="345" y="123" text-anchor="middle" class="title">……</text>
+  <rect x="400" y="100" width="90" height="36" class="obj"/><text x="445" y="123" text-anchor="middle">页 1169</text>
+  <rect x="510" y="100" width="90" height="36" class="obj"/><text x="555" y="123" text-anchor="middle">页 1170</text>
+  <line x1="135" y1="136" x2="105" y2="190" class="line"/><line x1="135" y1="136" x2="150" y2="190" class="line"/><line x1="135" y1="136" x2="195" y2="190" class="line"/>
+  <line x1="555" y1="136" x2="525" y2="190" class="line"/><line x1="555" y1="136" x2="570" y2="190" class="line"/>
+  <rect x="85" y="190" width="40" height="30" class="ok"/><rect x="130" y="190" width="40" height="30" class="ok"/><rect x="175" y="190" width="40" height="30" class="ok"/>
+  <text x="235" y="210" class="small">…</text>
+  <text x="345" y="210" text-anchor="middle" class="title">……</text>
+  <rect x="505" y="190" width="40" height="30" class="ok"/><rect x="550" y="190" width="40" height="30" class="ok"/>
+  <text x="320" y="250" text-anchor="middle">叶子：1170 × 1170 = 1 368 900 页，每页 16 行（一行 1KB）</text>
+  <text x="320" y="270" text-anchor="middle" class="title">1 368 900 × 16 = 21 902 400 行 ≈ 2000 万行</text>
+</svg>
+<figcaption>每往下一层，页数乘以扇出 1170。所以层数只随行数的对数增长：行数翻 1170 倍，才多一层</figcaption>
+</figure>
+<p>换成我们的 orders 表：一行约 160 字节，叶子每页约 100 行，三层能存 1170 × 1170 × 100 = 136 890 000 行，约 1.4 亿。3000 万行的 orders <b>三层就够</b>：按主键查任意一行，读 3 页。对比一下：两层只能存 1170 × 100 = 117 000 行；四层能存一千多亿行，网店用不到。</p>
+<p>还有一个更好的消息：前两层一共只有 1 + 1170 = 1171 页，1171 × 16KB ≈ 18.3 MB，常年待在缓冲池里。所以实际上查一行往往<b>只有读叶子那 1 次是真的读磁盘</b>。</p>
+<p>注意这是估算：页里还有页头、页尾、空闲空间等开销，真实数字会小一些。考题问「三层 B+ 树大约能存多少行」，答「约 2000 万（千万级）」即可，要会写上面五步。</p>
+
+<h2 id="demo">6. 动手玩 1：B+ 树查找 vs 全表扫描</h2>
+<p>下面是第 2 节那张 27 行的缩小版 orders 表，按主键 id 建成的三层 B+ 树：每个方框是一页，叶子一页放 3 行。根的键 10、19 把 id 分成「小于 10、10～18、大于等于 19」三段；第 2 层同理。</p>
+<ul>
+  <li>输入 14，点<b>用索引查找</b>：根 → 第 2 层 → 叶子，读 3 页。换成 1、27、或者不存在的 30，都是 3 页。</li>
+  <li>点<b>全表扫描</b>：9 个叶子页全读一遍，读 9 页。表越大，差距越大：30 万页的表，索引查找还是 3 页。</li>
+  <li>起点 8、终点 20，点<b>范围查询</b>：先 3 页找到 8 所在的叶子，再沿链表往右读 4 页，一共 7 页，拿到 13 行。</li>
+</ul>
+<div class="demo" id="btree"></div>
+
+<h2 id="clustered">7. 聚簇索引、二级索引与回表</h2>
+<p>上面的动画里，叶子里存的就是整行数据，这棵树本身就是表。InnoDB 正是这样存表的：</p>
+<div class="term"><b>聚簇索引</b>（也叫<b>主键索引</b>）：按主键建的 B+ 树，<b>叶子里存整行数据</b>。表的数据就按主键顺序存在这棵树的叶子里，「索引」和「数据」是一回事，所以一张表<b>只能有一个</b>聚簇索引。没定义主键时，InnoDB 拿第一个非空的 UNIQUE 列来当；还没有，就自己加一个隐藏的 6 字节行号。</div>
+<div class="term"><b>二级索引</b>（也叫<b>辅助索引</b>、非聚簇索引）：在其他列上建的 B+ 树，例如 <code>idx_user_id</code>。它按 user_id 排序，<b>叶子里只存 (user_id, 主键 id)</b>，不存整行。一张表可以有多个二级索引。</div>
+<div class="term"><b>回表</b>：通过二级索引找到主键 id 后，再拿着 id 去聚簇索引里从根往下查一次，取出整行。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 290" width="640" role="img" aria-label="查 user_id = 7：先在二级索引里找到主键 id，再拿 id 回聚簇索引取整行">
+  <text x="155" y="22" text-anchor="middle" class="title">二级索引 idx_user_id</text>
+  <line x1="160" y1="68" x2="59" y2="100" class="line"/><line x1="160" y1="68" x2="154" y2="100" class="line"/><line x1="160" y1="68" x2="249" y2="100" class="line"/>
+  <rect x="95" y="40" width="130" height="28" class="obj"/><text x="160" y="59" text-anchor="middle" class="mono">7,2 | 7,15</text>
+  <rect x="15" y="100" width="88" height="72" class="plain"/>
+  <text x="59" y="120" text-anchor="middle" class="mono">5 → 3</text><text x="59" y="140" text-anchor="middle" class="mono">5 → 9</text><text x="59" y="160" text-anchor="middle" class="mono">6 → 12</text>
+  <rect x="110" y="100" width="88" height="72" class="hot"/>
+  <text x="154" y="120" text-anchor="middle" class="mono">7 → 2</text><text x="154" y="140" text-anchor="middle" class="mono">7 → 7</text><text x="154" y="160" text-anchor="middle" class="mono">7 → 8</text>
+  <rect x="205" y="100" width="88" height="72" class="hot"/>
+  <text x="249" y="120" text-anchor="middle" class="mono">7 → 15</text><text x="249" y="140" text-anchor="middle" class="mono">7 → 18</text><text x="249" y="160" text-anchor="middle" class="mono">8 → 5</text>
+  <line x1="104" y1="136" x2="108" y2="136" class="arrow-blue"/><line x1="199" y1="136" x2="203" y2="136" class="arrow-blue"/>
+  <text x="155" y="194" text-anchor="middle" class="small">叶子存：user_id → 主键 id</text>
+  <text x="155" y="210" text-anchor="middle" class="small">（不存整行，所以小）</text>
+  <text x="485" y="22" text-anchor="middle" class="title">聚簇索引（按主键 id）</text>
+  <line x1="485" y1="68" x2="389" y2="100" class="line"/><line x1="485" y1="68" x2="484" y2="100" class="line"/><line x1="485" y1="68" x2="579" y2="100" class="line"/>
+  <rect x="435" y="40" width="100" height="28" class="obj"/><text x="485" y="59" text-anchor="middle" class="mono">10 | 19</text>
+  <rect x="345" y="100" width="88" height="72" class="ok"/><text x="389" y="128" text-anchor="middle" class="mono">id 1～9</text><text x="389" y="150" text-anchor="middle" class="small">整行数据</text>
+  <rect x="440" y="100" width="88" height="72" class="ok"/><text x="484" y="128" text-anchor="middle" class="mono">id 10～18</text><text x="484" y="150" text-anchor="middle" class="small">整行数据</text>
+  <rect x="535" y="100" width="88" height="72" class="plain"/><text x="579" y="128" text-anchor="middle" class="mono">id 19～27</text><text x="579" y="150" text-anchor="middle" class="small">整行数据</text>
+  <text x="485" y="194" text-anchor="middle" class="small">叶子存整行：这棵树就是表</text>
+  <text x="485" y="210" text-anchor="middle" class="small">（中间一层省略没画）</text>
+  <path d="M 250,98 Q 320,20 431,50" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="322" y="80" text-anchor="middle" fill="#c62828">回表</text>
+  <text x="320" y="250" text-anchor="middle">查 user_id = 7：先在二级索引里找到 5 个主键 id（2、7、8、15、18），</text>
+  <text x="320" y="272" text-anchor="middle">再拿每个 id 回聚簇索引，从根往下找到整行。</text>
+</svg>
+<figcaption>二级索引的叶子里为什么存主键，而不存「第几页第几行」？因为行在页之间会被挪动（第 14 节的页分裂），存主键的话，行怎么挪二级索引都不用改</figcaption>
+</figure>
+<p>所以 <code>SELECT * FROM orders WHERE user_id = 7</code> 的代价是：二级索引往下走 3 层 + 沿叶子读完 user_id = 7 的项，然后<b>回表 5 次</b>，每次在聚簇索引里走 3 层。比全表扫描的 30 万页少太多了。但回表的次数等于匹配的行数：如果条件匹配上百万行，回表一百万次反而比全表扫描还慢，这时优化器会放弃索引，直接全表扫描。</p>
+
+<h2 id="covering">8. 覆盖索引：不回表</h2>
+<p>回表是因为二级索引里没有查询要的列。如果<b>查询要的列，二级索引里全都有</b>，就不用回表了。</p>
+<div class="term"><b>覆盖索引</b>：一条查询用到的所有列（SELECT 的列、WHERE 的列、ORDER BY 的列……）都包含在某个索引里，只读这个索引就能得到结果，不用回表。这时我们说「这个索引覆盖了这条查询」。注意：二级索引的叶子里本来就带着主键，所以主键列也算「索引里有」。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 220" width="640" role="img" aria-label="只查 id 和 user_id 时在二级索引里就拿到结果；查所有列时还要回表">
+  <text x="20" y="24" class="mono">SELECT id, user_id FROM orders WHERE user_id = 7</text>
+  <rect x="20" y="38" width="150" height="36" class="obj"/><text x="95" y="61" text-anchor="middle">二级索引</text>
+  <line x1="172" y1="56" x2="226" y2="56" class="arrow-green" marker-end="url(#arrow-green)"/>
+  <rect x="230" y="38" width="100" height="36" class="ok"/><text x="280" y="61" text-anchor="middle">结果</text>
+  <text x="350" y="52">id、user_id 索引里都有</text>
+  <text x="350" y="70" fill="#2e7d32">→ 不回表：覆盖索引</text>
+  <text x="20" y="118" class="mono">SELECT * FROM orders WHERE user_id = 7</text>
+  <rect x="20" y="132" width="150" height="36" class="obj"/><text x="95" y="155" text-anchor="middle">二级索引</text>
+  <line x1="172" y1="150" x2="226" y2="150" class="line" marker-end="url(#arrow)"/>
+  <text x="199" y="142" text-anchor="middle" class="small">id</text>
+  <rect x="230" y="132" width="170" height="36" class="hot"/><text x="315" y="155" text-anchor="middle">聚簇索引（回表）</text>
+  <line x1="402" y1="150" x2="456" y2="150" class="line" marker-end="url(#arrow)"/>
+  <rect x="460" y="132" width="100" height="36" class="ok"/><text x="510" y="155" text-anchor="middle">结果</text>
+  <text x="320" y="200" text-anchor="middle" class="small">quantity、created_at 等列只在聚簇索引的叶子里，得回表去拿</text>
+</svg>
+<figcaption>在 MySQL 的 EXPLAIN 里，用了覆盖索引会在 Extra 列显示 <code>Using index</code>（第 13 节）</figcaption>
+</figure>
+<p>这也是为什么常说「<b>别写 SELECT *</b>」：只要真正需要的列，才有机会用上覆盖索引。「我的订单」列表页如果只显示状态和下单时间，下一节的联合索引 (user_id, status, created_at) 就能覆盖它。</p>
+
+<h2 id="composite">9. 联合索引与最左前缀</h2>
+<div class="term"><b>联合索引</b>（也叫组合索引、复合索引）：在<b>多列</b>上建的一个索引，例如 <code>CREATE INDEX idx_u_s_c ON orders(user_id, status, created_at);</code>。它的项先按 user_id 排序；user_id 相同的，再按 status 排序；前两列都相同的，再按 created_at 排序。就像字典先按第一个字母排，第一个字母相同再比第二个。</div>
+<p>网店的「我的订单 → 已付款」页面要查 <code>WHERE user_id = 7 AND status = 'paid'</code>，按时间排序。这个联合索引正好为它而建。看看它的叶子里，项是怎么排的（还是那 12 项，叶子末尾附带主键 id）：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 340" width="640" role="img" aria-label="联合索引按 user_id、status、created_at 排序：user_id 全局有序，status 只在同一个 user_id 内有序">
+  <text x="70" y="30" text-anchor="middle" class="title mono">user_id</text>
+  <text x="170" y="30" text-anchor="middle" class="title mono">status</text>
+  <text x="290" y="30" text-anchor="middle" class="title mono">created_at</text>
+  <text x="390" y="30" text-anchor="middle" class="title mono">id</text>
+  <rect x="20" y="40" width="410" height="22" class="plain"/><text x="70" y="56" text-anchor="middle" class="mono">5</text><text x="170" y="56" text-anchor="middle" class="mono">paid</text><text x="290" y="56" text-anchor="middle" class="mono">2026-10-30</text><text x="390" y="56" text-anchor="middle" class="mono">3</text>
+  <rect x="20" y="62" width="410" height="22" class="plain"/><text x="70" y="78" text-anchor="middle" class="mono">5</text><text x="170" y="78" text-anchor="middle" class="mono">shipped</text><text x="290" y="78" text-anchor="middle" class="mono">2026-11-02</text><text x="390" y="78" text-anchor="middle" class="mono">9</text>
+  <rect x="20" y="84" width="410" height="22" class="plain"/><text x="70" y="100" text-anchor="middle" class="mono">6</text><text x="170" y="100" text-anchor="middle" class="mono">paid</text><text x="290" y="100" text-anchor="middle" class="mono">2026-11-04</text><text x="390" y="100" text-anchor="middle" class="mono">12</text>
+  <rect x="20" y="106" width="410" height="22" class="hot"/><text x="70" y="122" text-anchor="middle" class="mono">7</text><text x="170" y="122" text-anchor="middle" class="mono">paid</text><text x="290" y="122" text-anchor="middle" class="mono">2026-10-28</text><text x="390" y="122" text-anchor="middle" class="mono">2</text>
+  <rect x="20" y="128" width="410" height="22" class="hot"/><text x="70" y="144" text-anchor="middle" class="mono">7</text><text x="170" y="144" text-anchor="middle" class="mono">paid</text><text x="290" y="144" text-anchor="middle" class="mono">2026-11-03</text><text x="390" y="144" text-anchor="middle" class="mono">8</text>
+  <rect x="20" y="150" width="410" height="22" class="hot"/><text x="70" y="166" text-anchor="middle" class="mono">7</text><text x="170" y="166" text-anchor="middle" class="mono">paid</text><text x="290" y="166" text-anchor="middle" class="mono">2026-11-05</text><text x="390" y="166" text-anchor="middle" class="mono">15</text>
+  <rect x="20" y="172" width="410" height="22" class="hot"/><text x="70" y="188" text-anchor="middle" class="mono">7</text><text x="170" y="188" text-anchor="middle" class="mono">refund</text><text x="290" y="188" text-anchor="middle" class="mono">2026-11-02</text><text x="390" y="188" text-anchor="middle" class="mono">7</text>
+  <rect x="20" y="194" width="410" height="22" class="hot"/><text x="70" y="210" text-anchor="middle" class="mono">7</text><text x="170" y="210" text-anchor="middle" class="mono">shipped</text><text x="290" y="210" text-anchor="middle" class="mono">2026-11-06</text><text x="390" y="210" text-anchor="middle" class="mono">18</text>
+  <rect x="20" y="216" width="410" height="22" class="plain"/><text x="70" y="232" text-anchor="middle" class="mono">8</text><text x="170" y="232" text-anchor="middle" class="mono">paid</text><text x="290" y="232" text-anchor="middle" class="mono">2026-11-01</text><text x="390" y="232" text-anchor="middle" class="mono">5</text>
+  <rect x="20" y="238" width="410" height="22" class="plain"/><text x="70" y="254" text-anchor="middle" class="mono">8</text><text x="170" y="254" text-anchor="middle" class="mono">unpaid</text><text x="290" y="254" text-anchor="middle" class="mono">2026-11-07</text><text x="390" y="254" text-anchor="middle" class="mono">20</text>
+  <rect x="20" y="260" width="410" height="22" class="plain"/><text x="70" y="276" text-anchor="middle" class="mono">9</text><text x="170" y="276" text-anchor="middle" class="mono">paid</text><text x="290" y="276" text-anchor="middle" class="mono">2026-11-08</text><text x="390" y="276" text-anchor="middle" class="mono">22</text>
+  <rect x="20" y="282" width="410" height="22" class="plain"/><text x="70" y="298" text-anchor="middle" class="mono">9</text><text x="170" y="298" text-anchor="middle" class="mono">shipped</text><text x="290" y="298" text-anchor="middle" class="mono">2026-10-31</text><text x="390" y="298" text-anchor="middle" class="mono">4</text>
+  <rect x="22" y="107" width="406" height="64" fill="none" stroke="#2e7d32" stroke-width="3"/>
+  <text x="445" y="118" class="small" fill="#2e7d32">绿框：user_id = 7</text>
+  <text x="445" y="134" class="small">且 status = 'paid'，</text>
+  <text x="445" y="150" class="small">3 项挨在一起，</text>
+  <text x="445" y="166" class="small">框内 created_at 有序</text>
+  <text x="445" y="196" class="small" fill="#e65100">橙色：user_id = 7 的</text>
+  <text x="445" y="212" class="small">5 项挨在一起，</text>
+  <text x="445" y="228" class="small">status 在这一段里有序</text>
+  <text x="320" y="328" text-anchor="middle" class="small">单看 status 一列（paid、shipped、paid……）或 created_at 一列，整体都是乱的</text>
+</svg>
+<figcaption>只有 user_id 在整个索引里有序。后面的列，只在「前面的列都相同」的那一段里才有序</figcaption>
+</figure>
+<p>B+ 树能快速定位，靠的是「有序」。于是规则就出来了：</p>
+<div class="term"><b>最左前缀匹配</b>：联合索引只能从<b>最左边的列</b>开始，<b>连续地</b>用上若干列来定位。(a, b, c) 上的索引，能用来定位的组合是 a、(a, b)、(a, b, c)，这些叫索引的<b>最左前缀</b>。中间断了一列，后面的列就用不上；某一列用的是<b>范围条件</b>（&gt;、&lt;、BETWEEN、LIKE 'abc%'），这一列能用上，但<b>它右边的列就用不上了</b>。</div>
+<p>逐个看网店的几个查询（「用上」指用来在 B+ 树里定位）：</p>
+<table>
+  <tr><th>WHERE 条件</th><th>用上的列</th><th>为什么</th></tr>
+  <tr><td><code>user_id = 7</code></td><td>user_id</td><td>最左一列，等值</td></tr>
+  <tr><td><code>user_id = 7 AND status = 'paid'</code></td><td>user_id, status</td><td>user_id 相同的一段里 status 有序</td></tr>
+  <tr><td><code>status = 'paid' AND user_id = 7</code></td><td>user_id, status</td><td>AND 两边可以交换，优化器会自己调整顺序。<b>最左前缀看的是索引列的顺序，不是 WHERE 的书写顺序</b></td></tr>
+  <tr><td><code>user_id = 7 AND status = 'paid' AND created_at &gt; '2026-11-01'</code></td><td>三列全用上</td><td>前两列等值，最后一列范围</td></tr>
+  <tr><td><code>status = 'paid'</code></td><td>一列也用不上</td><td>缺了最左列 user_id。status 在整个索引里是乱的</td></tr>
+  <tr><td><code>user_id = 7 AND created_at &gt; '2026-11-01'</code></td><td>只有 user_id</td><td>跳过了 status，在 user_id = 7 那一段里 created_at 是乱的（看图：11-02 排在 11-05 后面）</td></tr>
+  <tr><td><code>user_id &gt; 5 AND status = 'paid'</code></td><td>只有 user_id</td><td>user_id 是范围，6、7、8、9 混在一起，这一大段里 status 是乱的</td></tr>
+</table>
+<p>用不上来定位的条件并不是被忽略了：DBMS 在定位到的那一段里<b>逐项检查</b>它们，结果照样正确，只是要多看几项。MySQL 5.6 起还能在二级索引的项里先检查这些条件、不满足的就不回表（叫<b>索引下推</b>，EXPLAIN 的 Extra 显示 <code>Using index condition</code>），省掉一部分回表。</p>
+<p>把这个规则反过来用，就是建联合索引的口诀：<b>等值条件的列放前面，范围条件的列放最后</b>；同样是等值，经常单独出现的列放最左（例如 user_id），这样一个 (user_id, status, created_at) 就能同时服务「某用户的全部订单」「某用户某状态的订单」两种查询，不必再单独建 idx_user_id。</p>
+
+<h2 id="demo-leftmost">10. 动手玩 2：最左前缀检查器</h2>
+<p>点一个 WHERE 条件，动画从最左列开始，逐列判断：<b>绿色</b> = 用上了，<b>红色</b> = 在这里停下（并写出原因），<b>灰色</b> = 停下之后的列。下面的表就是上一张图的 12 项：<b>橙色</b>是索引直接定位到的那一段，<b>绿色加粗</b>是逐项检查后真正满足全部条件的项。最后两个按钮是下一节要讲的「索引失效」：对列做了运算。</p>
+<div class="demo" id="leftmost"></div>
+
+<h2 id="invalid">11. 索引失效：建了索引却没用上</h2>
+<p>「索引失效」指的是：列上明明有索引，但 WHERE 写法让优化器没法用它来定位，只好全表扫描。原因几乎都是同一个：<b>B+ 树是按列本身的值排序的，条件必须能直接拿列的值去比</b>。常见的五种：</p>
+<table>
+  <tr><th>情况</th><th>例子（orders 上有 idx_user_id、idx_u_s_c）</th><th>为什么用不上 / 怎么改</th></tr>
+  <tr><td>对列做运算或套函数</td><td><code>WHERE user_id + 1 = 8</code><br><code>WHERE MONTH(created_at) = 11</code></td><td>树按 user_id 排序，不按 user_id + 1 排序。把运算挪到另一边：<code>user_id = 8 - 1</code>；<code>created_at &gt;= '2026-11-01' AND created_at &lt; '2026-12-01'</code></td></tr>
+  <tr><td>隐式类型转换</td><td>假如手机号列 <code>phone</code> 是 VARCHAR：<code>WHERE phone = 13800000000</code>（没加引号）</td><td>字符串和数字比较时，MySQL 把<b>列</b>的每个值转成数字再比，等于对列套了函数。写成 <code>phone = '13800000000'</code>。反过来，数字列和字符串比（<code>user_id = '7'</code>）转换的是常量，索引还能用</td></tr>
+  <tr><td>LIKE 以 % 开头</td><td><code>WHERE name LIKE '%盘'</code>（products.name 上有索引）</td><td>不知道第一个字，就不知道从树的哪里开始找。<code>LIKE 'U%'</code> 可以用：它等于范围条件「以 U 开头」</td></tr>
+  <tr><td>OR 连了没索引的列</td><td><code>WHERE user_id = 7 OR quantity = 3</code></td><td>quantity = 3 的行只能靠全表扫描找；反正要扫一遍，索引就白用了。两边的列都有索引时，MySQL 可以分别查再合并（Extra 显示 <code>Using union</code>）</td></tr>
+  <tr><td>不满足最左前缀</td><td><code>WHERE status = 'paid'</code>（只有 idx_u_s_c）</td><td>第 9 节：缺了最左列 user_id</td></tr>
+</table>
+<p>还有一种不算「失效」但效果一样的：<b>优化器估计用索引更慢</b>。例如 <code>WHERE status = 'paid'</code> 假如单独有 status 的索引，但 3000 万行里有一半是 paid，用索引要回表 1500 万次，不如直接全表扫描。所以 <code>!=</code>、<code>IS NOT NULL</code> 这类匹配行很多的条件，经常也走全表扫描，取决于数据分布。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 200" width="640" role="img" aria-label="索引按 user_id 本身排序；对列加 1 以后，优化器不知道该到树的哪里去找">
+  <text x="20" y="24" class="title">索引里排好序的是 user_id 本身：</text>
+  <rect x="20" y="36" width="60" height="30" class="plain"/><text x="50" y="56" text-anchor="middle" class="mono">5</text>
+  <rect x="80" y="36" width="60" height="30" class="plain"/><text x="110" y="56" text-anchor="middle" class="mono">6</text>
+  <rect x="140" y="36" width="60" height="30" class="ok"/><text x="170" y="56" text-anchor="middle" class="mono">7</text>
+  <rect x="200" y="36" width="60" height="30" class="plain"/><text x="230" y="56" text-anchor="middle" class="mono">8</text>
+  <rect x="260" y="36" width="60" height="30" class="plain"/><text x="290" y="56" text-anchor="middle" class="mono">9</text>
+  <text x="340" y="48" class="mono">user_id = 8 - 1</text>
+  <text x="340" y="66" fill="#2e7d32">先算出 7，在树里直接定位 ✓</text>
+  <line x1="170" y1="100" x2="170" y2="70" class="arrow-green" marker-end="url(#arrow-green)"/>
+  <text x="20" y="130" class="mono">user_id + 1 = 8</text>
+  <text x="20" y="152">DBMS 不会解方程：只能把每一项取出来，</text>
+  <text x="20" y="174">算 5+1、6+1、7+1……逐个和 8 比 → 全部读一遍</text>
+  <text x="400" y="174" fill="#c62828">✗ 退化成全表扫描</text>
+</svg>
+<figcaption>口诀：<b>索引列在 WHERE 里要「干干净净」地单独站在一边</b>，不做运算、不套函数、不被类型转换</figcaption>
+</figure>
+
+<h2 id="cost">12. 索引的代价，哪些列适合建索引</h2>
+<p>索引不是越多越好。每个二级索引都是一棵独立的 B+ 树，代价有三项：</p>
+<ul>
+  <li><b>占空间</b>：idx_user_id 每项存 (user_id, id)，3000 万项也要几百 MB。</li>
+  <li><b>拖慢写入</b>：每 INSERT 一笔订单，除了聚簇索引，<b>每个</b>二级索引也要插入一项；UPDATE 了被索引的列、DELETE 一行，相关的索引都要跟着改。orders 上建 5 个索引，下单就要改 6 棵树。</li>
+  <li><b>让优化器多费心</b>：可选的索引多了，选错的可能也多了。</li>
+</ul>
+<div class="term"><b>区分度</b>（选择性）：一列里<b>不同值的个数 ÷ 总行数</b>，越接近 1 越好。orders 的主键 id 区分度是 1；user_id 有几十万种值，区分度高；status 只有 4 种值，区分度约 4 ÷ 3000 万，接近 0，按它单独查一次要命中几百万行。</div>
+<table>
+  <tr><th>适合建索引</th><th>不适合建索引</th></tr>
+  <tr><td>经常出现在 WHERE、JOIN … ON、ORDER BY、GROUP BY 里的列（user_id、created_at）</td><td>很少用来查询的列（quantity）</td></tr>
+  <tr><td>区分度高的列</td><td>区分度低的列单独建（status、性别）；可以放在联合索引的中间</td></tr>
+  <tr><td>外键列（JOIN 要用，例如 orders.user_id）</td><td>数据很少的小表（products 只有几千行，全表扫描也就几十页）</td></tr>
+  <tr><td>能顺便覆盖常用查询的联合索引</td><td>频繁更新、又很少查询的列</td></tr>
+</table>
+
+<h2 id="explain">13. EXPLAIN：看一条查询用没用上索引</h2>
+<div class="term"><b>执行计划</b>：优化器为一条 SQL 选定的具体做法：先读哪张表、用哪个索引、大约读多少行。在 SQL 前面加 <code>EXPLAIN</code>，MySQL 就不执行它，而是把执行计划列出来。</div>
+<pre>EXPLAIN SELECT * FROM orders WHERE user_id = 7 AND status = 'paid';</pre>
+<p>结果是一张表，考题和日常排查主要看四列：</p>
+<table>
+  <tr><th>列</th><th>含义</th><th>重点</th></tr>
+  <tr><td><code>type</code></td><td>访问方式，从好到差：<code>const</code>（按主键或唯一索引等值查，最多 1 行）&gt; <code>eq_ref</code>（JOIN 时按对方主键查）&gt; <code>ref</code>（普通索引等值查）&gt; <code>range</code>（索引范围查）&gt; <code>index</code>（把整个索引扫一遍）&gt; <code>ALL</code>（全表扫描）</td><td>出现 <code>ALL</code> 就要警惕；一般至少要到 <code>range</code></td></tr>
+  <tr><td><code>key</code></td><td>实际用的索引名，NULL 表示没用索引（<code>possible_keys</code> 是可能用的）</td><td>上面这条显示 <code>idx_u_s_c</code></td></tr>
+  <tr><td><code>rows</code></td><td>优化器<b>估计</b>要检查多少行</td><td>越少越好；和实际返回的行数差很多，说明索引不够准</td></tr>
+  <tr><td><code>Extra</code></td><td>附加说明</td><td><code>Using index</code> = 覆盖索引，不回表；<code>Using where</code> = 取出行后还要再用 WHERE 过滤；<code>Using index condition</code> = 索引下推；<code>Using filesort</code> = 要额外排序，不能靠索引顺序</td></tr>
+</table>
+<p>（另外 <code>key_len</code> 表示用上的索引列一共多少字节，可以据此推出联合索引用上了几列。）</p>
+<p>本课的实战脚本 <code>examples/index_in_practice.py</code>（运行：<code>uv run examples/index_in_practice.py</code>）只用 Python 自带的 sqlite3，造一张 5 万行的 orders 表，用 SQLite 的 <code>EXPLAIN QUERY PLAN</code> 把本课的结论逐条验证一遍：没索引、建索引后、覆盖索引、对列做运算、OR、联合索引的每种 WHERE 条件。SQLite 的输出是一句话，和 MySQL EXPLAIN 的对应关系如下：</p>
+<table>
+  <tr><th>SQLite 的 EXPLAIN QUERY PLAN</th><th>对应 MySQL EXPLAIN</th></tr>
+  <tr><td><code>SCAN orders</code></td><td><code>type = ALL</code>，全表扫描</td></tr>
+  <tr><td><code>SEARCH orders USING INTEGER PRIMARY KEY (rowid=?)</code></td><td><code>type = const</code>，<code>key = PRIMARY</code>（SQLite 的 INTEGER PRIMARY KEY 就是聚簇的主键）</td></tr>
+  <tr><td><code>SEARCH orders USING INDEX idx_user_id (user_id=?)</code></td><td><code>type = ref</code>，<code>key = idx_user_id</code>，会回表</td></tr>
+  <tr><td><code>SEARCH … USING INDEX idx_u_s_c (user_id&gt;?)</code></td><td><code>type = range</code></td></tr>
+  <tr><td><code>SEARCH … USING COVERING INDEX …</code></td><td><code>Extra = Using index</code>，覆盖索引</td></tr>
+  <tr><td>括号里的 <code>(user_id=? AND status=?)</code></td><td>用上了联合索引的哪几列（MySQL 要看 <code>key_len</code> 推算）</td></tr>
+</table>
+<p>脚本的输出里，联合索引那几条正好印证了第 9 节的表：<code>user_id = 7 AND created_at &gt; …</code> 括号里只有 <code>(user_id=?)</code>；<code>user_id &gt; 5 AND status = 'paid'</code> 只有 <code>(user_id&gt;?)</code>；<code>status = 'paid'</code> 直接变成 <code>SCAN orders</code>。</p>
+
+<h2 id="auto-increment">14. 为什么主键推荐自增：页分裂</h2>
+<p>聚簇索引的叶子按主键顺序存满整行，一页 16KB 装满就不能再塞了。新插入的行放在哪，取决于它的主键：</p>
+<div class="term"><b>页分裂</b>：新行按主键应该插进一个<b>已经满了</b>的页的中间时，InnoDB 只好申请一个新页，把原页的大约一半行挪过去，两页各半满，再把新行插进去，同时还要在父节点里加一项（父节点也满了就接着往上分裂）。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 230" width="640" role="img" aria-label="自增主键总是追加到最后一页；随机主键插到满页中间，引发页分裂">
+  <text x="20" y="24" class="title">自增 id：新行永远在最右边</text>
+  <rect x="20" y="36" width="120" height="34" class="obj"/><text x="80" y="58" text-anchor="middle" class="mono">1 2 3</text>
+  <rect x="150" y="36" width="120" height="34" class="obj"/><text x="210" y="58" text-anchor="middle" class="mono">4 5 6</text>
+  <rect x="280" y="36" width="120" height="34" class="ok"/><text x="340" y="58" text-anchor="middle" class="mono">7 8 □</text>
+  <line x1="470" y1="53" x2="406" y2="53" class="arrow-green" marker-end="url(#arrow-green)"/>
+  <text x="478" y="50">新行 id = 9</text>
+  <text x="478" y="68" class="small">填进最后一页，满了就开新页</text>
+  <text x="20" y="110" class="title">随机主键（如 UUID）：插进满页的中间</text>
+  <rect x="20" y="122" width="120" height="34" class="bad"/><text x="80" y="144" text-anchor="middle" class="mono">10 30 50</text>
+  <line x1="200" y1="139" x2="146" y2="139" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="206" y="136">新行 20</text>
+  <text x="206" y="152" class="small">没地方了</text>
+  <line x1="290" y1="139" x2="340" y2="139" class="line" marker-end="url(#arrow)"/>
+  <text x="315" y="128" text-anchor="middle" class="small">分裂</text>
+  <rect x="350" y="122" width="120" height="34" class="hot"/><text x="410" y="144" text-anchor="middle" class="mono">10 20 □</text>
+  <rect x="480" y="122" width="120" height="34" class="hot"/><text x="540" y="144" text-anchor="middle" class="mono">30 50 □</text>
+  <text x="320" y="190" text-anchor="middle">分裂要挪数据、改父节点；分裂后的页只有半满，</text>
+  <text x="320" y="212" text-anchor="middle">同样多的行占更多页，以后查询也要多读页</text>
+</svg>
+<figcaption>每页只画了 3 个位置。自增主键让插入几乎只发生在最后一页，顺序写入，页都是满的</figcaption>
+</figure>
+<p>所以 InnoDB 的主键推荐用<b>自增整数</b>（<code>BIGINT AUTO_INCREMENT</code>）：</p>
+<ul>
+  <li>插入总在末尾，几乎不发生页分裂，页都填得满满的；</li>
+  <li>主键短（8 字节）：每个二级索引的叶子都要存一份主键，主键越短，二级索引越小。用 36 个字符的 UUID 当主键，每个二级索引都跟着变胖；</li>
+  <li>非叶子节点里的键也短，扇出更大（第 5 节的 14 字节就是这么来的）。</li>
+</ul>
+<p>同理，不要拿业务上会变的列（手机号、身份证号）当主键：主键一改，这一行在聚簇索引里要挪位置，所有二级索引里存的主键也都要跟着改。</p>
+
+<h2 id="engines">15. InnoDB 与 MyISAM</h2>
+<p>MyISAM 是 MySQL 5.5 以前的默认存储引擎，现在已很少用，但常和 InnoDB 对比着考：</p>
+<table>
+  <tr><th></th><th>InnoDB（默认）</th><th>MyISAM</th></tr>
+  <tr><td>索引结构</td><td>B+ 树；<b>聚簇索引</b>，数据就在主键索引的叶子里；二级索引叶子存主键</td><td>B+ 树；<b>非聚簇</b>，数据单独存一个文件，所有索引（包括主键索引）的叶子都存<b>行的地址</b>，没有回表一说，主键索引和二级索引地位一样</td></tr>
+  <tr><td>事务</td><td>支持（第 9 课）</td><td>不支持</td></tr>
+  <tr><td>锁</td><td>行锁（只锁改动的行）</td><td>表锁（改一行锁整张表）</td></tr>
+  <tr><td>外键</td><td>支持</td><td>不支持</td></tr>
+  <tr><td>崩溃后恢复</td><td>能，靠日志（第 9 课）</td><td>容易丢数据或损坏</td></tr>
+  <tr><td><code>COUNT(*)</code> 不带 WHERE</td><td>要扫描一个索引去数</td><td>直接返回存好的总行数，很快</td></tr>
+</table>
+<p>网店要下单扣库存、并发很高，这些都离不开事务和行锁，所以用 InnoDB。事务和锁是下一课的内容。</p>
+
+<h2 id="exam">题单怎么考</h2>
+<p>牛客「数据库专项」里和本课有关的题，基本是下面这几类：</p>
+<table class="qmap">
+  <tr><th>题型</th><th>怎么想</th><th>回看</th></tr>
+  <tr><td>MySQL 索引用的什么数据结构、为什么</td><td>B+ 树：扇出大树矮、读页少；叶子链表支持范围</td><td><a href="#bplus">4</a>、<a href="#why-btree">3</a></td></tr>
+  <tr><td>为什么不用哈希表 / 二叉树 / B 树</td><td>哈希不支持范围；二叉树太高；B 树非叶子存数据扇出小、范围查询不便</td><td><a href="#why-not-hash">3</a>、<a href="#why-not-bst">3</a>、<a href="#bplus">4</a></td></tr>
+  <tr><td>三层 B+ 树大约存多少行</td><td>16384 ÷ 14 ≈ 1170；1170 × 1170 × 16 ≈ 2000 万</td><td><a href="#capacity">5</a></td></tr>
+  <tr><td>聚簇索引和非聚簇索引的区别、什么是回表</td><td>叶子存整行 vs 存主键；拿主键再查一次聚簇索引</td><td><a href="#clustered">7</a></td></tr>
+  <tr><td>什么是覆盖索引、Using index 说明什么</td><td>要的列索引里都有，不回表</td><td><a href="#covering">8</a>、<a href="#explain">13</a></td></tr>
+  <tr><td>给联合索引 (a, b, c) 和几个 WHERE，问哪些能用上索引、用上几列</td><td>从最左列连续往右；缺一列或遇到范围就停；与书写顺序无关</td><td><a href="#composite">9</a>、<a href="#demo-leftmost">动画 2</a></td></tr>
+  <tr><td>以下哪种写法会导致索引失效</td><td>对列运算/函数、隐式转换、% 开头、OR 无索引列、不满足最左前缀</td><td><a href="#invalid">11</a></td></tr>
+  <tr><td>哪些列适合建索引、索引是不是越多越好</td><td>常查询、区分度高；索引占空间、拖慢写入</td><td><a href="#cost">12</a></td></tr>
+  <tr><td>EXPLAIN 的 type / key / rows / Extra</td><td>ALL 是全表扫描；key 为 NULL 没用索引</td><td><a href="#explain">13</a></td></tr>
+  <tr><td>为什么主键用自增</td><td>顺序插入不分裂、主键短二级索引小</td><td><a href="#auto-increment">14</a></td></tr>
+  <tr><td>InnoDB 和 MyISAM 的区别</td><td>聚簇/非聚簇、事务、行锁/表锁、外键</td><td><a href="#engines">15</a></td></tr>
+</table>
+
+<h2 id="self-test">自测</h2>
+<details><summary>1. MySQL InnoDB 的索引默认采用哪种数据结构？A. 哈希表　B. 二叉搜索树　C. B 树　D. B+ 树</summary>
+D。B+ 树的非叶子只存键和指针，一页能装上千个键，三层就能存千万行，查一行只读 3 页；叶子用链表串起来，范围查询顺着链表读就行。哈希表不支持范围查询；二叉搜索树每个节点只有两个分叉，3000 万行要约 25 层；B 树的非叶子也存数据，扇出小，范围查询要在各层间来回跳。</details>
+<details><summary>2. 主键是 INT（4 字节），指针 6 字节，页大小 16KB，一行数据 1KB。三层 B+ 树大约能存多少行？</summary>
+非叶子一项 = 4 + 6 = 10 字节，一页能放 16384 ÷ 10 ≈ 1638 项，扇出约 1638。叶子一页放 16384 ÷ 1024 = 16 行。三层共 1638 × 1638 = 2 683 044 个叶子页，2 683 044 × 16 = 42 928 704 行，约 4300 万行。主键越短，扇出越大，同样三层能存的行越多。</details>
+<details><summary>3. orders 表主键 id，二级索引 idx_user_id(user_id)。下面哪条查询不需要回表？A. <code>SELECT * FROM orders WHERE user_id = 7</code>　B. <code>SELECT id FROM orders WHERE user_id = 7</code>　C. <code>SELECT quantity FROM orders WHERE user_id = 7</code>　D. <code>SELECT created_at FROM orders WHERE user_id = 7</code></summary>
+B。二级索引的叶子存的是 (user_id, 主键 id)，B 要的 id 索引里就有，是覆盖索引。A、C、D 要的列只在聚簇索引的叶子（整行）里，必须拿 id 回表。</details>
+<details><summary>4. 联合索引 (a, b, c)。下列哪个条件<b>只能</b>用上 a 这一列？A. <code>a = 1 AND b = 2</code>　B. <code>b = 2 AND a = 1 AND c = 3</code>　C. <code>a = 1 AND c = 3</code>　D. <code>b = 2 AND c = 3</code></summary>
+C。跳过了 b，在 a = 1 的那一段里 c 是乱的。A 用上 a、b；B 三列都用上（书写顺序不影响，优化器会调整）；D 缺了最左列 a，一列都用不上。</details>
+<details><summary>5. 联合索引 (user_id, status, created_at)，条件 <code>user_id &gt; 5 AND status = 'paid'</code> 用上了几列？</summary>
+1 列（user_id）。user_id 是范围条件，能定位到 user_id 为 6、7、8、9…… 的一大段，但这一段里有好几种 user_id，status 只在同一个 user_id 内部有序，整体是乱的，所以从 user_id 之后停下。status = 'paid' 只能在这一段里逐项检查。可以在第 10 节的动画里点这个条件看。</details>
+<details><summary>6. user_id 上有索引。下列哪种写法会使索引失效？A. <code>user_id = 8 - 1</code>　B. <code>user_id + 1 = 8</code>　C. <code>user_id IN (7, 8)</code>　D. <code>user_id BETWEEN 7 AND 8</code></summary>
+B。索引按 user_id 本身排序，对列做了运算，就没法拿它在树里定位，只能每行算一遍 user_id + 1 再比，退化成全表扫描。A 的运算在常量一边，先算出 7 再查；C、D 是等值和范围条件，都能用索引。</details>
+<details><summary>7. EXPLAIN 的结果里 type 为 ALL、key 为 NULL，说明什么？Extra 出现 Using index 又说明什么？</summary>
+type = ALL、key = NULL：没用任何索引，做的是全表扫描，通常要检查 WHERE 写法（是不是索引失效）或者考虑建索引。Extra = Using index：用了覆盖索引，结果只从索引里读，不用回表。</details>
+<details><summary>8. 为什么 InnoDB 推荐用自增整数作主键，而不推荐用 UUID？</summary>
+① 自增 id 一个比一个大，新行总是追加在聚簇索引的最后一页，几乎不会页分裂，页都是满的；UUID 是随机的，经常要插进已满的页中间，引发页分裂，挪数据、页半空。② 每个二级索引的叶子都存一份主键，8 字节的 BIGINT 比 36 字符的 UUID 小得多，二级索引也就小、扇出大。</details>
+
+<div class="nav"><a href="07-sql.html">← 上一课：SQL</a><a href="09-transaction.html">下一课：事务与隔离级别 →</a></div>
+<script src="../anim.js"></script>
+<script src="js/08-index.js"></script>
+</body>
+</html>

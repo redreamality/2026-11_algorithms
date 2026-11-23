@@ -62,7 +62,7 @@ slowest_requests = heapq.nlargest(3, timeline, key=lambda request: request.laten
   <li>暴力做法是“全部排序再取前 K 个”，而 K 远小于 n：可以用堆把 O(n log n) 降到 O(n log k)。</li>
 </ul>
 
-<h2>题一：数组中的第 K 个最大元素（LeetCode 215）</h2>
+<h2 id="kth-largest">题一：数组中的第 K 个最大元素（LeetCode 215）</h2>
 <div class="problem">
 <p><b>题意：</b>返回数组从大到小数的第 k 个数，重复的数分别计数。例如 <code>[3, 2, 1, 5, 6, 4]</code>，k = 2：从大到小是 6, 5, 4, 3, 2, 1，第 2 个是 5。</p>
 <p><b>暴力做法：</b>排序后取 <code>nums[len(nums) - k]</code>，时间 O(n log n)。它是对的，但做了很多没必要的事：我们只关心最大的 k 个，其余 n − k 个数之间谁大谁小根本不重要。</p>
@@ -74,7 +74,7 @@ slowest_requests = heapq.nlargest(3, timeline, key=lambda request: request.laten
 <p><b>补充：</b>这题还有一种平均 O(n) 的“快速选择”做法，就是第 9 课快速排序的分区，只递归进答案所在的那一边。面试里两种都常见，堆的写法更不容易出错。</p>
 </div>
 
-<h2>题二：前 K 个高频元素（LeetCode 347）</h2>
+<h2 id="top-k-frequent">题二：前 K 个高频元素（LeetCode 347）</h2>
 <div class="problem">
 <p><b>题意：</b>返回出现次数最多的 k 个数，顺序随意。例如 <code>[1, 1, 1, 2, 2, 3]</code>，k = 2：1 出现 3 次，2 出现 2 次，3 出现 1 次，答案是 <code>[1, 2]</code>。</p>
 <p><b>暴力做法：</b>统计次数后，按次数把所有不同的数排序，取前 k 个。设不同的数有 m 个，时间 O(n + m log m)。</p>
@@ -84,7 +84,7 @@ slowest_requests = heapq.nlargest(3, timeline, key=lambda request: request.laten
 <p><b>补充：</b>还有一种 O(n) 的“桶”做法：次数最多是 n，开 n + 1 个桶，第 c 个桶放出现了 c 次的数，从最大的桶往回收集 k 个。</p>
 </div>
 
-<h2>题三：合并 K 个升序链表（LeetCode 23）</h2>
+<h2 id="merge-k-lists">题三：合并 K 个升序链表（LeetCode 23）</h2>
 <div class="problem">
 <p><b>题意：</b>给 k 个各自升序的链表，合并成一个升序链表。例如 <code>1→4→5</code>、<code>1→3→4</code>、<code>2→6</code> 合并成 <code>1→1→2→3→4→4→5→6</code>。设所有链表一共有 N 个节点。</p>
 <p><b>暴力做法：</b>把所有值收集起来排序再建链表，O(N log N)。或者像第 8 课归并排序那样，拿第一个链表依次和后面每个链表两两合并：结果链表越来越长，每次合并都要把它从头走一遍，最坏 O(N · k)。</p>
@@ -94,7 +94,7 @@ slowest_requests = heapq.nlargest(3, timeline, key=lambda request: request.laten
 <p><b>复杂度：</b>每个节点进出堆各一次，堆里最多 k 个元素，总时间 O(N log k)，额外空间 O(k)。</p>
 </div>
 
-<h2>题四：数据流的中位数（LeetCode 295）——本课重点</h2>
+<h2 id="median-finder">题四：数据流的中位数（LeetCode 295）——本课重点</h2>
 <div class="problem">
 <p><b>题意：</b>数一个一个地到来，要随时回答“目前所有数的中位数”。中位数是排好序后正中间的数；个数为偶数时，取中间两个数的平均值。例如依次加入 5、15、1：加入 5 后中位数是 5；加入 15 后是 (5 + 15) / 2 = 10；加入 1 后排好序是 1, 5, 15，中位数是 5。</p>
 <p><b>暴力做法为什么慢：</b>每次查询都把所有数排序，一次 O(n log n)。改进一点：维护一个有序列表，每来一个数用二分找到位置插进去。找位置是 O(log n)，但在 Python 列表中间插入要把后面的元素整体往后挪，是 O(n)。</p>
@@ -155,6 +155,54 @@ slowest_requests = heapq.nlargest(3, timeline, key=lambda request: request.laten
   <tr><td>373</td><td>查找和最小的 K 对数字</td><td>进阶：同上</td></tr>
   <tr><td>480</td><td>滑动窗口中位数</td><td>进阶：双堆 + 删除过期元素</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-215"><summary>LeetCode 215 · 数组中的第K个最大元素</summary>
+<p><b>题意</b>：给定整数数组 <code>nums</code> 和整数 <code>k</code>，返回数组排序后的第 <code>k</code> 个最大的元素（重复元素分别计数，不是第 k 个不同的元素）；要求设计时间复杂度为 O(n) 的算法。完整讲解见 <a href="#kth-largest">正文第 1 题</a>。</p>
+</details>
+<details id="lc-347"><summary>LeetCode 347 · 前 K 个高频元素</summary>
+<p><b>题意</b>：给定整数数组 <code>nums</code> 和整数 <code>k</code>，返回出现频率前 <code>k</code> 高的元素，可以按任意顺序返回；进阶要求时间复杂度优于 O(n log n)。完整讲解见 <a href="#top-k-frequent">正文第 2 题</a>。</p>
+</details>
+<details id="lc-23"><summary>LeetCode 23 · 合并 K 个升序链表</summary>
+<p><b>题意</b>：给定一个链表数组 <code>lists</code>，每个链表都已按升序排列，把所有链表合并成一个升序链表并返回其头节点。完整讲解见 <a href="#merge-k-lists">正文第 3 题</a>。</p>
+</details>
+<details id="lc-295"><summary>LeetCode 295 · 数据流的中位数</summary>
+<p><b>题意</b>：实现 <code>MedianFinder</code> 类：<code>MedianFinder()</code> 初始化对象，<code>addNum(num)</code> 把数据流中的整数 <code>num</code> 加入结构，<code>findMedian()</code> 返回目前所有元素的中位数（元素个数为偶数时取中间两个数的平均值）。完整讲解见 <a href="#median-finder">正文第 4 题</a>。</p>
+</details>
+<details id="lc-703"><summary>LeetCode 703 · 数据流中的第 K 大元素</summary>
+<p><b>题意</b>：设计一个类，找出数据流中第 <code>k</code> 大的元素（是排序后的第 k 大，不是第 k 个不同的元素）。实现 <code>KthLargest</code> 类：</p>
+<ul>
+  <li><code>KthLargest(k, nums)</code>：用整数 <code>k</code> 和初始整数数组 <code>nums</code> 初始化对象。</li>
+  <li><code>add(val)</code>：把 <code>val</code> 加入数据流，返回当前数据流中第 <code>k</code> 大的元素。</li>
+</ul>
+<p><b>例子</b>：<code>KthLargest(3, [4, 5, 8, 2])</code> 之后，依次调用 <code>add(3)</code>、<code>add(5)</code>、<code>add(10)</code>、<code>add(9)</code>、<code>add(4)</code>，返回值依次是 <code>4</code>、<code>5</code>、<code>5</code>、<code>8</code>、<code>8</code>。例如 <code>add(10)</code> 后数据流是 2、3、4、5、5、8、10，从大往小数第 3 个是 5。</p>
+<p><b>数据范围</b>：0 ≤ nums.length ≤ 10<sup>4</sup>，1 ≤ k ≤ nums.length + 1，-10<sup>4</sup> ≤ 值 ≤ 10<sup>4</sup>，<code>add</code> 最多调用 10<sup>4</sup> 次；保证每次查找时数据流中至少有 <code>k</code> 个元素。</p>
+</details>
+<details id="lc-973"><summary>LeetCode 973 · 最接近原点的 K 个点</summary>
+<p><b>题意</b>：给定数组 <code>points</code>，其中 <code>points[i] = [x<sub>i</sub>, y<sub>i</sub>]</code> 是平面上的一个点，再给定整数 <code>k</code>，返回离原点 <code>(0, 0)</code> 最近的 <code>k</code> 个点。距离是欧几里得距离。答案可以按任意顺序返回，并且保证答案唯一（与顺序无关）。</p>
+<p><b>例子</b>：输入 <code>points = [[1, 3], [-2, 2]]</code>，<code>k = 1</code>，输出 <code>[[-2, 2]]</code>。两个点到原点距离的平方分别是 10 和 8，8 更小。</p>
+<p><b>数据范围</b>：1 ≤ k ≤ points.length ≤ 10<sup>4</sup>，-10<sup>4</sup> ≤ x<sub>i</sub>, y<sub>i</sub> ≤ 10<sup>4</sup>，坐标可以是负数。</p>
+</details>
+<details id="lc-692"><summary>LeetCode 692 · 前K个高频单词</summary>
+<p><b>题意</b>：给定单词列表 <code>words</code> 和整数 <code>k</code>，返回出现次数前 <code>k</code> 多的单词。返回的列表按出现次数从高到低排序；出现次数相同的单词按字典序从小到大排序。进阶要求时间复杂度 O(n log k)。</p>
+<p><b>例子</b>：输入 <code>words = ["i", "love", "leetcode", "i", "love", "coding"]</code>，<code>k = 2</code>，输出 <code>["i", "love"]</code>。"i" 和 "love" 都出现 2 次，是最多的两个；次数相同，按字典序 "i" 排在前面。</p>
+<p><b>数据范围</b>：1 ≤ words.length ≤ 500，每个单词长度 1～10，只含小写字母；k 在 [1, 不同单词的个数] 之间。</p>
+</details>
+<details id="lc-378"><summary>LeetCode 378 · 有序矩阵中第 K 小的元素</summary>
+<p><b>题意</b>：给定 n × n 矩阵 <code>matrix</code>，每一行和每一列都按升序排列，返回矩阵中第 <code>k</code> 小的元素（排序后的第 k 小，不是第 k 个不同的元素）。要求内存复杂度优于 O(n<sup>2</sup>)。</p>
+<p><b>例子</b>：输入 <code>matrix = [[1, 5, 9], [10, 11, 13], [12, 13, 15]]</code>，<code>k = 8</code>，输出 <code>13</code>。全部元素从小到大是 1、5、9、10、11、12、13、13、15，第 8 个是 13。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 300，-10<sup>9</sup> ≤ matrix[i][j] ≤ 10<sup>9</sup>，1 ≤ k ≤ n<sup>2</sup>。</p>
+</details>
+<details id="lc-373"><summary>LeetCode 373 · 查找和最小的 K 对数字</summary>
+<p><b>题意</b>：给定两个按非递减顺序排列的整数数组 <code>nums1</code>、<code>nums2</code> 和整数 <code>k</code>。一个数对 <code>(u, v)</code> 由 <code>nums1</code> 中的一个元素 <code>u</code> 和 <code>nums2</code> 中的一个元素 <code>v</code> 组成。返回和最小的 <code>k</code> 个数对。</p>
+<p><b>例子</b>：输入 <code>nums1 = [1, 7, 11]</code>，<code>nums2 = [2, 4, 6]</code>，<code>k = 3</code>，输出 <code>[[1, 2], [1, 4], [1, 6]]</code>。和最小的三个数对的和是 3、5、7；其余数对的和至少是 7 + 2 = 9。</p>
+<p><b>数据范围</b>：1 ≤ nums1.length, nums2.length ≤ 10<sup>5</sup>，-10<sup>9</sup> ≤ 元素 ≤ 10<sup>9</sup>，1 ≤ k ≤ 10<sup>4</sup>，k ≤ nums1.length × nums2.length；数对总数可达 10<sup>10</sup>，不能全部列出。</p>
+</details>
+<details id="lc-480"><summary>LeetCode 480 · 滑动窗口中位数</summary>
+<p><b>题意</b>：实现函数 <code>medianSlidingWindow(nums, k)</code>：一个大小为 <code>k</code> 的窗口从数组 <code>nums</code> 的最左端滑到最右端，每次右移一位，返回每个窗口中元素的中位数组成的数组（k 为偶数时中位数是中间两个数的平均值）。与真实值误差在 10<sup>-5</sup> 以内的答案都算正确。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 3, -1, -3, 5, 3, 6, 7]</code>，<code>k = 3</code>，输出 <code>[1, -1, -1, 3, 5, 6]</code>。例如第一个窗口 <code>[1, 3, -1]</code> 排序后是 -1、1、3，中位数是 1；第二个窗口 <code>[3, -1, -3]</code> 的中位数是 -1。</p>
+<p><b>数据范围</b>：1 ≤ k ≤ nums.length ≤ 10<sup>5</sup>，-2<sup>31</sup> ≤ nums[i] ≤ 2<sup>31</sup> − 1。</p>
+</details>
 
 <h2>练习</h2>
 <p>补全 <code>dsa/top_k.py</code>。建议顺序：<code>kth_largest</code> → <code>top_k_frequent</code> → <code>merge_k_sorted_lists</code> → <code>MedianFinder</code>。建链表、打印链表的工具函数已经写好，不用动。写完一题就运行一次，看打印出来的「输入、期望、实际」是否一致：</p>

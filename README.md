@@ -33,6 +33,7 @@ uv run pytest                               # 全部
 | 阶段 | 课 | 讲解 | 骨架 + 测试 | 完成 |
 |---|---|---|---|---|
 | 预备 | Python 基础 | ✅ | ✅ `python_basics.py` | ☐ |
+| | ACM 模式输入输出 | ✅ | ✅ `acm_io.py` | ☐ |
 | 1 基础 | 00 复杂度 | ✅ | ✅ `complexity.py` | ☐ |
 | | 01 动态数组 | ✅ | ✅ `dynamic_array.py` | ☐ |
 | | 02 单链表 | ✅ | ✅ `linked_list.py` | ☐ |
@@ -73,6 +74,30 @@ uv run pytest                               # 全部
 | | 37 一维 DP 高频题 | ✅ | `dp_1d.py` | ☐ |
 | | 38 二维 DP 高频题 | ✅ | `dp_2d.py` | ☐ |
 | | 39 位运算技巧 | ✅ | `bit_manipulation.py` | ☐ |
+| 7 笔试模板 | 40 数论模板（gcd、筛法、取模、快速幂、逆元、组合数） | ✅ | ✅ `number_theory.py` | ☐ |
+| | 41 差分数组 | ✅ | ✅ `difference_array.py` | ☐ |
+| | 42 树状数组（Fenwick Tree） | ✅ | ✅ `fenwick_tree.py` | ☐ |
+| | 43 区间 DP | ✅ | ✅ `interval_dp.py` | ☐ |
+| | 44 状压 DP | ✅ | ✅ `bitmask_dp.py` | ☐ |
+| | 45 树形 DP | ✅ | ✅ `tree_dp.py` | ☐ |
+| | 46 最短路变种（0-1 BFS、Floyd、Bellman-Ford） | ✅ | ✅ `shortest_path_variants.py` | ☐ |
+| 附录 | 选择题速查 | ✅ | ✅ `cheatsheet.py` | ☐ |
+
+第 7 阶段和 ACM 预备课是 2026-11-22 按[牛客蚂蚁笔试攻略](https://www.nowcoder.com/discuss/767459618661355520)补的：笔试是 ACM 模式（自己读 stdin），编程题常考能默写的模板。
+
+### 另一个系列：计算机基础（`lessons/cs/`）
+
+笔试选择题的「基础分」：操作系统、计算机网络、数据库。浏览器打开 `lessons/cs/index.html`。来源是用户给的[牛客蚂蚁笔试攻略](https://www.nowcoder.com/discuss/767459618661355520)，配套题单是牛客「操作系统专项」(test/607)、「计算机网络专项」(test/146643)、「数据库专项」(test/606)。这三个题单要登录后随机组卷，拿不到原题，所以知识点按这些题库的高频题型提炼。
+
+| 科目 | 课 | 页面 |
+|---|---|---|
+| 操作系统 | 1 进程与调度 · 2 虚拟内存 · 3 锁与死锁 | `01-process-scheduling` `02-virtual-memory` `03-deadlock` |
+| 计算机网络 | 4 分层与 IP · 5 TCP · 6 HTTP | `04-network-layers` `05-tcp` `06-http` |
+| 数据库 | 7 SQL · 8 索引 · 9 事务 | `07-sql` `08-index` `09-transaction` |
+
+和算法课的不同：这个系列不写骨架和单测，每课 = 讲解（多张内联 SVG 图）+ 交互动画（`lessons/cs/js/`，配 `tests/e2e/test_csNN_*.py`）+「题单怎么考」（题型 → 本课小节）+ 折叠答案的自测题。第 7～9 课另有 sqlite3 实战脚本（`examples/sql_in_practice.py` 等），由 `tests/test_examples.py` 自动跑。
+
+写这个系列的约定（用户 2026-11-22 要求）：语言友好易懂；每课 self-contain，先理清概念依赖再由浅入深；从题单提炼知识点并把题和知识点对应起来；多用 SVG 画图。整个系列用「一家小网店」作主线例子，一课之内用同一组数据讲到底。每课负责定义哪些概念、各课之间的依赖，见目录页的依赖图。样式在 `lessons/cs/cs.css`（SVG 配色 class：obj / hot / ok / bad / muted / plain）。
 
 **为什么是这个顺序**：后一课要用到前一课。复杂度是尺子；数组（连续格子）和链表（指针串联）是两种最基本的存法，后面的结构都由它们拼成（哈希表 = 数组 + 链表）。递归必须在归并排序和树之前。图把前面全用上（BFS 靠队列、Dijkstra 靠堆、Kruskal 靠排序 + 并查集）。贪心、DP、回溯放最后，是把见过的具体算法抽象成方法。2026-11-10 把“递归”从第 17 课提前到第 05 课。
 
@@ -91,9 +116,12 @@ uv run pytest                               # 全部
 
 - 2026-11-15：用户读了几课后提出两点：一是 `yield from`、`setdefault`、非标准库这些写法要在用之前讲；二是讲某课时前序知识必须已经讲完。于是新增预备课 `lessons/python-basics.html`（20 个小节，各有锚点；配生成器 / `yield from` 两个动画、`dsa/python_basics.py` 书店练习、测试和实战脚本），每课开头加了 `.prereq`「开始前要会」，链接到预备课锚点和前序课。8 个并行 agent 逐课审查并修正了「先用后讲」（例如堆讲之前就用 `heapq`、队列讲之前就用 `deque`）。`test_lessons.py` 新增两项检查：锚点链接必须存在，每课必须有「开始前要会」。
 
+- 2026-11-22：新增「计算机基础」系列（`lessons/cs/`，9 课，见上文）。第 1 课由主会话写作样板，第 2～9 课由 8 个并行 agent 按同一份说明写完。每课 10～15 张 SVG 图、1～2 个动画、8 道自测题，正文和测试里的数字都用仓库外的参考实现核对过。`test_lessons.py` 改成 `rglob`，会一并检查 `lessons/cs/`。系列相关的 107 个测试（e2e、链接、sqlite3 实战脚本）全部通过；每页 id 不重复，跨课锚点都存在。还没提交，用户也还没读。
+
 ## 下一步
 
 - 用户：先扫一遍预备课，再从第 00 课开始，按顺序学。
+- 用户：计算机基础系列从 `lessons/cs/index.html` 开始读，每课读完去刷对应的牛客专项题单。
 - agent：课已经全部铺完。用户学完一课后，review 代码，再根据反馈调整后面几课的难度和篇幅。
 
 ## 给接手 agent 的约定

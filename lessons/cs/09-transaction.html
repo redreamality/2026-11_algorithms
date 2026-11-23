@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>计算机基础 第 9 课 · 事务与隔离级别</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="cs.css">
+<style>
+/* 动画：左右两列是事务 A、B，中间是数据库 */
+#isolation .ops-bar button.on { background: #ffe0b2; border-color: #e65100; }
+#isolation .tl { display: grid; grid-template-columns: 1fr 280px 1fr; gap: 8px; align-items: start; }
+#isolation .col-head { font-weight: bold; border-bottom: 2px solid #ddd; margin-bottom: 4px; }
+#isolation .col { font: 13px/1.4 Consolas, "Microsoft YaHei", monospace; }
+#isolation .slot { min-height: 22px; padding: 2px 6px; margin: 2px 0; border-radius: 3px; }
+#isolation .slot:not(.blank) { background: #e3f2fd; }
+#isolation .slot.wait { background: #fff3e0; border: 1px dashed #e65100; }
+#isolation .slot.ok { background: #c8e6c9; }
+#isolation .slot.bad { background: #ffcdd2; }
+#isolation .db { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; font-size: 14px; line-height: 1.5; }
+#isolation .db-row { margin-bottom: 6px; }
+#isolation .db-row .committed { white-space: nowrap; }
+#isolation .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 3px; }
+#isolation .ver { display: inline-flex; flex-direction: column; border: 2px solid #0b62c4; border-radius: 4px; padding: 1px 5px; font: 12px/1.35 Consolas, "Microsoft YaHei", monospace; background: #e3f2fd; }
+#isolation .ver.uncommitted { border-color: #e65100; background: #ffe0b2; border-style: dashed; }
+#isolation .ver.seen { box-shadow: 0 0 0 3px #2e7d32; }
+#isolation .ver-state { color: #666; }
+#isolation .link { font-size: 14px; min-width: 0; }
+#isolation .locks { margin-top: 4px; font-size: 13px; }
+#isolation .read { margin-top: 6px; padding-top: 4px; border-top: 1px solid #eee; }
+#isolation .read-value { color: #2e7d32; font-size: 16px; }
+#isolation .verdict { padding: 6px 12px; border-radius: 4px; font-weight: bold; }
+#isolation .verdict.bad { background: #ffcdd2; }
+#isolation .verdict.ok { background: #c8e6c9; }
+</style>
+</head>
+<body>
+<!-- 全页共用的箭头。SVG 里写 marker-end="url(#arrow)" 即可 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+  <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0b62c4"/></marker>
+  <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c62828"/></marker>
+  <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e7d32"/></marker>
+</defs></svg>
+
+<p><a href="index.html">← 计算机基础目录</a></p>
+<h1>第 9 课 · 事务与隔离级别</h1>
+<p class="one-line">下单要改三张表，这三步必须<b>要么全做、要么全不做</b>，这就是<b>事务</b>。很多顾客同时下单时，事务之间会互相干扰；<b>隔离级别</b>规定了允许干扰到什么程度，数据库用<b>锁</b>和<b>多版本（MVCC）</b>来实现它。</p>
+<p class="prereq">开始前要会：<a href="07-sql.html">第 7 课 SQL</a>（表、行、主键，SELECT / UPDATE / INSERT，网店的 users / products / orders 三张表）、<a href="08-index.html">第 8 课 索引</a>（B+ 树索引、主键索引，数据按页存在磁盘上）、<a href="03-deadlock.html">第 3 课 并发、锁与死锁</a>（竞态条件、互斥锁、死锁的四个必要条件）。</p>
+
+<p>前两课讲了网店的数据怎么存、怎么查得快。这一课看「写」：顾客点下单按钮，网店程序要在数据库里连着改好几处；同一时刻还有别的顾客在买同一件商品。怎样保证数据不出错？整课都用同一件商品：<b>商品 42（保温杯），stock = 10，price = 99</b>，以及买它的<b>用户 1，余额 300</b>。</p>
+
+<p class="roadmap"><b>本课的路线</b>：一次下单就是一个事务 → ACID 四个性质 → 原子性和持久性靠日志 → 并发事务的四种问题 → 隔离级别 → 锁 → MVCC → 间隙锁与幻读 → 数据库里的死锁 → 动手玩 → 用代码试试 → 九课串起来 → 题单怎么考。</p>
+
+<h2 id="order">1. 一次下单，就是一个事务</h2>
+<p>先给第 7 课的 users 表加一列余额（单位：元），用户 1 的余额是 300：</p>
+<pre>ALTER TABLE users ADD COLUMN balance DECIMAL(10, 2) NOT NULL DEFAULT 0;
+UPDATE users SET balance = 300 WHERE id = 1;</pre>
+<p>用户 1 买 1 个商品 42，网店程序要执行三条语句：</p>
+<pre>UPDATE products SET stock = stock - 1 WHERE id = 42;                   -- ① 扣库存：10 → 9
+INSERT INTO orders (user_id, product_id, quantity) VALUES (1, 42, 1);  -- ② 写订单
+UPDATE users SET balance = balance - 99 WHERE id = 1;                  -- ③ 扣余额：300 → 201</pre>
+<p>如果执行完 ① ② 时服务器断电，或者 ③ 发现余额不够，就会留下「库存少了、订单有了、钱没扣」的烂摊子。我们要的是：三条语句当成<b>一个整体</b>。</p>
+<div class="term"><b>事务</b>（transaction）：数据库里一组操作的整体，这组操作<b>要么全部生效，要么全部不生效</b>。</div>
+<p>用三条命令告诉数据库事务从哪开始、到哪结束：</p>
+<ul>
+  <li><code>BEGIN</code>（或 <code>START TRANSACTION</code>）：开始一个事务。</li>
+  <li><code>COMMIT</code>：<b>提交</b>，事务里的修改全部正式生效。</li>
+  <li><code>ROLLBACK</code>：<b>回滚</b>，把事务里已经做的修改全部撤销，就像什么都没发生过。</li>
+</ul>
+<figure class="fig">
+<svg viewBox="0 0 640 230" width="640" role="img" aria-label="下单事务：三步都成功就提交，中途出错就回滚">
+  <text x="10" y="20" class="title">都成功：提交</text>
+  <rect x="10" y="32" width="66" height="50" rx="4" class="muted"/><text x="43" y="62" text-anchor="middle" class="mono">BEGIN</text>
+  <line x1="76" y1="57" x2="96" y2="57" class="line" marker-end="url(#arrow)"/>
+  <rect x="98" y="32" width="130" height="50" rx="4" class="obj"/>
+  <text x="163" y="53" text-anchor="middle">① 扣库存</text><text x="163" y="72" text-anchor="middle" class="small">stock 10 → 9</text>
+  <line x1="228" y1="57" x2="248" y2="57" class="line" marker-end="url(#arrow)"/>
+  <rect x="250" y="32" width="130" height="50" rx="4" class="obj"/>
+  <text x="315" y="53" text-anchor="middle">② 写订单</text><text x="315" y="72" text-anchor="middle" class="small">INSERT orders</text>
+  <line x1="380" y1="57" x2="400" y2="57" class="line" marker-end="url(#arrow)"/>
+  <rect x="402" y="32" width="130" height="50" rx="4" class="obj"/>
+  <text x="467" y="53" text-anchor="middle">③ 扣余额</text><text x="467" y="72" text-anchor="middle" class="small">balance 300 → 201</text>
+  <line x1="532" y1="57" x2="552" y2="57" class="line" marker-end="url(#arrow)"/>
+  <rect x="554" y="32" width="76" height="50" rx="4" class="ok"/><text x="592" y="62" text-anchor="middle" class="mono">COMMIT</text>
+  <text x="10" y="122" class="title">第 ③ 步出错（比如余额不够）：回滚</text>
+  <rect x="402" y="134" width="130" height="50" rx="4" class="bad"/>
+  <text x="467" y="155" text-anchor="middle">③ 出错</text><text x="467" y="174" text-anchor="middle" class="small">余额不够扣</text>
+  <line x1="400" y1="159" x2="232" y2="159" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <rect x="98" y="134" width="130" height="50" rx="4" class="hot"/>
+  <text x="163" y="155" text-anchor="middle" class="mono">ROLLBACK</text><text x="163" y="174" text-anchor="middle" class="small">撤销 ① 和 ②</text>
+  <text x="320" y="214" text-anchor="middle">结果：库存还是 10，没有新订单，余额还是 300</text>
+</svg>
+<figcaption>事务的边界由 BEGIN 和 COMMIT / ROLLBACK 划定：中间的修改，最后要么一起生效，要么一起撤销</figcaption>
+</figure>
+<p>如果不写 BEGIN，MySQL 默认开着<b>自动提交</b>（autocommit）：每条语句自己就是一个事务，执行完马上提交。所以要把几条语句绑在一起，必须显式写 BEGIN。</p>
+
+<h2 id="acid">2. 事务的四个性质：ACID</h2>
+<p>说一个数据库「支持事务」，指的是它保证下面四件事，取英文首字母合称 <b>ACID</b>：</p>
+<div class="term"><b>原子性</b>（Atomicity）：事务里的操作要么全做，要么全不做，不会只做一半。「原子」就是「不可分割」，和第 3 课的原子操作是同一个意思。</div>
+<div class="term"><b>一致性</b>（Consistency）：事务执行前后，数据都满足业务规则。对网店来说：库存不为负，每卖出一件，库存少 1、多一条订单、余额少 99，三者对得上。</div>
+<div class="term"><b>隔离性</b>（Isolation）：多个事务同时执行时，互相不干扰，每个事务感觉不到别人正在改数据（干扰到什么程度算可以接受，由第 5 节的隔离级别决定）。</div>
+<div class="term"><b>持久性</b>（Durability）：事务一旦提交，修改就永久保存，之后哪怕断电、宕机也不会丢。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 230" width="640" role="img" aria-label="原子性、隔离性、持久性是手段，一致性是目的">
+  <rect x="20" y="20" width="180" height="95" rx="6" class="obj"/>
+  <text x="110" y="45" text-anchor="middle" class="title">原子性 A</text>
+  <text x="110" y="70" text-anchor="middle" class="small">三步要么全做、要么全不做</text>
+  <text x="110" y="98" text-anchor="middle">实现：undo log</text>
+  <rect x="230" y="20" width="180" height="95" rx="6" class="obj"/>
+  <text x="320" y="45" text-anchor="middle" class="title">隔离性 I</text>
+  <text x="320" y="70" text-anchor="middle" class="small">同时执行的事务互不干扰</text>
+  <text x="320" y="98" text-anchor="middle">实现：锁 + MVCC</text>
+  <rect x="440" y="20" width="180" height="95" rx="6" class="obj"/>
+  <text x="530" y="45" text-anchor="middle" class="title">持久性 D</text>
+  <text x="530" y="70" text-anchor="middle" class="small">提交以后，断电也不会丢</text>
+  <text x="530" y="98" text-anchor="middle">实现：redo log</text>
+  <line x1="110" y1="115" x2="200" y2="153" class="line" marker-end="url(#arrow)"/>
+  <line x1="320" y1="115" x2="320" y2="153" class="line" marker-end="url(#arrow)"/>
+  <line x1="530" y1="115" x2="440" y2="153" class="line" marker-end="url(#arrow)"/>
+  <rect x="60" y="155" width="520" height="60" rx="6" class="ok"/>
+  <text x="320" y="180" text-anchor="middle" class="title">一致性 C：这是目的</text>
+  <text x="320" y="202" text-anchor="middle" class="small">库存不为负；卖出一件，就少一件库存、多一条订单、扣一份钱</text>
+</svg>
+<figcaption>A、I、D 是数据库提供的手段，C 是最终要达到的目的（还需要表上的约束和程序逻辑写对）</figcaption>
+</figure>
+<p>考试常问「哪个性质靠什么实现」：</p>
+<table>
+  <tr><th>性质</th><th>靠什么</th><th>在哪一节</th></tr>
+  <tr><td>原子性</td><td>undo log（回滚日志）：记下修改前的旧值，回滚时照着改回去</td><td><a href="#logs">3</a></td></tr>
+  <tr><td>持久性</td><td>redo log（重做日志）：提交时先把修改记到磁盘上的日志里</td><td><a href="#logs">3</a></td></tr>
+  <tr><td>隔离性</td><td>锁 + MVCC（多版本并发控制）</td><td><a href="#locks">6</a>、<a href="#mvcc">7</a></td></tr>
+  <tr><td>一致性</td><td>是目的，由上面三个加上约束（第 7 课的 NOT NULL、外键等）共同保证</td><td></td></tr>
+</table>
+<p>下面说到具体实现时，都以 MySQL 默认的存储引擎 <b>InnoDB</b> 为准（第 8 课提过它）。</p>
+
+<h2 id="logs">3. 原子性和持久性：靠两种日志</h2>
+<p>第 8 课讲过：数据按页存在磁盘上，读写以页为单位，而磁盘比内存慢得多。所以 InnoDB 不会每改一行就去写磁盘，而是先在内存里改：</p>
+<div class="term"><b>缓冲池</b>（buffer pool）：InnoDB 在内存里开的一大块区域，缓存最近用过的数据页。读写数据都先在这里进行，改过的页以后再找时机写回磁盘。</div>
+<p>这带来两个问题。① 事务改到一半要回滚，旧值去哪找？② 事务已经提交了，但改过的页还在内存里没写回磁盘，这时断电，修改就丢了，持久性怎么保证？InnoDB 用两种<b>日志</b>（按顺序记下「做了什么」的文件）来解决：</p>
+<div class="term"><b>undo log</b>（回滚日志）：每次修改一行<b>之前</b>，先记下这一行的旧值。回滚时照着 undo log 把数据改回去，这保证了<b>原子性</b>。（第 7 节会看到，它还被用来做 MVCC。）</div>
+<div class="term"><b>redo log</b>（重做日志）：每次修改，都记一笔「哪一页的哪个位置改成了什么」。事务<b>提交时</b>，必须先把这些记录写到磁盘上的 redo log 文件里，才算提交成功。断电重启后，按 redo log 把没来得及写回的修改重做一遍，这保证了<b>持久性</b>。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 255" width="640" role="img" aria-label="修改先在缓冲池进行，旧值记入 undo log，提交时 redo log 顺序写入磁盘，数据页以后再刷回">
+  <rect x="10" y="30" width="290" height="215" rx="8" fill="#fafafa" stroke="#0b62c4" stroke-dasharray="5 4"/>
+  <text x="22" y="22" class="title">内存</text>
+  <rect x="25" y="45" width="260" height="60" rx="4" class="hot"/>
+  <text x="155" y="69" text-anchor="middle">缓冲池里的数据页</text>
+  <text x="155" y="91" text-anchor="middle" class="small">商品 42：stock 10 → 9</text>
+  <line x1="155" y1="105" x2="155" y2="156" class="line" marker-end="url(#arrow)"/>
+  <text x="165" y="136" class="small">改之前先记旧值</text>
+  <rect x="25" y="160" width="260" height="60" rx="4" class="obj"/>
+  <text x="155" y="184" text-anchor="middle">undo log（回滚日志）</text>
+  <text x="155" y="206" text-anchor="middle" class="small">商品 42 的 stock 原来是 10</text>
+  <rect x="340" y="30" width="290" height="215" rx="8" fill="#fafafa" stroke="#555" stroke-dasharray="5 4"/>
+  <text x="352" y="22" class="title">磁盘</text>
+  <rect x="355" y="45" width="260" height="60" rx="4" class="ok"/>
+  <text x="485" y="69" text-anchor="middle">redo log（重做日志）</text>
+  <text x="485" y="91" text-anchor="middle" class="small">顺序追加：商品 42 的 stock 改成 9</text>
+  <rect x="355" y="160" width="260" height="60" rx="4" class="plain"/>
+  <text x="485" y="184" text-anchor="middle">数据文件里的页</text>
+  <text x="485" y="206" text-anchor="middle" class="small">暂时还是 stock 10，以后再写回</text>
+  <line x1="285" y1="70" x2="352" y2="70" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="318" y="62" text-anchor="middle" class="title">①</text>
+  <line x1="285" y1="95" x2="352" y2="180" class="dash" marker-end="url(#arrow)"/>
+  <text x="330" y="150" text-anchor="middle" class="title">②</text>
+</svg>
+<figcaption>① 提交时只需把 redo log 顺序写到磁盘；② 改过的数据页以后再慢慢写回。宕机重启后，用 redo log 重做已提交的修改，用 undo log 撤销没提交的修改</figcaption>
+</figure>
+<p>为什么不在提交时直接把数据页写回磁盘？一个事务改的几行可能分散在好几个页上，要在磁盘上跳来跳去写好几页（随机写）；而 redo log 是在文件末尾一条接一条地追加（顺序写），又小又快。这种「先写日志、再写数据」的做法叫<b>预写日志</b>（WAL，Write-Ahead Logging）。</p>
+
+<h2 id="anomalies">4. 事务同时执行，会出什么问题</h2>
+<p>网店同一时刻有很多顾客，每个顾客的请求由服务器上的一个线程处理，每个线程开自己的事务。这些事务<b>并发</b>执行（第 1 课：一段时间内都在推进，操作互相交错）。第 3 课讲过线程交错会产生<b>竞态条件</b>：两个线程同时卖最后一件商品，结果出错。事务交错也一样，只是出问题的地方从内存变量换成了数据库里的行。</p>
+<p>下面四种问题都用商品 42（stock = 10，price = 99）来演示，A、B 是两个同时执行的事务。图里从上往下是时间顺序，同一时刻只执行一条语句。</p>
+
+<h3 id="lost-update">丢失修改：两个人同时卖，只扣了一次</h3>
+<p>A、B 两个顾客各买 1 个商品 42。网店程序的写法是「先读出库存，在程序里减 1，再写回去」：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 245" width="640" role="img" aria-label="丢失修改的时间线：A 和 B 都读到 10，各自写回 9">
+  <text x="28" y="20" text-anchor="middle" class="title">时刻</text>
+  <text x="170" y="20" text-anchor="middle" class="title">事务 A</text>
+  <text x="360" y="20" text-anchor="middle" class="title">商品 42 的 stock</text>
+  <text x="535" y="20" text-anchor="middle" class="title">事务 B</text>
+  <line x1="290" y1="28" x2="290" y2="205" class="dash"/><line x1="430" y1="28" x2="430" y2="205" class="dash"/>
+  <text x="28" y="55" text-anchor="middle" class="small">t1</text>
+  <rect x="60" y="34" width="220" height="32" rx="4" class="obj"/><text x="170" y="55" text-anchor="middle">读 stock → 10</text>
+  <rect x="300" y="34" width="120" height="32" rx="4" class="plain"/><text x="360" y="55" text-anchor="middle">10</text>
+  <text x="28" y="97" text-anchor="middle" class="small">t2</text>
+  <rect x="300" y="76" width="120" height="32" rx="4" class="plain"/><text x="360" y="97" text-anchor="middle">10</text>
+  <rect x="440" y="76" width="190" height="32" rx="4" class="obj"/><text x="535" y="97" text-anchor="middle">读 stock → 10</text>
+  <text x="28" y="139" text-anchor="middle" class="small">t3</text>
+  <rect x="60" y="118" width="220" height="32" rx="4" class="obj"/><text x="170" y="139" text-anchor="middle">写 stock = 9，提交</text>
+  <rect x="300" y="118" width="120" height="32" rx="4" class="plain"/><text x="360" y="139" text-anchor="middle">9</text>
+  <text x="28" y="181" text-anchor="middle" class="small">t4</text>
+  <rect x="300" y="160" width="120" height="32" rx="4" class="bad"/><text x="360" y="181" text-anchor="middle">9</text>
+  <rect x="440" y="160" width="190" height="32" rx="4" class="bad"/><text x="535" y="181" text-anchor="middle">写 stock = 9，提交</text>
+  <text x="320" y="230" text-anchor="middle">卖出 2 件，库存只少了 1：A 的修改被 B 覆盖了</text>
+</svg>
+<figcaption>B 在 t2 读到的 10 是 A 修改之前的旧值，它据此算出的 9 把 A 写的 9 盖掉了</figcaption>
+</figure>
+<div class="term"><b>丢失修改</b>（lost update）：两个事务读了同一个数据，又先后修改它，后提交的把先提交的修改覆盖了。</div>
+<p>这和第 3 课的竞态一模一样：「读、减、写」三步被另一个人插了进来。</p>
+
+<h3 id="dirty-read">脏读：读到了别人没提交的数据</h3>
+<p>B 扣了库存，但还没提交；这时 A 去读库存。如果 A 能看见 B 没提交的修改：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 245" width="640" role="img" aria-label="脏读的时间线：A 读到 B 未提交的 9，B 随后回滚">
+  <text x="28" y="20" text-anchor="middle" class="title">时刻</text>
+  <text x="170" y="20" text-anchor="middle" class="title">事务 A</text>
+  <text x="360" y="20" text-anchor="middle" class="title">商品 42 的 stock</text>
+  <text x="535" y="20" text-anchor="middle" class="title">事务 B</text>
+  <line x1="290" y1="28" x2="290" y2="205" class="dash"/><line x1="430" y1="28" x2="430" y2="205" class="dash"/>
+  <text x="28" y="55" text-anchor="middle" class="small">t1</text>
+  <rect x="60" y="34" width="220" height="32" rx="4" class="obj"/><text x="170" y="55" text-anchor="middle">读 stock → 10</text>
+  <rect x="300" y="34" width="120" height="32" rx="4" class="plain"/><text x="360" y="55" text-anchor="middle">10</text>
+  <text x="28" y="97" text-anchor="middle" class="small">t2</text>
+  <rect x="300" y="76" width="120" height="32" rx="4" class="hot"/><text x="360" y="96" text-anchor="middle" class="small">10 + 未提交的 9</text>
+  <rect x="440" y="76" width="190" height="32" rx="4" class="hot"/><text x="535" y="97" text-anchor="middle">改 stock = 9（未提交）</text>
+  <text x="28" y="139" text-anchor="middle" class="small">t3</text>
+  <rect x="60" y="118" width="220" height="32" rx="4" class="bad"/><text x="170" y="139" text-anchor="middle">读 stock → 9（脏数据）</text>
+  <rect x="300" y="118" width="120" height="32" rx="4" class="hot"/><text x="360" y="138" text-anchor="middle" class="small">10 + 未提交的 9</text>
+  <text x="28" y="181" text-anchor="middle" class="small">t4</text>
+  <rect x="300" y="160" width="120" height="32" rx="4" class="plain"/><text x="360" y="181" text-anchor="middle">10</text>
+  <rect x="440" y="160" width="190" height="32" rx="4" class="obj"/><text x="535" y="181" text-anchor="middle" class="mono">ROLLBACK</text>
+  <text x="320" y="230" text-anchor="middle">A 在 t3 读到的 9 从来没有被提交过，B 一回滚它就不存在了</text>
+</svg>
+<figcaption>橙色：B 改出了一个新值，但还没提交。A 如果拿这个 9 去做判断（比如给后台报「库存 9」），就是在用一个不存在的数据</figcaption>
+</figure>
+<div class="term"><b>脏读</b>（dirty read）：一个事务读到了另一个事务<b>还没提交</b>的修改。对方一旦回滚，读到的就是从未真正存在过的「脏数据」。</div>
+
+<h3 id="non-repeatable">不可重复读：同一行，两次读的不一样</h3>
+<p>这次 B 正常提交了。A 在一个事务里先后读了两次商品 42 的价格（比如先展示给顾客，再算订单金额），中间 B 把价格从 99 改成 109 并提交：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 205" width="640" role="img" aria-label="不可重复读的时间线：A 两次读 price，先 99 后 109">
+  <text x="28" y="20" text-anchor="middle" class="title">时刻</text>
+  <text x="170" y="20" text-anchor="middle" class="title">事务 A</text>
+  <text x="360" y="20" text-anchor="middle" class="title">商品 42 的 price</text>
+  <text x="535" y="20" text-anchor="middle" class="title">事务 B</text>
+  <line x1="290" y1="28" x2="290" y2="160" class="dash"/><line x1="430" y1="28" x2="430" y2="160" class="dash"/>
+  <text x="28" y="55" text-anchor="middle" class="small">t1</text>
+  <rect x="60" y="34" width="220" height="32" rx="4" class="obj"/><text x="170" y="55" text-anchor="middle">读 price → 99</text>
+  <rect x="300" y="34" width="120" height="32" rx="4" class="plain"/><text x="360" y="55" text-anchor="middle">99</text>
+  <text x="28" y="97" text-anchor="middle" class="small">t2</text>
+  <rect x="300" y="76" width="120" height="32" rx="4" class="plain"/><text x="360" y="97" text-anchor="middle">109</text>
+  <rect x="440" y="76" width="190" height="32" rx="4" class="obj"/><text x="535" y="97" text-anchor="middle">改 price = 109，提交</text>
+  <text x="28" y="139" text-anchor="middle" class="small">t3</text>
+  <rect x="60" y="118" width="220" height="32" rx="4" class="bad"/><text x="170" y="139" text-anchor="middle">再读 price → 109</text>
+  <rect x="300" y="118" width="120" height="32" rx="4" class="plain"/><text x="360" y="139" text-anchor="middle">109</text>
+  <text x="320" y="190" text-anchor="middle">A 读的都是已提交的数据，但同一个事务里前后两次结果不一样</text>
+</svg>
+<figcaption>和脏读的区别：B 已经提交了，109 是真实存在的数据；问题出在 A 的两次读之间被插入了别人的修改</figcaption>
+</figure>
+<div class="term"><b>不可重复读</b>（non-repeatable read）：一个事务里两次读<b>同一行</b>，中间被别的事务<b>修改（或删除）</b>并提交，两次读到的值不一样。</div>
+
+<h3 id="phantom">幻读：同样的条件，多出了几行</h3>
+<p>A 按条件查一批行：「价格不超过 100 的商品」。假设店里符合条件的只有商品 42。这时 B 上架了一件新商品 43（price = 89）并提交：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 205" width="640" role="img" aria-label="幻读的时间线：A 两次按同一条件查询，第二次多出商品 43">
+  <text x="28" y="20" text-anchor="middle" class="title">时刻</text>
+  <text x="170" y="20" text-anchor="middle" class="title">事务 A</text>
+  <text x="360" y="20" text-anchor="middle" class="title">price ≤ 100 的行</text>
+  <text x="535" y="20" text-anchor="middle" class="title">事务 B</text>
+  <line x1="290" y1="28" x2="290" y2="160" class="dash"/><line x1="430" y1="28" x2="430" y2="160" class="dash"/>
+  <text x="28" y="55" text-anchor="middle" class="small">t1</text>
+  <rect x="60" y="34" width="220" height="32" rx="4" class="obj"/><text x="170" y="55" text-anchor="middle">查 price ≤ 100 → 42</text>
+  <rect x="300" y="34" width="120" height="32" rx="4" class="plain"/><text x="360" y="55" text-anchor="middle">42</text>
+  <text x="28" y="97" text-anchor="middle" class="small">t2</text>
+  <rect x="300" y="76" width="120" height="32" rx="4" class="plain"/><text x="360" y="97" text-anchor="middle">42、43</text>
+  <rect x="440" y="76" width="190" height="32" rx="4" class="obj"/><text x="535" y="97" text-anchor="middle">插入商品 43，提交</text>
+  <text x="28" y="139" text-anchor="middle" class="small">t3</text>
+  <rect x="60" y="118" width="220" height="32" rx="4" class="bad"/><text x="170" y="139" text-anchor="middle">再查 → 42、43</text>
+  <rect x="300" y="118" width="120" height="32" rx="4" class="plain"/><text x="360" y="139" text-anchor="middle">42、43</text>
+  <text x="320" y="190" text-anchor="middle">同样的查询条件，第二次多出了一行，像出现了幻影</text>
+</svg>
+<figcaption>已有的行一个字都没变，变的是「满足条件的行有哪些」</figcaption>
+</figure>
+<div class="term"><b>幻读</b>（phantom read）：一个事务里两次用<b>同一个条件</b>查询，中间别的事务<b>插入</b>了满足条件的新行并提交，第二次查到的行数变多了。</div>
+<p>不可重复读和幻读很容易混：<b>不可重复读盯的是同一行的值变了</b>（UPDATE、DELETE 引起），<b>幻读盯的是行的集合变了</b>（INSERT 引起）。分开说，是因为防它们的办法不同：防不可重复读只要锁住读过的那几行，可新行在读的时候还不存在，锁不到它，要另想办法（第 8 节）。</p>
+
+<h2 id="levels">5. 隔离级别：允许干扰到什么程度</h2>
+<p>最彻底的隔离是让事务一个接一个地执行，但网店就只能同时服务一个顾客了。隔离越严，事务之间要等待的越多，能同时处理的请求越少。所以 SQL 标准定义了四个<b>隔离级别</b>，让使用者在「正确」和「快」之间选：</p>
+<table>
+  <tr><th>隔离级别</th><th>脏读</th><th>不可重复读</th><th>幻读</th></tr>
+  <tr><td>读未提交（READ UNCOMMITTED）</td><td>会</td><td>会</td><td>会</td></tr>
+  <tr><td>读已提交（READ COMMITTED）</td><td>不会</td><td>会</td><td>会</td></tr>
+  <tr><td>可重复读（REPEATABLE READ）</td><td>不会</td><td>不会</td><td>会（标准的规定）</td></tr>
+  <tr><td>串行化（SERIALIZABLE）</td><td>不会</td><td>不会</td><td>不会</td></tr>
+</table>
+<ul>
+  <li>从上往下，每一级都比上一级多防一种问题。名字就是提示：<b>读已提交</b>只读已提交的数据，所以没有脏读；<b>可重复读</b>保证同一行重复读结果一样。</li>
+  <li><b>串行化</b>：并发执行的结果，和这些事务按某种顺序一个接一个执行的结果一样（这种性质叫<b>可串行化</b>）。最安全，也最慢。</li>
+  <li>默认级别：<b>MySQL InnoDB 默认可重复读</b>；<b>Oracle、PostgreSQL、SQL Server 默认读已提交</b>。</li>
+  <li>InnoDB 的可重复读比标准更严：普通 SELECT 也看不到幻行（第 7、8 节讲原因）。考试如果问「标准规定可重复读能不能防幻读」，答「不能」。</li>
+  <li><b>丢失修改不在表里</b>。如果 B 在 A 没提交时直接改 A 改过的行（叫「脏写」），任何级别都不允许：UPDATE 总要加锁（第 6 节），B 会等 A 结束。但第 4 节那种「先读、在程序里算、再写回」的丢失修改，在 InnoDB 的读未提交、读已提交、可重复读下都会发生，要靠第 6 节的办法防。</li>
+</ul>
+<p>MySQL 里查看和设置隔离级别：</p>
+<pre>SELECT @@transaction_isolation;                          -- 查看，默认 REPEATABLE-READ
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;  -- 只改当前连接</pre>
+
+<h2 id="locks">6. 锁：数据库怎么让事务排队</h2>
+<p>第 3 课的互斥锁同一时刻只让一个线程进临界区。数据库把锁分得更细：读和读不冲突，没必要互相排队。</p>
+<div class="term"><b>共享锁</b>（S 锁，读锁）：事务要读一行时加。多个事务可以同时持有同一行的 S 锁。</div>
+<div class="term"><b>排他锁</b>（X 锁，写锁）：事务要改一行时加。一行上有了 X 锁，别的事务的 S 锁和 X 锁都加不上，只能等。</div>
+<p>两个事务对同一行加锁时能不能同时持有，看这张<b>兼容矩阵</b>：</p>
+<table>
+  <tr><th>B 想加 ＼ A 已持有</th><th>S 锁</th><th>X 锁</th></tr>
+  <tr><th>S 锁</th><td class="ok">兼容，不用等</td><td>冲突，B 等待</td></tr>
+  <tr><th>X 锁</th><td>冲突，B 等待</td><td>冲突，B 等待</td></tr>
+</table>
+<p>记法：<b>只有「读 + 读」能共存</b>，只要有一方要写就冲突。InnoDB 里：</p>
+<ul>
+  <li>UPDATE、DELETE、INSERT 会自动给改动的行加 X 锁，<b>一直持有到事务提交或回滚</b>才释放。这就是任何级别都不会脏写的原因。</li>
+  <li>普通 SELECT 默认不加锁（第 7 节讲它怎么读）；只有在串行化级别下，普通 SELECT 才会自动加 S 锁。</li>
+  <li>想在读的时候就加锁，要显式写：<code>SELECT … FOR SHARE</code>（加 S 锁，老写法是 <code>LOCK IN SHARE MODE</code>）、<code>SELECT … FOR UPDATE</code>（加 X 锁）。</li>
+</ul>
+<p><b>锁的粒度</b>：锁住一整张表的叫<b>表锁</b>，开销小，但同一时刻只有一个事务能改这张表；只锁住几行的叫<b>行锁</b>，并发度高，但要管理的锁多。InnoDB 支持行锁，而且<b>行锁是加在索引上的</b>：<code>WHERE id = 42</code> 走主键索引（第 8 课），只锁商品 42 这一行；如果 WHERE 里的列没有索引，就只能全表扫描，扫过的每一行都被锁上，效果和锁表差不多。MyISAM 引擎只有表锁，也不支持事务。</p>
+
+<h3 id="lock-protocol">封锁协议：锁加多久，决定防住什么</h3>
+<p>数据库教材里有一套「三级封锁协议」，规定 S 锁和 X 锁什么时候加、什么时候放。它和隔离级别是同一件事的两种说法，笔试常考：</p>
+<table>
+  <tr><th>协议</th><th>规定</th><th>防住了</th></tr>
+  <tr><td>一级</td><td>改数据前加 X 锁，事务结束才放</td><td>丢失修改</td></tr>
+  <tr><td>二级</td><td>一级 + 读数据前加 S 锁，<b>读完马上放</b></td><td>丢失修改、脏读</td></tr>
+  <tr><td>三级</td><td>一级 + 读数据前加 S 锁，<b>事务结束才放</b></td><td>丢失修改、脏读、不可重复读</td></tr>
+</table>
+<p>为什么二级防不了不可重复读？A 读完 price 就放了 S 锁，B 就能加 X 锁改价、提交，A 再读时价格已经变了。三级把 S 锁一直留到 A 结束，B 只能等。</p>
+<p>注意：教材里一级封锁协议的「改数据」包括「为了修改而读」，即 A 在读库存之前就加 X 锁，所以能防丢失修改。这正是下面的悲观锁。</p>
+<p>和它相关的还有<b>两段锁协议</b>（2PL）：每个事务分两个阶段，先只加锁不放锁（扩展阶段），一旦开始放锁就不能再加锁（收缩阶段）。所有事务都遵守两段锁协议，并发执行的结果就是可串行化的。它是可串行化的<b>充分条件，不是必要条件</b>；而且它<b>不能防止死锁</b>（第 9 节）。</p>
+
+<h3 id="pessimistic-optimistic">悲观锁和乐观锁：怎么防丢失修改</h3>
+<p>回到第 4 节两个顾客同时买的例子，有三种改法。第一种最简单：<b>不在程序里算，让数据库算</b>：</p>
+<pre>UPDATE products SET stock = stock - 1 WHERE id = 42 AND stock &gt; 0;</pre>
+<p>UPDATE 先给这一行加 X 锁，再读出最新的 stock 减 1，读和写之间没人插得进来。<code>AND stock &gt; 0</code> 保证库存不会被扣成负数：库存为 0 时这条语句改了 0 行，程序看到「改了 0 行」就告诉顾客卖完了。</p>
+<p>如果非要先读出来在程序里处理（比如要根据库存做复杂判断），就用下面两种锁：</p>
+<div class="term"><b>悲观锁</b>：假定一定会有人来抢，<b>读的时候就加锁</b>。用 <code>SELECT … FOR UPDATE</code> 读库存并加 X 锁，别的事务想读它来改，只能等。</div>
+<div class="term"><b>乐观锁</b>：假定很少有人来抢，<b>读的时候不加锁</b>，写的时候核对一下「这期间有没有人改过」。通常给表加一列版本号 <code>version</code>，每改一次加 1。它其实不是数据库里的锁，而是程序的写法。</div>
+<pre>-- 悲观锁
+BEGIN;
+SELECT stock FROM products WHERE id = 42 FOR UPDATE;   -- 读到 10，同时加 X 锁
+UPDATE products SET stock = 9 WHERE id = 42;
+COMMIT;                                                -- 释放锁，等着的 B 才能读，读到 9
+
+-- 乐观锁：products 多一列 version，开始时是 1
+SELECT stock, version FROM products WHERE id = 42;     -- 读到 (10, 1)
+UPDATE products SET stock = 9, version = 2
+ WHERE id = 42 AND version = 1;                        -- 改了 1 行：成功；改了 0 行：有人先改了，重读重试</pre>
+<figure class="fig">
+<svg viewBox="0 0 640 250" width="640" role="img" aria-label="悲观锁让 B 排队等待，乐观锁让 B 更新失败后重试">
+  <text x="162" y="20" text-anchor="middle" class="title">悲观锁：先锁住再改</text>
+  <rect x="20" y="34" width="285" height="34" rx="4" class="obj"/><text x="162" y="56" text-anchor="middle" class="small">A：FOR UPDATE 读到 10，加 X 锁</text>
+  <rect x="20" y="78" width="285" height="34" rx="4" class="hot"/><text x="162" y="100" text-anchor="middle" class="small">B：FOR UPDATE，等待 A 的 X 锁</text>
+  <rect x="20" y="122" width="285" height="34" rx="4" class="ok"/><text x="162" y="144" text-anchor="middle" class="small">A：写 stock = 9，提交，释放锁</text>
+  <rect x="20" y="166" width="285" height="34" rx="4" class="ok"/><text x="162" y="188" text-anchor="middle" class="small">B：拿到锁，读到 9，写 stock = 8</text>
+  <text x="162" y="228" text-anchor="middle" class="small">适合冲突多的场景：排队，不会白干</text>
+  <line x1="320" y1="30" x2="320" y2="235" class="dash"/>
+  <text x="478" y="20" text-anchor="middle" class="title">乐观锁：写的时候核对版本号</text>
+  <rect x="335" y="34" width="285" height="34" rx="4" class="obj"/><text x="478" y="56" text-anchor="middle" class="small">A、B 都读到 stock 10、version 1</text>
+  <rect x="335" y="78" width="285" height="34" rx="4" class="ok"/><text x="478" y="100" text-anchor="middle" class="small">A：… WHERE version = 1 → 改了 1 行</text>
+  <rect x="335" y="122" width="285" height="34" rx="4" class="bad"/><text x="478" y="144" text-anchor="middle" class="small">B：… WHERE version = 1 → 改了 0 行</text>
+  <rect x="335" y="166" width="285" height="34" rx="4" class="ok"/><text x="478" y="188" text-anchor="middle" class="small">B：重读到 9、version 2，再写 → 成功</text>
+  <text x="478" y="228" text-anchor="middle" class="small">适合冲突少的场景：不加锁，冲突了才重试</text>
+</svg>
+<figcaption>两种做法最后库存都是 8：悲观锁让 B 在读之前排队，乐观锁让 B 写失败后从头再来</figcaption>
+</figure>
+
+<h2 id="mvcc">7. MVCC：读的时候不加锁，也不读脏数据</h2>
+<p>如果只靠锁实现隔离，一个顾客在改商品 42 的库存（持有 X 锁），其他所有想看商品 42 页面的人都得等它提交，太慢了。InnoDB 的办法是：一行数据保留好几个版本，改的人生成新版本，读的人去读一个合适的旧版本，读写互不阻塞。这叫<b>多版本并发控制</b>（MVCC，Multi-Version Concurrency Control）。它由三样东西组成：</p>
+<div class="term"><b>隐藏列</b>：InnoDB 给每一行偷偷加了两列。<code>trx_id</code>：最后改这一行的事务的编号（每个事务开始时领一个递增的编号）。<code>roll_pointer</code>：指向这一行上一个版本的指针，上一个版本就存在 undo log 里（第 3 节）。</div>
+<div class="term"><b>版本链</b>：顺着 roll_pointer 一路往回，把同一行从新到旧的所有版本串起来的链表。</div>
+<div class="term"><b>读视图</b>（read view）：事务做普通 SELECT 时拍的一张「快照」，记下<b>此刻还有哪些事务没提交</b>。读一行时，从版本链最新的版本往回找，<b>跳过读视图建立时还没提交的事务写的版本</b>，返回第一个可见的版本（自己改的版本总是可见）。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 270" width="640" role="img" aria-label="商品 42 的版本链，以及读已提交和可重复读在不同时刻建立读视图">
+  <text x="10" y="22" class="title">商品 42 的版本链（不可重复读的场景，B 已把价格改成 109 并提交）</text>
+  <rect x="30" y="38" width="230" height="64" rx="4" class="hot"/>
+  <text x="145" y="62" text-anchor="middle">price 109（新版本）</text>
+  <text x="145" y="86" text-anchor="middle" class="small">trx_id = B，B 在 t2 提交</text>
+  <line x1="260" y1="70" x2="376" y2="70" class="line" marker-end="url(#arrow)"/>
+  <text x="318" y="62" text-anchor="middle" class="small mono">roll_pointer</text>
+  <rect x="380" y="38" width="230" height="64" rx="4" class="obj"/>
+  <text x="495" y="62" text-anchor="middle">price 99（旧版本）</text>
+  <text x="495" y="86" text-anchor="middle" class="small">在 undo log 里</text>
+  <text x="10" y="138" class="title">A 在 t3 第二次读 price：</text>
+  <rect x="30" y="150" width="110" height="44" rx="4" class="plain"/><text x="85" y="177" text-anchor="middle">读已提交</text>
+  <text x="155" y="167" class="small">t3 这次 SELECT 新建读视图：此时 B 已提交</text>
+  <text x="155" y="187" class="small">→ 109 这个版本可见 → 读到 109（不可重复读）</text>
+  <rect x="30" y="208" width="110" height="44" rx="4" class="plain"/><text x="85" y="235" text-anchor="middle">可重复读</text>
+  <text x="155" y="225" class="small">沿用 t1 第一次 SELECT 时建的读视图：那时 B 没提交</text>
+  <text x="155" y="245" class="small">→ 跳过 109，顺着 roll_pointer 找到 99 → 读到 99</text>
+</svg>
+<figcaption>读已提交和可重复读用的是同一套 MVCC，唯一的区别是<b>读视图什么时候建</b>：每条 SELECT 都建一次，还是只在事务里第一条 SELECT 时建一次</figcaption>
+</figure>
+<p>四个隔离级别在 InnoDB 里分别是这样实现的：</p>
+<table>
+  <tr><th>级别</th><th>普通 SELECT 怎么读</th></tr>
+  <tr><td>读未提交</td><td>不用读视图，直接读版本链上最新的版本，哪怕还没提交，所以有脏读</td></tr>
+  <tr><td>读已提交</td><td>每条 SELECT 新建一个读视图：总能看到「此刻」已提交的数据，所以没有脏读，但有不可重复读</td></tr>
+  <tr><td>可重复读</td><td>事务里第一条 SELECT 建读视图，之后一直用它：整个事务看到的都是同一张快照</td></tr>
+  <tr><td>串行化</td><td>不用快照，普通 SELECT 自动加 S 锁，靠锁让冲突的事务排队</td></tr>
+</table>
+
+<h3 id="current-read">快照读和当前读</h3>
+<p>到这里要分清 InnoDB 里两种「读」：</p>
+<div class="term"><b>快照读</b>：普通的 <code>SELECT</code>。通过读视图读版本链上的某个版本，不加锁。</div>
+<div class="term"><b>当前读</b>：<code>SELECT … FOR UPDATE</code>、<code>SELECT … FOR SHARE</code>，以及 UPDATE、DELETE、INSERT 内部的读。读的是<b>最新的已提交版本</b>，并且给读到的行加锁。</div>
+<p>当前读不看读视图。比如在可重复读下，A 先快照读到 stock = 10，这时 B 卖出一件并提交（stock = 9）。A 再执行 <code>UPDATE products SET stock = stock - 1 WHERE id = 42</code>，UPDATE 是当前读，读到的是最新的 9，写成 8，结果正确。所以第 6 节说「让数据库去算」能防丢失修改；而「先快照读出 10、程序里算出 9、再写 9」就会丢失修改。</p>
+
+<h2 id="gap-lock">8. 幻读和间隙锁</h2>
+<p>回到第 4 节的幻读场景。在 InnoDB 的可重复读下：</p>
+<ul>
+  <li>如果 A 用的是<b>快照读</b>，第二次查询沿用第一次的读视图，B 插入的商品 43 是读视图建立之后才提交的，看不见，所以<b>没有幻读</b>。</li>
+  <li>如果 A 用的是<b>当前读</b>（例如 <code>SELECT id FROM products WHERE price &lt;= 100 FOR UPDATE</code>，要读到最新数据并锁住它们），读视图帮不上忙。只锁住已有的行 42 也不够，因为 43 根本还不存在。</li>
+</ul>
+<p>InnoDB 的办法是连同行与行之间的「空隙」一起锁上。设 price 列上有索引（第 8 课的二级索引），索引里的值是排好序的，相邻两个值之间就是一个间隙：</p>
+<div class="term"><b>间隙锁</b>（gap lock）：锁住索引里两个相邻值之间的区间，不让别的事务往这个区间里插入新行。它只防插入，不锁已有的行。</div>
+<div class="term"><b>临键锁</b>（next-key lock）：一行的行锁（叫<b>记录锁</b>）加上它前面那个间隙的间隙锁。InnoDB 在可重复读下做当前读时，默认加的就是临键锁。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 200" width="640" role="img" aria-label="price 索引上的间隙锁：B 插入 price 89 落在被锁的间隙里，只能等待">
+  <text x="10" y="22" class="title">price 列上的索引（从小到大）</text>
+  <rect x="40" y="96" width="270" height="36" class="hot"/>
+  <text x="175" y="119" text-anchor="middle">间隙锁 (−∞, 99)</text>
+  <rect x="310" y="96" width="60" height="36" class="bad"/>
+  <text x="340" y="119" text-anchor="middle" class="mono">99</text>
+  <rect x="370" y="96" width="230" height="36" class="hot"/>
+  <text x="485" y="119" text-anchor="middle">间隙锁 (99, +∞)</text>
+  <text x="340" y="152" text-anchor="middle" class="small">记录锁：商品 42</text>
+  <text x="320" y="180" text-anchor="middle" class="small">A 执行 SELECT … WHERE price &lt;= 100 FOR UPDATE 后锁住的范围（橙 + 红）</text>
+  <text x="175" y="52" text-anchor="middle" fill="#c62828">B：INSERT 商品 43（price 89）</text>
+  <line x1="175" y1="60" x2="175" y2="92" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="185" y="80" class="small">落进被锁的间隙 → 等待</text>
+</svg>
+<figcaption>89 比 99 小，在间隙 (−∞, 99) 里，B 的插入要等 A 提交；而 99 之后的间隙也被锁住，是因为扫描要确认「99 后面没有别的 ≤ 100 的值」，所以连同下一个间隙一起锁上</figcaption>
+</figure>
+<p>两点补充：</p>
+<ul>
+  <li>如果 price 列没有索引，InnoDB 只能全表扫描，会把每一行和每个间隙都锁上，相当于锁表。这又是一个「WHERE 里的列要有索引」的理由。</li>
+  <li>InnoDB 的可重复读并没有<b>完全</b>消灭幻读：A 先快照读（只看到 42），B 插入 43 并提交，A 再执行一条当前读的 UPDATE 碰到了 43，那么 A 之后的快照读也会看到 43（自己改过的版本总是可见）。真要绝对没有，用串行化。</li>
+</ul>
+
+<h2 id="deadlock">9. 数据库里的死锁</h2>
+<p>有了行锁，第 3 课的死锁也会出现在数据库里。网店有两种事务都要改商品 42 和用户 1 这两行：</p>
+<ul>
+  <li>事务 A（下单）：先扣商品 42 的库存，再扣用户 1 的余额。</li>
+  <li>事务 B（退货）：先给用户 1 退 99 元，再把商品 42 的库存加回去。</li>
+</ul>
+<pre>A：UPDATE products SET stock = stock - 1 WHERE id = 42;    -- A 锁住商品 42
+B：UPDATE users SET balance = balance + 99 WHERE id = 1;   -- B 锁住用户 1
+A：UPDATE users SET balance = balance - 99 WHERE id = 1;   -- 等 B 放用户 1 的锁
+B：UPDATE products SET stock = stock + 1 WHERE id = 42;    -- 等 A 放商品 42 的锁：死锁</pre>
+<figure class="fig">
+<svg viewBox="0 0 640 225" width="640" role="img" aria-label="资源分配图：A 持有商品 42 等用户 1，B 持有用户 1 等商品 42，形成环">
+  <rect x="250" y="20" width="140" height="40" rx="4" class="obj"/><text x="320" y="45" text-anchor="middle">商品 42 这一行</text>
+  <rect x="250" y="168" width="140" height="40" rx="4" class="obj"/><text x="320" y="193" text-anchor="middle">用户 1 这一行</text>
+  <circle cx="90" cy="114" r="34" class="hot"/><text x="90" y="112" text-anchor="middle" class="title">事务 A</text><text x="90" y="129" text-anchor="middle" class="small">下单</text>
+  <circle cx="550" cy="114" r="34" class="hot"/><text x="550" y="112" text-anchor="middle" class="title">事务 B</text><text x="550" y="129" text-anchor="middle" class="small">退货</text>
+  <line x1="248" y1="46" x2="122" y2="98" class="line" marker-end="url(#arrow)"/>
+  <text x="168" y="58" text-anchor="middle" class="small">A 持有 X 锁</text>
+  <line x1="120" y1="132" x2="246" y2="182" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="160" y="182" text-anchor="middle" class="small" fill="#c62828">A 等待</text>
+  <line x1="392" y1="182" x2="518" y2="132" class="line" marker-end="url(#arrow)"/>
+  <text x="480" y="182" text-anchor="middle" class="small">B 持有 X 锁</text>
+  <line x1="520" y1="98" x2="394" y2="46" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="474" y="58" text-anchor="middle" class="small" fill="#c62828">B 等待</text>
+</svg>
+<figcaption>和第 3 课的资源分配图一样：行 → 事务表示「被它持有」，事务 → 行表示「在等它」。四条边首尾相接成环，就是死锁</figcaption>
+</figure>
+<p>对照第 3 课的四个必要条件：X 锁一次只能给一个事务（<b>互斥</b>）；A 拿着商品 42 又去要用户 1（<b>占有并等待</b>）；锁只能等持有者提交或回滚才释放，别人抢不走（<b>不可抢占</b>）；A 等 B、B 等 A（<b>循环等待</b>）。四条全满足。</p>
+<p>InnoDB 怎么处理：</p>
+<ul>
+  <li><b>死锁检测</b>：每当一个事务要等锁，InnoDB 就检查「谁在等谁」有没有成环（这张图叫等待图）。一旦成环，就挑一个事务回滚（通常是改动行数少、回滚代价小的那个），报错 <code>Deadlock found when trying to get lock</code>，它的锁随之释放，另一个事务就能继续。被回滚的事务由程序重试。</li>
+  <li><b>锁等待超时</b>：等锁超过 <code>innodb_lock_wait_timeout</code>（默认 50 秒）就放弃这条语句并报错。</li>
+</ul>
+<p>怎么预防：还是第 3 课的「破坏循环等待」，<b>所有事务按同一个顺序加锁</b>。比如规定一律先改 products 再改 users，B 改成先加库存再退钱，就不会成环。另外，事务要尽量短（锁持有的时间短），WHERE 条件要走索引（锁的行少）。</p>
+
+<h2 id="demo">10. 动手玩：两个事务的时间线</h2>
+<p>先在上面一排选一个隔离级别（默认是 MySQL 的「可重复读」），再选一个场景。动画每一步执行一条语句：左列是事务 A 执行过的语句，右列是事务 B 的，同一行编号表示同一时刻。中间是数据库：商品 42 的<b>版本链</b>（左边最新；虚线橙框是还没提交的版本，绿色外圈是 A 刚才读到的那个版本）、当前的锁，以及 A 最近一次 SELECT 读到的值。播完后最下面给出结论。</p>
+<p>建议这样玩：</p>
+<ol>
+  <li>「读未提交」+「脏读」：A 第二次读到 9，B 回滚后又变回 10。</li>
+  <li>换成「读已提交」再点「脏读」：A 跳过了 B 没提交的版本。接着点「不可重复读」：A 两次读到 99 和 109。</li>
+  <li>换成「可重复读」点「不可重复读」：A 沿用第一次的读视图，两次都是 99。再点「幻读」：快照读看不到商品 43。</li>
+  <li>换成「串行化」点任一场景：普通 SELECT 也加 S 锁，B 的冲突语句只能<b>等待锁</b>。点「丢失修改」还能看到第 9 节的死锁。</li>
+  <li>任何级别下点「丢失修改」，对比一下「先读、在程序里算、再写回」有多危险。</li>
+</ol>
+<div class="demo" id="isolation"></div>
+<p>动画里的规则就是第 6～8 节讲的：UPDATE / INSERT 加 X 锁直到事务结束；读已提交每条 SELECT 新建读视图，可重复读只在第一条 SELECT 时建；串行化下普通 SELECT 加 S 锁（范围查询连间隙一起锁）。</p>
+
+<h2 id="practice">11. 用代码试一试</h2>
+<p>仓库里的 <code>examples/transaction_in_practice.py</code> 只用 Python 标准库里的 <code>sqlite3</code>（SQLite 是一个嵌在程序里的小数据库，不用装服务器），演示两件事：</p>
+<ol>
+  <li><b>原子性</b>：用户 1 下单成功，stock 10 → 9、余额 300 → 201；余额只有 50 的用户 2 下单，第 ③ 步扣余额失败，ROLLBACK 之后库存还是 9、订单还是 1 条，第 ① 步扣的库存被撤销了。</li>
+  <li><b>防超卖</b>：商品 42 只剩 1 件，两个连接同时来买。「先读、在程序里减 1、再写回」两边都卖出去了（丢失修改，实际卖了 2 件）；换成 <code>UPDATE … SET stock = stock - 1 WHERE id = ? AND stock &gt; 0</code>，第二个人改了 0 行，知道卖完了；用乐观锁 version 列，第二个人的 UPDATE 也是改了 0 行，重读后发现库存为 0。</li>
+</ol>
+<pre>uv run examples/transaction_in_practice.py</pre>
+<p>脚本里每个结论都用 <code>assert</code> 检查，跑完退出码为 0。注意：<b>SQLite 的隔离模型和 MySQL 不一样</b>。它没有行锁，写的时候锁住整个数据库文件，同一时刻只允许一个事务写；也不能像 MySQL 那样把隔离级别设成读已提交、可重复读。所以四个隔离级别的差别只能在上面的动画里看，脚本只演示原子性和防超卖这两种和数据库种类无关的做法。</p>
+
+<h2 id="recap">12. 九课串起来：顾客点下单按钮之后</h2>
+<p>这是本系列最后一课。回到第一课开头那家网店，把一次下单从头到尾走一遍，每一步都是前面某一课讲过的东西：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 260" width="640" role="img" aria-label="一次下单经过的九课内容：浏览器、DNS、TCP、HTTP、服务器进程线程、SQL、索引、事务、锁与 MVCC、返回响应">
+  <rect x="10" y="30" width="112" height="60" rx="6" class="hot"/><text x="66" y="55" text-anchor="middle">① 点下单</text><text x="66" y="77" text-anchor="middle" class="small">浏览器</text>
+  <rect x="138" y="30" width="112" height="60" rx="6" class="hot"/><text x="194" y="55" text-anchor="middle">② DNS</text><text x="194" y="77" text-anchor="middle" class="small">第 4 课</text>
+  <rect x="266" y="30" width="112" height="60" rx="6" class="hot"/><text x="322" y="55" text-anchor="middle">③ TCP 握手</text><text x="322" y="77" text-anchor="middle" class="small">第 5 课</text>
+  <rect x="394" y="30" width="112" height="60" rx="6" class="hot"/><text x="450" y="55" text-anchor="middle">④ HTTP 请求</text><text x="450" y="77" text-anchor="middle" class="small">第 6 课</text>
+  <rect x="522" y="30" width="112" height="60" rx="6" class="obj"/><text x="578" y="55" text-anchor="middle">⑤ 进程线程</text><text x="578" y="77" text-anchor="middle" class="small">第 1、2、3 课</text>
+  <line x1="122" y1="60" x2="134" y2="60" class="line" marker-end="url(#arrow)"/>
+  <line x1="250" y1="60" x2="262" y2="60" class="line" marker-end="url(#arrow)"/>
+  <line x1="378" y1="60" x2="390" y2="60" class="line" marker-end="url(#arrow)"/>
+  <line x1="506" y1="60" x2="518" y2="60" class="line" marker-end="url(#arrow)"/>
+  <line x1="578" y1="90" x2="578" y2="146" class="line" marker-end="url(#arrow)"/>
+  <rect x="522" y="150" width="112" height="60" rx="6" class="ok"/><text x="578" y="175" text-anchor="middle">⑥ 发 SQL</text><text x="578" y="197" text-anchor="middle" class="small">第 7 课</text>
+  <rect x="394" y="150" width="112" height="60" rx="6" class="ok"/><text x="450" y="175" text-anchor="middle">⑦ 索引找行</text><text x="450" y="197" text-anchor="middle" class="small">第 8 课</text>
+  <rect x="266" y="150" width="112" height="60" rx="6" class="ok"/><text x="322" y="175" text-anchor="middle">⑧ 事务</text><text x="322" y="197" text-anchor="middle" class="small">第 9 课</text>
+  <rect x="138" y="150" width="112" height="60" rx="6" class="ok"/><text x="194" y="175" text-anchor="middle">⑨ 锁、MVCC</text><text x="194" y="197" text-anchor="middle" class="small">第 3、9 课</text>
+  <rect x="10" y="150" width="112" height="60" rx="6" class="hot"/><text x="66" y="175" text-anchor="middle">⑩ 返回响应</text><text x="66" y="197" text-anchor="middle" class="small">第 6 课</text>
+  <line x1="522" y1="180" x2="510" y2="180" class="line" marker-end="url(#arrow)"/>
+  <line x1="394" y1="180" x2="382" y2="180" class="line" marker-end="url(#arrow)"/>
+  <line x1="266" y1="180" x2="254" y2="180" class="line" marker-end="url(#arrow)"/>
+  <line x1="138" y1="180" x2="126" y2="180" class="line" marker-end="url(#arrow)"/>
+  <text x="320" y="20" text-anchor="middle" class="small">橙：网络（第 4～6 课）　蓝：服务器上的操作系统（第 1～3 课）　绿：数据库（第 7～9 课）</text>
+  <text x="320" y="245" text-anchor="middle" class="small">从上排左边出发，到下排左边回到浏览器</text>
+</svg>
+<figcaption>一次点击，九课全用上了：网络把请求送到服务器，操作系统让处理它的线程跑起来，数据库用事务把三步改动绑成一个整体</figcaption>
+</figure>
+<ol>
+  <li><b>浏览器</b>：顾客点「下单」，浏览器要把请求发给网店的域名（<a href="06-http.html">第 6 课</a>：URL 的结构）。</li>
+  <li><b>DNS</b>：先把域名换成服务器的 IP 地址；数据包按 IP 逐跳转发到服务器（<a href="04-network-layers.html">第 4 课</a>）。</li>
+  <li><b>TCP</b>：浏览器和服务器的 443 端口三次握手，建立可靠的连接（<a href="05-tcp.html">第 5 课</a>）。</li>
+  <li><b>HTTP</b>：在 TLS 加密的连接上发一个 POST 请求，正文里是「用户 1 买 1 个商品 42」（<a href="06-http.html">第 6 课</a>）。</li>
+  <li><b>进程和线程</b>：服务器上的 shop-server 进程收到请求，交给一个线程处理；调度器让它轮流用 CPU（<a href="01-process-scheduling.html#threads">第 1 课</a>）；它的代码和数据都在虚拟内存的页里（<a href="02-virtual-memory.html">第 2 课</a>）；许多线程同时处理不同顾客，共享的数据要靠锁保护（<a href="03-deadlock.html">第 3 课</a>）。</li>
+  <li><b>SQL</b>：线程向数据库发出扣库存、写订单、扣余额三条语句（<a href="07-sql.html">第 7 课</a>）。</li>
+  <li><b>索引</b>：<code>WHERE id = 42</code> 顺着主键的 B+ 树三四次磁盘读就找到了那一行，而且行锁只锁这一行（<a href="08-index.html">第 8 课</a>）。</li>
+  <li><b>事务</b>：三条语句包在 BEGIN … COMMIT 里，undo log 保证出错能回滚，redo log 保证提交后不丢（本课第 <a href="#order">1</a>～<a href="#logs">3</a> 节）。</li>
+  <li><b>锁与 MVCC</b>：同时买商品 42 的其他顾客，在 X 锁上排队；只是来看商品页的顾客，读快照，不用等（本课第 <a href="#locks">6</a>～<a href="#deadlock">9</a> 节）。</li>
+  <li><b>返回响应</b>：提交成功，服务器回一个 HTTP 响应（例如 201 Created），浏览器显示「下单成功」（<a href="06-http.html">第 6 课</a>）。</li>
+</ol>
+
+<h2 id="exam">题单怎么考</h2>
+<p>牛客「数据库专项」里和本课有关的题，基本就是下面这几类：</p>
+<table class="qmap">
+  <tr><th>题型</th><th>怎么想</th><th>回看</th></tr>
+  <tr><td>ACID 各是什么、靠什么实现</td><td>原子性 undo log，持久性 redo log，隔离性锁 + MVCC，一致性是目的</td><td><a href="#acid">2</a>、<a href="#logs">3</a></td></tr>
+  <tr><td>给一段时间线，判断是哪种并发问题</td><td>读到未提交 → 脏读；同一行值变了 → 不可重复读；行数变多 → 幻读；修改被覆盖 → 丢失修改</td><td><a href="#anomalies">4</a>、<a href="#demo">动画</a></td></tr>
+  <tr><td>某个隔离级别能防住哪些问题</td><td>背那张表：每升一级多防一种；标准的可重复读不防幻读</td><td><a href="#levels">5</a></td></tr>
+  <tr><td>MySQL / Oracle 的默认隔离级别</td><td>MySQL InnoDB 可重复读；Oracle、PostgreSQL 读已提交</td><td><a href="#levels">5</a></td></tr>
+  <tr><td>S 锁、X 锁能否同时加</td><td>只有「读 + 读」兼容</td><td><a href="#locks">6</a></td></tr>
+  <tr><td>几级封锁协议防住什么、两段锁协议</td><td>一级防丢失修改，二级加防脏读，三级加防不可重复读；2PL 保证可串行化但不防死锁</td><td><a href="#lock-protocol">6</a></td></tr>
+  <tr><td>悲观锁 / 乐观锁的写法和适用场景</td><td>FOR UPDATE 先锁；version 列写时核对，冲突多用悲观，冲突少用乐观</td><td><a href="#pessimistic-optimistic">6</a></td></tr>
+  <tr><td>MVCC 原理、读已提交和可重复读的区别</td><td>版本链 + 读视图；区别只在读视图什么时候建</td><td><a href="#mvcc">7</a></td></tr>
+  <tr><td>快照读和当前读、InnoDB 怎么防幻读</td><td>快照读靠读视图，当前读靠临键锁（记录锁 + 间隙锁）</td><td><a href="#current-read">7</a>、<a href="#gap-lock">8</a></td></tr>
+  <tr><td>数据库死锁的原因和处理</td><td>两个事务以相反顺序锁行；InnoDB 检测后回滚一个；预防：固定加锁顺序</td><td><a href="#deadlock">9</a></td></tr>
+  <tr><td>InnoDB 和 MyISAM 的区别（事务方面）</td><td>InnoDB 支持事务和行锁，MyISAM 都不支持，只有表锁</td><td><a href="#locks">6</a></td></tr>
+</table>
+
+<h2 id="self-test">自测</h2>
+<details><summary>1. 下单事务执行完扣库存、写订单后，扣余额失败，程序执行了 ROLLBACK。数据库靠什么把库存改回 10？这体现了 ACID 的哪一条？</summary>
+靠 undo log。扣库存之前，InnoDB 先在 undo log 里记下「商品 42 的 stock 原来是 10」，回滚时照着改回去；写订单那一步也同样被撤销。这体现的是<b>原子性</b>：三步要么全做，要么全不做。</details>
+<details><summary>2. 事务提交成功后数据库马上断电，改过的数据页还没写回磁盘。重启后修改还在吗？靠的是什么？</summary>
+在。提交时 redo log 已经先写到了磁盘上（预写日志 WAL），重启后按 redo log 把修改重做一遍。这体现的是<b>持久性</b>。</details>
+<details><summary>3. 事务 A 读到了事务 B 修改后还没提交的数据，B 随后回滚。这是什么问题？最低要用哪个隔离级别才能避免？</summary>
+脏读。最低用<b>读已提交</b>：它只让事务读已经提交的数据。读未提交是唯一会出现脏读的级别。</details>
+<details><summary>4. 下列说法正确的是：A. MySQL InnoDB 默认隔离级别是读已提交　B. Oracle 默认隔离级别是可重复读　C. 按 SQL 标准，可重复读能防止不可重复读，但不能防止幻读　D. 串行化仍可能出现脏读</summary>
+C。A 错，InnoDB 默认是可重复读；B 错，Oracle 默认读已提交；D 错，串行化四种问题都不会出现。（InnoDB 的可重复读借助 MVCC 和间隙锁，实际上能防住大部分幻读，但题目问「标准」时答不能。）</details>
+<details><summary>5. 事务 A 对商品 42 持有 S 锁。事务 B 想对同一行加 S 锁、加 X 锁，分别会怎样？</summary>
+加 S 锁：兼容，立即成功，两个事务可以同时读。加 X 锁：冲突，B 要等 A 提交或回滚释放 S 锁之后才能加上。记法：只有「读 + 读」能共存。</details>
+<details><summary>6. 商品 42 的 stock = 10、version = 3。A、B 都读到 (10, 3)，然后各自执行 <code>UPDATE products SET stock = stock - 1, version = version + 1 WHERE id = 42 AND version = 3</code>，A 先执行。B 的语句改了几行？B 重读后重试成功，最终 stock 和 version 各是多少？</summary>
+A 执行后变成 (9, 4)。B 的 <code>WHERE version = 3</code> 已经匹配不上，改了 <b>0 行</b>，程序据此知道有人先改过。B 重读到 (9, 4)，用 <code>WHERE version = 4</code> 再执行一次，成功，变成 <b>stock = 8、version = 5</b>。两次修改都生效了，没有丢失修改。</details>
+<details><summary>7. 三级封锁协议中，能防止不可重复读的是哪一级？为什么二级不行？</summary>
+三级。二级规定读之前加 S 锁、<b>读完马上释放</b>，A 两次读之间 B 就能加 X 锁改数据并提交，A 第二次读到的就不一样了。三级把 S 锁一直留到 A 事务结束，B 想改只能等，所以 A 两次读的结果相同。</details>
+<details><summary>8. 事务 A 先锁商品 42 再锁用户 1，事务 B 先锁用户 1 再锁商品 42，结果死锁了。InnoDB 会怎么处理？怎样改写程序才能避免？</summary>
+InnoDB 的死锁检测发现等待图成环，回滚其中一个事务（通常是回滚代价小的那个）并报 <code>Deadlock found</code> 错误，另一个事务得以继续；被回滚的那个由程序重试。避免的办法是破坏「循环等待」：规定所有事务按同一顺序加锁，例如一律先改 products 再改 users。</details>
+
+<div class="nav"><a href="08-index.html">← 上一课：索引</a><a href="index.html">回到目录 →</a></div>
+<script src="../anim.js"></script>
+<script src="js/09-transaction.js"></script>
+</body>
+</html>

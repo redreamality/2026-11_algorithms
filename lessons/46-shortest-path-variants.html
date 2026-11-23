@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 46 课 · 最短路变种</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .graph { display: block; max-width: 100%; }
+  .graph circle { fill: #fff; stroke: #555; stroke-width: 2; }
+  .graph .gnode.done circle { fill: #c8e6c9; stroke: #2e7d32; }
+  .graph .gnode.cur circle { stroke: #c62828; stroke-width: 4; }
+  .graph .gnode.middle circle { fill: #ffe0b2; stroke: #e65100; stroke-width: 4; }
+  .graph text { font: 15px Consolas, monospace; text-anchor: middle; }
+  .graph .w { fill: #0b62c4; font-weight: bold; }
+  .graph .w.free { fill: #2e7d32; }
+  .graph .edge { stroke: #999; stroke-width: 2; }
+  .graph .edge.free { stroke-dasharray: 6 4; }
+  .graph .edge.relax { stroke: #e65100; stroke-width: 5; }
+  .graph .edge.nope { stroke: #bbb; stroke-width: 5; }
+  .box.fixed { background: #c8e6c9; border-color: #2e7d32; }
+  .box.front { border-color: #2e7d32; }
+  .box.back { border-color: #0b62c4; }
+  table.matrix td, table.matrix th { text-align: center; padding: 4px 12px; font-family: Consolas, monospace; }
+  table.matrix td.changed { background: #ffe0b2; font-weight: bold; }
+  table.matrix td.via { background: #fff3e0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 46 课 · 最短路变种</h1>
+<p class="one-line">第 13 课的 BFS 和第 16 课的 Dijkstra 之外，还有三个常用的最短路算法：边权只有 0 和 1 时用 <b>0-1 BFS</b>（deque 头插尾插，O(V + E)）；要<b>任意两点</b>之间的最短路、点又不多时用 <b>Floyd-Warshall</b>（三重循环，O(n³)）；有<b>负权边</b>时用 <b>Bellman-Ford</b>（所有边松弛 V − 1 轮）。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#dict-tools">dict 的 get 与 setdefault</a>、<a href="python-basics.html#numbers">math.inf</a>、<a href="python-basics.html#comprehension">推导式（嵌套的 dict 推导式建表）</a>、<a href="python-basics.html#unpack">解包</a>；前面的课 —— <a href="03-stack-queue.html">第 3 课 · 栈与队列（<code>deque</code> 的 <code>appendleft</code>）</a>、<a href="13-graph-traversal.html">第 13 课 · 图的表示与 BFS</a>（邻接矩阵、V 和 E）、<a href="16-dijkstra.html">第 16 课 · Dijkstra</a>（松弛、过期记录）、<a href="19-dp-memo.html">第 19 课 · 动态规划</a>（Floyd 是一张 DP 表）、<a href="35-grid-search.html">第 35 课 · 网格搜索</a>（网格是隐式的图）。</p>
+
+<h2>主线例子：收费站</h2>
+<p>五座城 A～E 之间有六条双向的路。有的路上有收费站，过一次记 1；有的路免费，记 0。边上的数字就是<b>边权</b>（第 16 课：边上的代价）。</p>
+<div class="row">
+  <span class="box">A–B：1</span><span class="box">A–C：0</span><span class="box">C–B：0</span>
+  <span class="box">B–D：1</span><span class="box">C–E：1</span><span class="box">D–E：0</span>
+</div>
+<p>这一课围绕这张图问三个问题，每个问题对应一个算法：</p>
+<ol>
+  <li>从 A 出发，到每座城最少过几次收费站？边权只有 0 和 1 → <b>0-1 BFS</b>。</li>
+  <li>做一张表，写出<b>任意两座城</b>之间最少过几次收费站？→ <b>Floyd-Warshall</b>。</li>
+  <li>如果有一条路反过来<b>给补贴</b>（边权是负数），怎么办？→ <b>Bellman-Ford</b>。</li>
+</ol>
+<p>先说两个词。<b>单源</b>最短路：从<b>一个</b>起点出发，求它到所有点的最短距离，第 16 课的 Dijkstra 就是单源的。<b>全源</b>最短路：求<b>每一对</b>点之间的最短距离，结果是一张 V × V 的表（V 是点数，E 是边数，和第 13 课一样）。</p>
+
+<h2>实战里怎么写</h2>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>地铁“最少换乘”：坐同一条线代价 0，换线代价 1</td><td>0-1 BFS，<code>collections.deque</code> 头插尾插</td><td>O(V + E)</td></tr>
+  <tr><td>游戏地图“最少打穿几堵墙”，走空地 0、进墙 1</td><td>网格上的 0-1 BFS</td><td>O(行数 × 列数)</td></tr>
+  <tr><td>几十个配送站之间的距离表，之后反复查询</td><td>Floyd 一次算好，再记一张“下一跳”表复原路线</td><td>预处理 O(n³)，查询 O(1)</td></tr>
+  <tr><td>汇率套利：有没有一圈兑换下来钱变多</td><td>边权取 −log(汇率)，Bellman-Ford 找负环</td><td>O(V × E)</td></tr>
+  <tr><td>图很大、要现成的各种算法</td><td>networkx（本项目不引入）</td><td>—</td></tr>
+</table>
+<p>下面是“最少过几次收费站”的完整写法，和第 16 课的 Dijkstra 只差两处：<code>heapq</code> 换成 <code>deque</code>，进队分成“放队头”和“放队尾”。</p>
+<pre>import math
+from collections import deque
+
+toll_roads = {                     # 城 -&gt; {邻城: 过路费次数}，双向各存一条
+    "A": {"B": 1, "C": 0},
+    "B": {"A": 1, "C": 0, "D": 1},
+    "C": {"A": 0, "B": 0, "E": 1},
+    "D": {"B": 1, "E": 0},
+    "E": {"C": 1, "D": 0},
+}
+
+def zero_one_bfs(graph, source):
+    distances = {source: 0}
+    finished = set()
+    queue = deque([(0, source)])            # 放 (距离, 点)
+    while queue:
+        distance, node = queue.popleft()    # 永远从队头取
+        if node in finished:                # 过期记录：这个点早就确定了
+            continue
+        finished.add(node)
+        for neighbor, weight in graph.get(node, {}).items():
+            candidate = distance + weight
+            if candidate &lt; distances.get(neighbor, math.inf):   # 松弛
+                distances[neighbor] = candidate
+                if weight == 0:
+                    queue.appendleft((candidate, neighbor))     # 0 边：和当前点一样近，插到队头
+                else:
+                    queue.append((candidate, neighbor))         # 1 边：远一层，排到队尾
+    return distances
+
+zero_one_bfs(toll_roads, "A")    # {'A': 0, 'B': 0, 'C': 0, 'E': 1, 'D': 1}</pre>
+<p>完整可运行的版本在 <code>examples/shortest_path_variants_in_practice.py</code>（<code>uv run examples/shortest_path_variants_in_practice.py</code>），里面有地铁最少换乘（0-1 BFS）、配送站距离表和路线复原（Floyd）、汇率套利检测（Bellman-Ford）。</p>
+
+<h2 id="zero-one-bfs">问题 1：边权只有 0 和 1（0-1 BFS）</h2>
+<p><b>普通 BFS 为什么不行。</b>第 13 课的 BFS 数的是“走了几条边”。A 到 B 只有 1 条边，BFS 会说 B 最近；可那条路要收费，绕 A → C → B 走两条免费路才是 0。边权不全相同时，边数少不等于代价小。</p>
+<p><b>Dijkstra 行，但多了 log。</b>Dijkstra 对任何非负边权都对，O((V + E) log V)，log 来自堆。边权只有 0 和 1 时，用不着堆这么强的工具。</p>
+<p><b>关键观察。</b>Dijkstra 需要堆，是因为要“每次取出当前最近的点”。边权只有 0/1 时，有一个更便宜的办法保持顺序：</p>
+<ul>
+  <li>从队头取出距离为 d 的点。走一条 <b>0 边</b>，邻居的距离还是 d，和队头一样小，所以<b>插到队头</b>（<code>appendleft</code>）。</li>
+  <li>走一条 <b>1 边</b>，邻居的距离是 d + 1，比队里所有距离为 d 的都大，所以<b>排到队尾</b>（<code>append</code>）。</li>
+</ul>
+<p>这样 deque 里的距离从队头到队尾始终是<b>非递减</b>的，而且只有 d 和 d + 1 两种值。队头就是最近的点，作用和 Dijkstra 的堆顶一样，但每次进出队只要 O(1)。</p>
+<div class="row">
+  <span class="label">deque：</span>
+  <span class="label">队头 →</span><span class="box front">d</span><span class="box front">d</span><span class="box back">d+1</span><span class="box back">d+1</span><span class="label">← 队尾</span>
+  <span class="label">0 边的邻居插左边，1 边的邻居接右边</span>
+</div>
+<p><b>什么时候算“确定”。</b>和第 16 课一样：一个点<b>出队</b>时才确定。同一个点可能先经 1 边被放到队尾，后来又经 0 边变得更近、被插到队头，于是队里有它的两条记录。后取出的那条是过期记录，跳过。注意这和第 35 课的普通 BFS 不一样：普通 BFS 在<b>入队时</b>就标记，因为第一次碰到就是最近；0-1 BFS 第一次碰到时不一定最近，不能在入队时就定下来。</p>
+<p><b>为什么是对的。</b>它就是用 deque 代替了堆的 Dijkstra。只要 deque 一直有序，每次取出的都是最近的点，第 16 课的“取出就确定”的论证原样成立。</p>
+<p><b>复杂度。</b>每条边最多松弛成功一次，带来一次进队，所以进出队 O(V + E) 次，每次 O(1)。总时间 <b>O(V + E)</b>，和 BFS 一样。</p>
+
+<h3>网格版：最少打穿几堵墙</h3>
+<p>第 35 课说过，网格就是一张隐式的图。网格里 <code>"."</code> 是空地，<code>"#"</code> 是墙，从左上走到右下，最少要打穿几堵墙？走进空地代价 0，走进墙代价 1，正好是 0/1 边权：</p>
+<pre>.#..
+##.#
+#..#
+###.</pre>
+<p>起点的右边和下边都是墙，至少打一堵；打穿 <code>(0, 1)</code> 进到 <code>(0, 2)</code>，往下走到 <code>(2, 2)</code>，之后右边和下边又都是墙，再打一堵。答案是 2。写法就是把上面代码里的“邻居”换成第 35 课的方向数组，代价看下一格是不是墙。这道题是 LeetCode 2290，在练习里要写。</p>
+
+<h2>问题 2：任意两点之间（Floyd-Warshall）</h2>
+<p>现在要一张表：任意两座城之间最少过几次收费站。一种做法是从每座城各跑一次 0-1 BFS（或 Dijkstra）。点不多时还有一个更省事的写法：<b>Floyd-Warshall</b>，三重循环，十行代码。</p>
+<p><b>注意别和第 29 课混淆。</b>第 29 课的“Floyd 判环”是用快慢指针判断链表有没有环，和这里的 Floyd-Warshall 最短路是两个不同的算法，只是都以 Robert Floyd 命名。</p>
+
+<h3>表从哪里开始</h3>
+<p>用第 13 课的<b>邻接矩阵</b>思路：<code>dist[i][j]</code> 先填“i 直接走到 j 的边权”；i 等于 j 填 0；没有直达的边填 <code>math.inf</code>（表示目前到不了）。主线例子的初始表：</p>
+<table class="matrix">
+  <tr><th></th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th></tr>
+  <tr><th>A</th><td>0</td><td>1</td><td>0</td><td>∞</td><td>∞</td></tr>
+  <tr><th>B</th><td>1</td><td>0</td><td>0</td><td>1</td><td>∞</td></tr>
+  <tr><th>C</th><td>0</td><td>0</td><td>0</td><td>∞</td><td>1</td></tr>
+  <tr><th>D</th><td>∞</td><td>1</td><td>∞</td><td>0</td><td>0</td></tr>
+  <tr><th>E</th><td>∞</td><td>∞</td><td>1</td><td>0</td><td>0</td></tr>
+</table>
+
+<h3>一个一个放开中转站</h3>
+<p>想象一开始<b>不准中途经过任何城</b>，只能直达，表就是上面那张。然后规则一点点放宽：先允许途中经过 A，再允许经过 A、B，再允许 A、B、C……每放开一个中转站 k，就对每一对 (i, j) 问一句：</p>
+<pre>dist[i][k] + dist[k][j] &lt; dist[i][j] 吗？     # 先到 k、再从 k 到 j，比现在记着的更近吗？</pre>
+<p>更近就改。这就是第 16 课的<b>松弛</b>，只不过“绕道的点”换成了 k。五个中转站都放开以后，任何路线都被允许了，表里就是真正的最短距离。</p>
+<pre>import math
+
+def floyd_warshall(graph):
+    nodes = list(graph)                     # 本例每座城都是 graph 的键
+    dist = {i: {j: (0 if i == j else math.inf) for j in nodes} for i in nodes}
+    for i, edges in graph.items():
+        for j, weight in edges.items():
+            dist[i][j] = weight
+    for k in nodes:                         # 中转站：必须在最外层
+        for i in nodes:
+            for j in nodes:
+                if dist[i][k] + dist[k][j] &lt; dist[i][j]:
+                    dist[i][j] = dist[i][k] + dist[k][j]
+    return dist
+
+table = floyd_warshall(toll_roads)
+table["A"]["D"]     # 1：A → C → B → D，只在 B–D 交一次</pre>
+<p>在主线例子上，每一轮改了什么：</p>
+<ul>
+  <li>k = A：没有任何一对能经过 A 变近，不变。</li>
+  <li>k = B：A → B → D 得 1 + 1 = 2，<code>dist[A][D]</code> 从 ∞ 变成 2；C → B → D 得 0 + 1 = 1，<code>dist[C][D]</code> 变成 1（反方向同理）。</li>
+  <li>k = C：A → C → B 得 0 + 0 = 0，<code>dist[A][B]</code> 从 1 变成 0；A → C → D 得 0 + 1 = 1，<code>dist[A][D]</code> 从 2 又变成 1——这里用到的 <code>dist[C][D] = 1</code> 是上一轮刚算出来的，它本身已经“经过了 B”。A → C → E、B → C → E 也都变成 1。</li>
+  <li>k = D、k = E：不变。最终表是：A、B、C 互相之间 0，D、E 之间 0，两组之间 1。</li>
+</ul>
+
+<h3>为什么 k 必须在最外层</h3>
+<p>这是一张第 19 课讲的 DP 表。<b>状态</b>：<code>dist<sub>k</sub>[i][j]</code> = 从 i 到 j、途中只准经过“前 k 个中转站”的最短距离。<b>转移</b>：放开第 k 个中转站后，最短路要么不经过它（还是 <code>dist<sub>k−1</sub>[i][j]</code>），要么经过它一次（<code>dist<sub>k−1</sub>[i][k] + dist<sub>k−1</sub>[k][j]</code>），取小的。</p>
+<p>算第 k 层的任何一格，都要用到第 k − 1 层的<b>整张表</b>。所以必须一层一层来：先把 k = A 这一层对所有 (i, j) 做完，再做 k = B 这一层。k 在最外层，正好就是“一层一层”。</p>
+<p>把 k 放到最里层（先定 i、j，再试所有 k）就错了：<code>dist[i][j]</code> 只在轮到 (i, j) 那一次被计算，那时它要用的 <code>dist[i][k]</code>、<code>dist[k][j]</code> 可能还没被算好，之后它们变短了，<code>dist[i][j]</code> 也不会再更新。自测第 1 题有一个具体的反例。</p>
+<p><b>为什么可以原地改，不用存 V 张表。</b>第 k 轮里，第 k 行和第 k 列不会变：<code>dist[k][k]</code> 是 0，<code>dist[i][k] + dist[k][k]</code> 不可能比 <code>dist[i][k]</code> 更小。所以这一轮用到的 <code>dist[i][k]</code> 和 <code>dist[k][j]</code>，改不改都一样，一张表就够了。</p>
+
+<h3>负权边和负环</h3>
+<p>Floyd 允许负权边（Dijkstra 不允许）。但如果有<b>负环</b>——绕一圈边权加起来小于 0——每多绕一圈就更短，最短路没有意义。三重循环跑完后，只要某个 <code>dist[i][i] &lt; 0</code>（从 i 出发绕回 i 总和是负的），就说明有负环。</p>
+
+<h3>复杂度：n 不超过几百时最省事</h3>
+<p>三重循环，时间 <b>O(n³)</b>，表要 <b>O(n²)</b> 空间（n 就是点数 V）。n = 200 时 200³ = 800 万次比较，C++ 一眨眼，Python 几秒。n 再大就不划算了：n = 2000 是 80 亿次。点多、边少（稀疏）的图，还是从每个点各跑一次 Dijkstra。</p>
+
+<h2>问题 3：有负权边（Bellman-Ford）</h2>
+<p>假设主线例子里 C–B 这条路给补贴，走一次返 1 次过路费，边权变成 −1。马上出问题：路是双向的，B → C → B 绕一圈是 −1 + −1 = −2，每绕一圈都“更便宜”，这就是负环，最短路不存在。所以负权边一般出现在<b>单向</b>的图里。换一张单向的小图：A → B 2，A → C 3，C → B −2（返现 2），B → D 1。正确答案：A 到 B 走 A → C → B 是 3 − 2 = 1，A 到 D 是 1 + 1 = 2。</p>
+<p><b>Dijkstra 为什么错。</b>第 16 课说过：Dijkstra 取出一个点就当它确定了。从 A 出发，B（2）比 C（3）近，B 先出堆、被确定成 2，并用它把 D 更新成 3。之后 C 出堆，经过 −2 的边把 B 改成 1——可 B 已经确定过了，不会再出堆去更新 D。D 停在 3，错了。负边让一个“更远的点”绕回来反超，这正是第 16 课说的“负权边不能用”。</p>
+<p><b>Bellman-Ford 一句话：把所有边松弛 V − 1 轮。</b>不挑顺序、不用堆，每一轮把每条边都试一遍“经过它能不能更短”。</p>
+<pre>def bellman_ford(graph, source):
+    nodes = set(graph) | {neighbor for edges in graph.values() for neighbor in edges}
+    distances = {source: 0}
+    for _ in range(len(nodes) - 1):         # V - 1 轮
+        for node, edges in graph.items():   # 每一轮：所有边都松弛一次
+            for neighbor, weight in edges.items():
+                if node in distances and distances[node] + weight &lt; distances.get(neighbor, math.inf):
+                    distances[neighbor] = distances[node] + weight
+    return distances
+
+bellman_ford({"A": {"B": 2, "C": 3}, "C": {"B": -2}, "B": {"D": 1}}, "A")
+# {'A': 0, 'B': 1, 'C': 3, 'D': 2}</pre>
+<p><b>为什么是 V − 1 轮。</b>没有负环时，最短路不会重复经过同一个点，所以最多 V 个点、V − 1 条边。第 1 轮之后，“只用 1 条边”的最短路一定算对了；第 2 轮之后，“最多 2 条边”的也对了……第 V − 1 轮之后全部算对。</p>
+<p><b>顺手判负环。</b>V − 1 轮之后再松弛一轮，如果还有边能让距离变短，说明有负环。复杂度 <b>O(V × E)</b>，比 Dijkstra 慢得多，所以只在真有负权边时才用。</p>
+
+<h2>动手玩</h2>
+<p>先点 <b>0-1 BFS 从 A 出发</b>：虚线是免费路（0），实线是收费路（1）。下面的 deque 里，绿框是插到队头的，蓝框是排到队尾的。注意 B：先经过收费路被记成 1、排到队尾，接着经过免费路 C–B 改成 0、插到队头，于是队尾留下一条过期的 (1, B)。</p>
+<p>再点 <b>Floyd：逐个放开中转站</b>：橙色的点是当前的中转站 k，表里浅橙色是第 k 行和第 k 列（这一轮要用的数），深橙色是刚被改小的格子。留意 <code>dist[A][D]</code>：k = B 时变成 2，k = C 时又变成 1。</p>
+<div class="demo" id="variants"></div>
+
+<h2>该用哪个</h2>
+<table>
+  <tr><th>边权</th><th>要什么</th><th>用</th><th>时间</th></tr>
+  <tr><td>没有权（或全都一样）</td><td>单源</td><td>BFS（第 13 课）</td><td>O(V + E)</td></tr>
+  <tr><td>只有 0 和 1</td><td>单源</td><td>0-1 BFS</td><td>O(V + E)</td></tr>
+  <tr><td>非负</td><td>单源</td><td>Dijkstra（第 16 课）</td><td>O((V + E) log V)</td></tr>
+  <tr><td>有负权边</td><td>单源，顺便判负环</td><td>Bellman-Ford</td><td>O(V × E)</td></tr>
+  <tr><td>任意（不能有负环）</td><td>全源，n 不超过几百</td><td>Floyd-Warshall</td><td>O(n³)</td></tr>
+  <tr><td>非负，图大且稀疏</td><td>全源</td><td>每个点各跑一次 Dijkstra</td><td>O(V × (V + E) log V)</td></tr>
+</table>
+<p>记法：从上往下，能处理的边权越来越“宽”，代价越来越大。先看边权，能用上面的就别用下面的。</p>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>0-1 BFS 在入队时就标记已访问。</b>那是普通 BFS 的写法。0-1 BFS 里一个点第一次被碰到时不一定最近，要等出队时才确定。</li>
+  <li><b>0-1 BFS 把 0 边和 1 边的方向放反。</b>0 边要 <code>appendleft</code>（同样近，先处理），1 边才 <code>append</code>。</li>
+  <li><b>Floyd 把 k 写在里层。</b>不报错，但某些图会算出 ∞ 或者偏大的数。k 一定在最外层。</li>
+  <li><b>Floyd 初始表忘了对角线填 0。</b><code>dist[i][i]</code> 最后会是 ∞ 或者“绕一圈回到 i”的长度，而不是 0。</li>
+  <li><b>有负权边还用 Dijkstra。</b>不报错，结果可能错。见到负权先想 Bellman-Ford。</li>
+</ul>
+
+<h2>LeetCode 对应题目</h2>
+<table>
+  <tr><th>题号</th><th>题名</th><th>本课对应</th></tr>
+  <tr><td>2290</td><td>到达角落需要移除障碍物的最小数目</td><td>问题 1 的网格版：打穿墙的代价是 1，空地是 0</td></tr>
+  <tr><td>1368</td><td>使网格图至少有一条有效路径的最小代价</td><td>0-1 BFS：顺着箭头走代价 0，改箭头代价 1</td></tr>
+  <tr><td>1334</td><td>阈值距离内邻居最少的城市</td><td>Floyd 求全源最短路，再逐个城市计数</td></tr>
+  <tr><td>787</td><td>K 站中转内最便宜的航班</td><td>Bellman-Ford 只跑 K + 1 轮</td></tr>
+</table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-2290"><summary>LeetCode 2290 · 到达角落需要移除障碍物的最小数目</summary>
+<p><b>题意</b>：m × n 网格 <code>grid</code> 里 0 是空单元格、1 是障碍物，可以在空单元格之间上下左右移动，也可以移除障碍物；返回从左上角 <code>(0, 0)</code> 走到右下角 <code>(m - 1, n - 1)</code> 最少要移除几个障碍物（保证两个角都是空单元格，m × n ≤ 10<sup>5</sup>）。完整讲解见 <a href="#zero-one-bfs">正文问题 1</a>。</p>
+</details>
+<details id="lc-1368"><summary>LeetCode 1368 · 使网格图至少有一条有效路径的最小代价</summary>
+<p><b>题意</b>：m × n 网格 <code>grid</code> 的每个格子里有一个方向标记：1 向右、2 向左、3 向下、4 向上（可能指向网格外）。从 <code>(0, 0)</code> 出发，每一步沿当前格子的标记走到下一格；如果能这样走到 <code>(m - 1, n - 1)</code>，就称有一条有效路径。修改一个格子的标记代价为 1，每个格子的标记最多修改一次。返回让网格至少有一条有效路径的最小代价。</p>
+<p><b>例子</b>：输入 <code>grid = [[1, 1, 1, 1], [2, 2, 2, 2], [1, 1, 1, 1], [2, 2, 2, 2]]</code>，输出 <code>3</code>。从 (0, 0) 顺着向右走到 (0, 3)，把它改成向下（代价 1），到 (1, 3) 后顺着向左走到 (1, 0)，改成向下（代价 1），到 (2, 0) 后向右走到 (2, 3)，改成向下（代价 1），到达 (3, 3)。</p>
+<p><b>数据范围</b>：m、n ≤ 100。</p>
+</details>
+<details id="lc-1334"><summary>LeetCode 1334 · 阈值距离内邻居最少的城市</summary>
+<p><b>题意</b>：n 个城市（编号 0 到 n − 1），<code>edges[i] = [from, to, weight]</code> 表示两城之间有一条权重为 weight 的双向边，另给一个整数 <code>distanceThreshold</code>。对每个城市，数一数最短路距离不超过阈值的其他城市有几个；返回这个数最少的城市，有多个时返回<b>编号最大</b>的那个。</p>
+<p><b>例子</b>：输入 <code>n = 4</code>，<code>edges = [[0, 1, 3], [1, 2, 1], [1, 3, 4], [2, 3, 1]]</code>，<code>distanceThreshold = 4</code>，输出 <code>3</code>。阈值内的邻居：城市 0 有 1、2；城市 1 有 0、2、3；城市 2 有 0、1、3；城市 3 有 1、2。城市 0 和 3 都是 2 个，取编号大的 3。</p>
+<p><b>数据范围</b>：n ≤ 100，1 ≤ weight ≤ 10<sup>4</sup>。</p>
+</details>
+<details id="lc-787"><summary>LeetCode 787 · K 站中转内最便宜的航班</summary>
+<p><b>题意</b>：n 个城市，<code>flights[i] = [from, to, price]</code> 表示从 from 飞到 to 的单向航班，价格为 price。给定出发城市 <code>src</code>、目的地 <code>dst</code> 和整数 k，返回从 src 到 dst <b>最多经过 k 站中转</b>的最便宜价格；没有这样的路线就返回 <code>-1</code>。</p>
+<p><b>例子</b>：输入 <code>n = 4</code>，<code>flights = [[0, 1, 100], [1, 2, 100], [2, 0, 100], [1, 3, 600], [2, 3, 200]]</code>，<code>src = 0</code>，<code>dst = 3</code>，<code>k = 1</code>，输出 <code>700</code>。0 → 1 → 3 中转 1 次，价格 700；0 → 1 → 2 → 3 只要 400，但中转了 2 次，不符合要求。</p>
+<p><b>数据范围</b>：n ≤ 100，航班没有重复，也没有自己飞到自己的。</p>
+</details>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/shortest_path_variants.py</code>，建议顺序：<code>zero_one_bfs</code> → <code>min_walls_to_break</code>（网格版，LeetCode 2290）→ <code>floyd_warshall</code>（含负环检测）→ <code>bellman_ford</code>（含负环检测）。</p>
+<pre>uv run dsa/shortest_path_variants.py            # 主线例子，逐条打印期望和实际
+uv run pytest tests/test_shortest_path_variants.py</pre>
+<p>做完可以去 LeetCode 交：1368（使网格图至少有一条有效路径的最小代价，0-1 BFS）、1334（阈值距离内邻居最少的城市，Floyd）、787（K 站中转内最便宜的航班，Bellman-Ford 只跑 K + 1 轮）。</p>
+
+<h2>自测</h2>
+<details><summary>1. 一条单向的链 B → D → C → A，每条边权 1。点的循环顺序是 A、B、C、D。把 k 写在最里层（for i、for j、for k），dist[B][A] 会算成多少？</summary>
+∞。轮到 (i, j) = (B, A) 时：经过 D 要用 <code>dist[D][A]</code>，可 D 那一行排在 B 后面，还没算，是 ∞；经过 C 要用 <code>dist[B][C]</code>，j = C 排在 j = A 后面，也还没算，是 ∞。之后它们都被算出来了，可 (B, A) 这一格不会再回头算。正确答案是 3，k 放在最外层就能得到。</details>
+<details><summary>2. 0-1 BFS 里，如果 1 边也用 appendleft，会怎样？</summary>
+deque 不再有序：距离 d + 1 的点跑到了距离 d 的点前面，先被取出、先被“确定”，可它后来还可能经过 0 边变短，答案就错了。</details>
+<details><summary>3. 边权是 0、1、2 三种，还能用 deque 吗？</summary>
+不能直接用：只有队头和队尾两个口子，放不下三种距离 d、d + 1、d + 2 的顺序。可以把每条权重 2 的边拆成两条权重 1 的边（中间加一个点），再跑 0-1 BFS；或者直接用 Dijkstra。</details>
+
+<div class="nav"><a href="45-tree-dp.html">← 上一课：树形 DP</a><a href="choice-cheatsheet.html">附录：选择题速查 →</a></div>
+<script src="anim.js"></script>
+<script src="js/46-shortest-path-variants.js"></script>
+</body>
+</html>

@@ -67,7 +67,7 @@ def edit_distance(source, target):              # 只留上一行，空间 O(len
 </table>
 <p>“两个字符串”这一类，表要多开一行一列，留给“前 0 个字符”（空串）。所以第 i 行对应的字符是 <code>source[i - 1]</code>，不是 <code>source[i]</code>。这是二维 DP 里最常见的差一错误。</p>
 
-<h2>题 1：不同路径 II（LeetCode 63）</h2>
+<h2 id="unique-paths-ii">题 1：不同路径 II（LeetCode 63）</h2>
 <p><b>回顾 62（第 19 课已经写过）</b>：m 行 n 列的网格，从左上走到右下，每步只能向右或向下，有几条路。<code>dp[i][j]</code> = 走到 (i, j) 的路数 = 上面一格的路数 + 左边一格的路数。</p>
 <p><b>题意（63）</b>：同样的走法，但网格里有障碍（值为 1 的格子），障碍不能走。问有几条路。</p>
 <p><b>例子</b>：3 × 3 网格，正中间是障碍。原本有 6 条路，经过中间的都被堵死，只剩“沿上边再沿右边”和“沿左边再沿下边”两条。</p>
@@ -82,7 +82,7 @@ def edit_distance(source, target):              # 只留上一行，空间 O(len
 </ol>
 <p><b>复杂度</b>：O(m × n) 时间。每格只用到上一行和本行左边，所以只留一行也可以，额外空间 O(n)。</p>
 
-<h2>题 2：最小路径和（LeetCode 64）</h2>
+<h2 id="min-path-sum">题 2：最小路径和（LeetCode 64）</h2>
 <p><b>题意</b>：网格里每格有一个非负整数，从左上走到右下，每步只能向右或向下，问路过的数字（包括起点和终点）加起来最小是多少。</p>
 <p><b>例子</b>：</p>
 <div class="row"><span class="box dep">1</span><span class="box dep">3</span><span class="box dep">1</span></div>
@@ -118,7 +118,7 @@ def edit_distance(source, target):              # 只留上一行，空间 O(len
 <p>三个按钮各演示一道题，用“上一步 / 下一步”慢慢看。<b>橙色</b>是正在填的格子，<b>蓝色</b>是它用到的格子，<b>红色</b>是最后倒推出来的路线。编辑距离那一段，注意每格的说明里写了“从左上、上、左三格各代表什么操作”。最长回文子串的表只填对角线和它右上方的一半（灰色格子不需要），按子串长度一圈圈往右上填。</p>
 <div class="demo" id="dp2d"></div>
 
-<h2>题 3：最长公共子序列（LeetCode 1143，第 20 课回顾）</h2>
+<h2 id="longest-common-subsequence">题 3：最长公共子序列（LeetCode 1143，第 20 课回顾）</h2>
 <p><b>题意</b>：两个字符串里，按顺序都能挑出来（可以不连续）的最长的那串有多长。"abcde" 和 "ace" 的最长公共子序列是 "ace"，长度 3。</p>
 <p>这里只把表格读一遍，作为编辑距离的热身：</p>
 <ul>
@@ -128,7 +128,7 @@ def edit_distance(source, target):              # 只留上一行，空间 O(len
 </ul>
 <p><b>用上它的变体：两个字符串的删除操作（LeetCode 583）</b>。每次可以从任意一个串里删一个字符，问最少删几次让两个串相同。最后留下来的，正好是两者的一个公共子序列；留得越长删得越少。所以答案 = 两串长度之和 − 2 × 最长公共子序列长度。"sea" 和 "eat" 的最长公共子序列是 "ea"，答案 3 + 3 − 2 × 2 = 2。</p>
 
-<h2>题 4：编辑距离（LeetCode 72）</h2>
+<h2 id="edit-distance">题 4：编辑距离（LeetCode 72）</h2>
 <p><b>题意</b>：把字符串 source 变成 target，每次操作可以插入一个字符、删除一个字符、或把一个字符替换成另一个。问最少要几次操作。</p>
 <p><b>例子</b>：source = "horse"，target = "ros"，答案是 3：horse → rorse（把 h 换成 r）→ rose（删掉第二个 r）→ ros（删掉 e）。</p>
 <p><b>暴力做法为什么慢</b>：每一步都有插入、删除、替换三种选择，而且能插什么、在哪里插都有很多种，搜索树是指数级的。</p>
@@ -163,7 +163,7 @@ else:
 <p><b>为什么是对的</b>：任何一种编辑方案，对“两个末尾字符”的处理只有上面列出的几种可能（直接对上、替换、删掉 source 的末尾、给 target 的末尾插一个），每种可能之后剩下的都是一个更小的同类问题，而那个更小的问题我们已经算出了最优值。把所有可能都比较一遍，不会漏掉最优解。</p>
 <p><b>复杂度</b>：表有 (m + 1) × (n + 1) 格，每格 O(1)，所以 O(m × n) 时间和空间。只需要答案（不需要倒推操作）时，只留两行，空间 O(n)。</p>
 
-<h2>题 5：最长回文子串（LeetCode 5）</h2>
+<h2 id="longest-palindromic-substring">题 5：最长回文子串（LeetCode 5）</h2>
 <p><b>题意</b>：在字符串里找最长的、<b>连续</b>的、正着读和反着读一样的一段。</p>
 <p><b>例子</b>："babad" 里 "bab" 和 "aba" 都是长度 3 的回文子串，返回任意一个都对（本课骨架约定返回最靠左的 "bab"）。"cbbd" 返回 "bb"。</p>
 <p><b>暴力做法为什么慢</b>：子串一共有 n(n + 1) / 2 个，每个再花 O(n) 判断是不是回文，总共 O(n³)。慢在<b>判断是不是回文</b>这一步做了很多重复工作：判断 "abcba" 时，其实已经判断过中间的 "bcb"。</p>
@@ -220,6 +220,49 @@ else:
   <tr><td>516</td><td>最长回文子序列</td><td>练手：区间类，但“子序列”可以跳过字符，转移多了上、左两种</td></tr>
   <tr><td>221</td><td>最大正方形</td><td>练手：网格类，看左上、上、左三格取最小 + 1</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-62"><summary>LeetCode 62 · 不同路径</summary>
+<p><b>题意</b>：机器人在 m × n 网格的左上角，每次只能向下或向右移动一步，返回到达右下角的不同路径数（1 ≤ m, n ≤ 100，答案 ≤ 2 × 10<sup>9</sup>）。完整讲解见 <a href="#unique-paths-ii">正文题 1</a> 开头的回顾。</p>
+</details>
+<details id="lc-63"><summary>LeetCode 63 · 不同路径 II</summary>
+<p><b>题意</b>：同 62 的走法，但网格 <code>obstacleGrid</code> 里值为 1 的格子是障碍物，路径不能经过任何障碍物，返回到达右下角的不同路径数。完整讲解见 <a href="#unique-paths-ii">正文题 1</a>。</p>
+</details>
+<details id="lc-64"><summary>LeetCode 64 · 最小路径和</summary>
+<p><b>题意</b>：m × n 网格 <code>grid</code> 里都是非负整数，从左上角走到右下角，每次只能向下或向右，返回路径上数字总和（含起点和终点）的最小值。完整讲解见 <a href="#min-path-sum">正文题 2</a>。</p>
+</details>
+<details id="lc-120"><summary>LeetCode 120 · 三角形最小路径和</summary>
+<p><b>题意</b>：给一个三角形 <code>triangle</code>，第 i 行有 i + 1 个数。从顶部出发，每一步移动到下一行的相邻结点：当前在本行下标 i，下一步只能到下一行的下标 i 或 i + 1。返回从顶部走到底部的最小路径和。</p>
+<p><b>例子</b>：输入 <code>triangle = [[2], [3, 4], [6, 5, 7], [4, 1, 8, 3]]</code>，输出 <code>11</code>。路径 2 → 3 → 5 → 1 的和为 11，其他路径的和都不比它小。</p>
+<p><b>数据范围</b>：1 ≤ 行数 ≤ 200，−10<sup>4</sup> ≤ triangle[i][j] ≤ 10<sup>4</sup>（可能是负数）。进阶要求只用 O(行数) 的额外空间。</p>
+</details>
+<details id="lc-1143"><summary>LeetCode 1143 · 最长公共子序列</summary>
+<p><b>题意</b>：给两个字符串 <code>text1</code> 和 <code>text2</code>，返回它们最长公共子序列的长度，没有公共子序列时返回 0（子序列是删去若干字符、不改变剩余字符相对顺序得到的串）。完整讲解见 <a href="#longest-common-subsequence">正文题 3</a>。</p>
+</details>
+<details id="lc-583"><summary>LeetCode 583 · 两个字符串的删除操作</summary>
+<p><b>题意</b>：给两个单词 <code>word1</code> 和 <code>word2</code>，每步可以删除任意一个字符串中的一个字符，返回使两者相同所需的最少步数（长度 ≤ 500，只含小写字母）。完整讲解见 <a href="#longest-common-subsequence">正文题 3</a> 末尾。</p>
+</details>
+<details id="lc-72"><summary>LeetCode 72 · 编辑距离</summary>
+<p><b>题意</b>：给两个单词 <code>word1</code> 和 <code>word2</code>，可以对一个单词插入、删除或替换一个字符，返回把 word1 转换成 word2 的最少操作数（长度 0～500）。完整讲解见 <a href="#edit-distance">正文题 4</a>。</p>
+</details>
+<details id="lc-5"><summary>LeetCode 5 · 最长回文子串</summary>
+<p><b>题意</b>：给字符串 <code>s</code>（长度 ≤ 1000，由数字和英文字母组成），返回其中最长的回文子串；长度相同的有多个时，返回任意一个都正确。完整讲解见 <a href="#longest-palindromic-substring">正文题 5</a>。</p>
+</details>
+<details id="lc-647"><summary>LeetCode 647 · 回文子串</summary>
+<p><b>题意</b>：给字符串 <code>s</code>，统计并返回其中回文子串的数目。子串必须连续；起始位置或结束位置不同的子串算作不同的子串，即使内容相同。</p>
+<p><b>例子</b>：输入 <code>s = "abc"</code>，输出 <code>3</code>，只有 "a"、"b"、"c" 三个。示例 2 输入 <code>"aaa"</code>，输出 <code>6</code>：三个 "a"、两个 "aa"、一个 "aaa"，内容相同但位置不同的分别计数。</p>
+<p><b>数据范围</b>：1 ≤ s.length ≤ 1000，只含小写字母。</p>
+</details>
+<details id="lc-516"><summary>LeetCode 516 · 最长回文子序列</summary>
+<p><b>题意</b>：给字符串 <code>s</code>，找出其中最长的回文子序列，返回它的长度。子序列可以不连续，但不能改变剩余字符的相对顺序。</p>
+<p><b>例子</b>：输入 <code>s = "bbbab"</code>，输出 <code>4</code>。删掉 a 得到 "bbbb"，是回文；整串 "bbbab" 不是回文，所以最长是 4。</p>
+<p><b>数据范围</b>：1 ≤ s.length ≤ 1000，只含小写字母。</p>
+</details>
+<details id="lc-221"><summary>LeetCode 221 · 最大正方形</summary>
+<p><b>题意</b>：给一个由字符 <code>'0'</code> 和 <code>'1'</code> 组成的 m × n 矩阵，找到只包含 '1' 的最大正方形，返回它的<b>面积</b>（不是边长）。</p>
+<p><b>例子</b>：输入 <code>matrix = [["1","0","1","0","0"], ["1","0","1","1","1"], ["1","1","1","1","1"], ["1","0","0","1","0"]]</code>，输出 <code>4</code>。第 1～2 行、第 2～3 列是一个全 1 的 2 × 2 正方形；找不到全 1 的 3 × 3 正方形，所以面积是 4。</p>
+<p><b>数据范围</b>：1 ≤ m, n ≤ 300，矩阵元素是字符而不是整数。</p>
+</details>
 
 <h2>最容易错的地方</h2>
 <ul>

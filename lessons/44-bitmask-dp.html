@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 44 课 · 状压 DP</title>
+<link rel="stylesheet" href="style.css">
+<style>
+table.dp td { font-family: Consolas, monospace; text-align: center; min-width: 30px; }
+table.dp th { font-family: Consolas, monospace; }
+table.dp td.cur { background: #ffe0b2; font-weight: bold; }
+table.dp td.dep { background: #bbdefb; }
+table.dp td.best { background: #ffcdd2; font-weight: bold; }
+table.dp td.off { background: #f0f0f0; }
+.box.dep { background: #bbdefb; border-color: #1565c0; }
+.steps li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 44 课 · 状压 DP</h1>
+<p class="one-line">当 DP 的状态里要记住“<b>哪些东西已经用过</b>”，而东西只有十几个时，就把这个集合<b>压缩成一个整数</b>（位掩码），整数直接当数组下标。这就是状态压缩 DP，简称状压 DP。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#numbers"><code>math.inf</code></a>、<a href="python-basics.html#comprehension">推导式（二维表）</a>、<a href="python-basics.html#itertools"><code>itertools.permutations</code></a>、<a href="python-basics.html#decorator"><code>functools.cache</code></a>；前面的课 —— <a href="39-bit-manipulation.html">第 39 课 · 位运算技巧（位掩码、<code>bit_count</code>）</a>、<a href="21-backtracking.html">第 21 课 · 回溯（枚举排列）</a>、<a href="19-dp-memo.html">第 19 课 · DP（一）记忆化</a>、<a href="37-dp-1d.html">第 37 课 · 一维 DP（四步法）</a>。</p>
+
+<p>本课一条主线：一个配送站，先给 3 个骑手分 3 单（题 1，热身），再给 1 个骑手规划跑 4 个点的路线（题 2，旅行商问题）。两题的状态里都有一个“已经处理过的集合”。</p>
+
+<h2>先定义几个词</h2>
+<ul>
+  <li><b>位掩码</b>（第 39 课）：一个整数 <code>mask</code>，它的第 k 位是 1，表示第 k 个元素在集合里。n 个元素的所有子集，正好对应 0 到 2<sup>n</sup> − 1 这 2<sup>n</sup> 个整数。</li>
+  <li><b>全集</b>：所有元素都在，<code>(1 &lt;&lt; n) - 1</code>，二进制是 n 个 1。</li>
+  <li><b>状态压缩</b>：把“一个集合”这种不好当下标的状态，压缩成一个整数，于是 DP 表可以写成普通的列表 <code>best[mask]</code> 或 <code>shortest[mask][last]</code>。</li>
+</ul>
+<p>本课反复用到的四个操作（第 39 课的小招式）：</p>
+<table>
+  <tr><th>想做什么</th><th>写法</th><th>例子（mask = <code>0b1011</code>）</th></tr>
+  <tr><td>第 k 个在不在集合里</td><td><code>(mask &gt;&gt; k) &amp; 1</code></td><td>k = 2：0，不在</td></tr>
+  <tr><td>把第 k 个加进集合</td><td><code>mask | (1 &lt;&lt; k)</code></td><td>k = 2：<code>0b1111</code></td></tr>
+  <tr><td>把第 k 个从集合去掉（它原来在）</td><td><code>mask ^ (1 &lt;&lt; k)</code></td><td>k = 1：<code>0b1001</code></td></tr>
+  <tr><td>集合里有几个</td><td><code>mask.bit_count()</code></td><td>3</td></tr>
+</table>
+<p>还有一个关键性质：<b>往集合里加元素，整数一定变大；去掉元素，整数一定变小</b>（多了一个 1，少了一个 1）。所以只要 mask 从小到大循环，用到的“少一个元素的集合”一定已经算好。这就是状压 DP 的遍历顺序。</p>
+
+<h2>实战里怎么写：先看 n 有多大</h2>
+<table>
+  <tr><th>n</th><th>用什么</th><th>为什么</th></tr>
+  <tr><td>≤ 8</td><td><code>itertools.permutations</code> 枚举所有顺序</td><td>8! = 40320，最不容易写错</td></tr>
+  <tr><td>10～16</td><td>状压 DP，<code>functools.cache</code> 写递归，参数里带一个 <code>visited_mask</code></td><td>状态数 2<sup>n</sup> × n，几十万到一百万</td></tr>
+  <tr><td>更大</td><td>分配问题用匈牙利算法（<code>scipy.optimize.linear_sum_assignment</code>，O(n³)）；路线问题用启发式求近似解（Google OR-Tools）</td><td>2<sup>n</sup> 太大，精确的状压也算不动（这两个库本课程不装）</td></tr>
+</table>
+<pre>import math
+from functools import cache
+
+def shortest_route_length(distance):              # 从 0 出发，每点去一次，回到 0
+    count = len(distance)
+    everything = (1 &lt;&lt; count) - 1
+
+    @cache
+    def rest_of_trip(visited_mask, here):         # 去过 visited_mask、现在在 here，剩下最少还要走多远
+        if visited_mask == everything:
+            return distance[here][0]
+        best = math.inf
+        for next_place in range(count):
+            if not (visited_mask &gt;&gt; next_place) &amp; 1:
+                best = min(best, distance[here][next_place] + rest_of_trip(visited_mask | (1 &lt;&lt; next_place), next_place))
+        return best
+
+    return rest_of_trip(1, 0)                     # 1 = 0b1：只去过配送站
+
+shortest_route_length([[0, 2, 9, 10], [2, 0, 6, 4], [9, 6, 0, 3], [10, 4, 3, 0]])    # 18</pre>
+<p>完整可运行的版本在 <code>examples/bitmask_dp_in_practice.py</code>（<code>uv run examples/bitmask_dp_in_practice.py</code>），会倒推出“谁送哪单”和具体路线，还有“送完不回站”的变体。下面用填表的写法讲原理。</p>
+
+<h2 id="assign-tasks">题 1：分配任务（热身）</h2>
+<p><b>题意</b>：n 个骑手、n 个订单，<code>cost[worker][task]</code> 是骑手 worker 送订单 task 的花费。每个骑手正好送一单、每单正好一人送，总花费最少是多少？</p>
+<p><b>例子</b>：3 个骑手、3 单。</p>
+<table>
+  <tr><th>cost</th><th>单 0</th><th>单 1</th><th>单 2</th></tr>
+  <tr><th>骑手 0</th><td>9</td><td><b>2</b></td><td>7</td></tr>
+  <tr><th>骑手 1</th><td><b>6</b></td><td>4</td><td>3</td></tr>
+  <tr><th>骑手 2</th><td>5</td><td>8</td><td><b>1</b></td></tr>
+</table>
+<p>最优是加粗的三格：2 + 6 + 1 = 9。<b>贪心为什么不对</b>：按顺序让每个骑手挑剩下最便宜的，骑手 0 挑单 1（2），骑手 1 挑单 2（3），骑手 2 只剩单 0（5），总共 10。骑手 1 抢走了骑手 2 最便宜的那单。</p>
+<p><b>暴力做法为什么慢</b>：每种分法就是订单的一个排列，一共 n! 种。n = 16 时约 2 × 10<sup>13</sup> 种，跑不完。</p>
+<p><b>关键观察</b>：让骑手<b>按编号顺序</b>接单：骑手 0 先挑，然后骑手 1……那么“已经分出去的订单集合”就能说明一切：</p>
+<ul>
+  <li>集合里有几单，就说明前几个骑手已经安排好了（<code>mask.bit_count()</code> 个）。</li>
+  <li>后面的骑手怎么分，只取决于<b>还剩哪些单</b>，跟前面谁拿了哪单的具体对应无关。</li>
+</ul>
+<p>暴力枚举会把“骑手 0 拿单 1、骑手 1 拿单 0”和“骑手 0 拿单 0、骑手 1 拿单 1”当成两条路分别往下走，但它们走到的是同一个状态“单 0、单 1 已分出去”，只需要保留花费更少的那条。状态从 n! 个排列缩成了 2<sup>n</sup> 个集合。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>best[assigned_mask]</code> = 订单集合 assigned_mask 已经分给前 <code>assigned_mask.bit_count()</code> 个骑手时的最少花费。</li>
+  <li>转移：最后安排的是骑手 <code>worker = assigned_mask.bit_count() - 1</code>，他送的是集合里的某一单 task。去掉这一单，就是安排他之前的状态：
+<pre>best[assigned_mask] = min(best[assigned_mask ^ (1 &lt;&lt; task)] + cost[worker][task]
+                          for task in range(n) if (assigned_mask &gt;&gt; task) &amp; 1)</pre></li>
+  <li>初始值：<code>best[0] = 0</code>，一单都没分，不花钱。</li>
+  <li>遍历顺序：assigned_mask 从 1 到 2<sup>n</sup> − 1 从小到大。答案在 <code>best[(1 &lt;&lt; n) - 1]</code>。</li>
+</ol>
+<p><b>复杂度</b>：2<sup>n</sup> 个状态，每个状态试 n 单，O(2<sup>n</sup> × n) 时间，O(2<sup>n</sup>) 空间。n = 20 约 2000 万次，Python 几秒。</p>
+
+<h2 id="traveling-salesman">题 2：旅行商问题（TSP，本课主线）</h2>
+<p><b>题意</b>：骑手从 0 号点（配送站）出发，每个点正好去一次，最后回到配送站。<code>distance[a][b]</code> 是从 a 到 b 的距离。最短要走多远？</p>
+<p><b>例子</b>：4 个点，0 = 配送站、1 = 东门、2 = 图书馆、3 = 南门。</p>
+<table>
+  <tr><th>distance</th><th>0</th><th>1</th><th>2</th><th>3</th></tr>
+  <tr><th>0</th><td>0</td><td>2</td><td>9</td><td>10</td></tr>
+  <tr><th>1</th><td>2</td><td>0</td><td>6</td><td>4</td></tr>
+  <tr><th>2</th><td>9</td><td>6</td><td>0</td><td>3</td></tr>
+  <tr><th>3</th><td>10</td><td>4</td><td>3</td><td>0</td></tr>
+</table>
+<p>最短路线 0 → 1 → 3 → 2 → 0，长度 2 + 4 + 3 + 9 = 18（反方向走一样长）。</p>
+<p><b>暴力做法为什么慢</b>：除了起点，剩下 n − 1 个点的每种顺序都是一条路线，一共 (n − 1)! 条。n = 15 时约 8.7 × 10<sup>10</sup> 条。</p>
+<p><b>关键观察</b>：走到半路时，<b>接下来最少还要走多远，只取决于两件事：已经去过哪些点、现在停在哪</b>。至于是按什么顺序去的，后面根本不关心。比如“0 → 1 → 3”和“0 → 3 → 1”去过的集合都是 {0, 1, 3}，但一个停在 3、一个停在 1，所以停在哪也要记。于是状态是“集合 + 当前点”，一共 2<sup>n</sup> × n 个。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>shortest[visited_mask][last]</code> = 从 0 出发，正好走过 visited_mask 里的点，现在停在 last，最短走了多远。visited_mask 一定包含 0 和 last，不满足的格子没有意义（保持 <code>math.inf</code>）。</li>
+  <li>转移：停在 last 之前的那一站叫 previous，它在“去掉 last 的集合”里：
+<pre>previous_mask = visited_mask ^ (1 &lt;&lt; last)
+shortest[visited_mask][last] = min(shortest[previous_mask][previous] + distance[previous][last]
+                                   for previous in range(n) if (previous_mask &gt;&gt; previous) &amp; 1)</pre></li>
+  <li>初始值：<code>shortest[1][0] = 0</code>。1 就是 <code>0b0001</code>，只去过配送站，停在配送站，走了 0。</li>
+  <li>遍历顺序：visited_mask 从小到大（previous_mask 比它少一个 1，一定更小）。所有点都走过以后还要回站，答案是 <code>min(shortest[全集][last] + distance[last][0])</code>。</li>
+</ol>
+<pre>import math
+
+def shortest_round_trip(distance):
+    n = len(distance)
+    if n &lt;= 1:
+        return 0
+    shortest = [[math.inf] * n for _ in range(1 &lt;&lt; n)]
+    shortest[1][0] = 0
+    for visited_mask in range(1, 1 &lt;&lt; n):
+        if not visited_mask &amp; 1:                     # 不含配送站的集合没有意义
+            continue
+        for last in range(1, n):
+            if not (visited_mask &gt;&gt; last) &amp; 1:
+                continue
+            previous_mask = visited_mask ^ (1 &lt;&lt; last)
+            for previous in range(n):
+                if (previous_mask &gt;&gt; previous) &amp; 1:
+                    candidate = shortest[previous_mask][previous] + distance[previous][last]
+                    shortest[visited_mask][last] = min(shortest[visited_mask][last], candidate)
+    everything = (1 &lt;&lt; n) - 1
+    return min(shortest[everything][last] + distance[last][0] for last in range(1, n))</pre>
+<p><b>为什么对</b>：任何一条合法路线，走到某一步时都处在某个状态 (visited_mask, last)，而且它前面那一段一定能换成到达这个状态的最短走法（换了以后后面照样能走，总长只会更短）。所以每个状态只记最短值不会丢掉最优路线。</p>
+
+<h2>O(2<sup>n</sup> × n²) 什么时候能用</h2>
+<p>TSP 有 2<sup>n</sup> × n 个状态，每个状态试 n 个 previous，所以 O(2<sup>n</sup> × n²) 时间、O(2<sup>n</sup> × n) 空间。笔试看到数据范围就该反应过来：</p>
+<table>
+  <tr><th>n</th><th>2<sup>n</sup> × n²</th><th>(n − 1)!（暴力）</th><th>Python 实测（上面这段代码）</th></tr>
+  <tr><td>10</td><td>约 10 万</td><td>36 万</td><td>0.01 秒</td></tr>
+  <tr><td>12</td><td>约 59 万</td><td>4000 万</td><td>0.03 秒</td></tr>
+  <tr><td>15</td><td>约 740 万</td><td>8.7 × 10<sup>10</sup></td><td>0.3 秒</td></tr>
+  <tr><td>16</td><td>约 1700 万</td><td>1.3 × 10<sup>12</sup></td><td>0.8 秒</td></tr>
+  <tr><td>20</td><td>约 4.2 亿</td><td>1.2 × 10<sup>17</sup></td><td>按增长速度估算要半分钟左右，笔试必超时</td></tr>
+</table>
+<p>（实测比 2<sup>n</sup> × n² 这个数快，是因为不含配送站、不含 last 的状态都被 <code>continue</code> 跳过了。）经验规则：<b>题目给 n ≤ 15 或 16，又要“每个都用一次”“访问所有点”，基本就是状压 DP</b>；只要 O(2<sup>n</sup> × n) 的（像题 1），n 可以到 20。n 到 30 时 2<sup>30</sup> 已经超过 10 亿，状压就不行了。另外空间也要算：n = 20 时 2<sup>n</sup> × n 是两千万格，一个 Python 列表的格子要 8 字节，表本身就要一百多 MB。</p>
+
+<h2>动手玩</h2>
+<p>两个按钮各演示一道题。表格的每一行是一个集合，行名就是它的二进制写法（<b>最右边是第 0 位</b>，例如 <code>1011</code> 表示 {0, 1, 3}）。<b>橙色</b>是正在填的格子，<b>蓝色</b>是它用到的格子（去掉一个元素的集合），<b>红色</b>是最终答案，<b>灰色</b>是没有意义的格子（TSP 里集合不含配送站，或者 last 不在集合里）。注意行是从上往下、按整数从小到大填的。</p>
+<div class="demo" id="bitmask-dp"></div>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>题</th><th>状态</th><th>每个状态试几种</th><th>时间</th><th>空间</th><th>n 大约能到</th></tr>
+  <tr><td>分配任务</td><td>best[assigned_mask]</td><td>n 单</td><td>O(2<sup>n</sup> × n)</td><td>O(2<sup>n</sup>)</td><td>20</td></tr>
+  <tr><td>旅行商（TSP）</td><td>shortest[visited_mask][last]</td><td>n 个 previous</td><td>O(2<sup>n</sup> × n²)</td><td>O(2<sup>n</sup> × n)</td><td>15～16</td></tr>
+  <tr><td>暴力枚举排列</td><td>—</td><td>—</td><td>O(n!)</td><td>O(n)</td><td>8～10</td></tr>
+</table>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li><b>n 很小</b>（≤ 20，常见 ≤ 15 或 16），这是最强的信号。一般的 DP 题 n 都是几百几千。</li>
+  <li>题目要求“<b>每个都正好用一次</b>”“<b>访问所有点</b>”“把 n 个东西<b>分配</b>给 n 个人”。</li>
+  <li>写回溯（第 21 课）时发现：不同的走法会走到“用过的东西一样、当前位置一样”的局面，后面的事完全相同。这就是可以合并的重复状态。</li>
+  <li>状态要记“哪些用过了”：用 <code>set</code> 当状态既慢又不能当列表下标，换成位掩码。</li>
+</ul>
+
+<h2>LeetCode 对应题目</h2>
+<table>
+  <tr><th>题号</th><th>中文题名</th><th>本课对应</th></tr>
+  <tr><td>1879</td><td>两个数组最小的异或值之和</td><td>题 1 原样：cost[i][j] = nums1[i] XOR nums2[j]</td></tr>
+  <tr><td>526</td><td>优美的排列</td><td>题 1 的计数版：best 存方案数，min 换成加法</td></tr>
+  <tr><td>847</td><td>访问所有节点的最短路径</td><td>题 2 的状态 (visited_mask, 当前点)，边权都是 1，用 BFS（第 13 课）</td></tr>
+  <tr><td>943</td><td>最短超级串</td><td>题 2 换皮：distance 是“接上这个词要多写几个字母”</td></tr>
+  <tr><td>698</td><td>划分为 k 个相等的子集</td><td>练手：best[mask] = 用掉 mask 后当前这一组装了多少</td></tr>
+  <tr><td>1125</td><td>最小的必要团队</td><td>练手：mask 表示“已经覆盖了哪些技能”</td></tr>
+</table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-1879"><summary>LeetCode 1879 · 两个数组最小的异或值之和</summary>
+<p><b>题意</b>：两个长度都是 n 的整数数组 <code>nums1</code>、<code>nums2</code>，异或值之和定义为 (nums1[0] XOR nums2[0]) + (nums1[1] XOR nums2[1]) + … + (nums1[n − 1] XOR nums2[n − 1])。可以任意重新排列 <code>nums2</code>，返回重新排列后异或值之和的最小值。它就是 <a href="#assign-tasks">正文题 1</a> 的分配问题。</p>
+<p><b>例子</b>：输入 <code>nums1 = [1, 2]</code>，<code>nums2 = [2, 3]</code>，输出 <code>2</code>。把 nums2 排成 <code>[3, 2]</code>，得到 (1 XOR 3) + (2 XOR 2) = 2 + 0 = 2。</p>
+<p><b>数据范围</b>：n ≤ 14，0 ≤ <code>nums1[i]</code>、<code>nums2[i]</code> ≤ 10<sup>7</sup>。</p>
+</details>
+<details id="lc-526"><summary>LeetCode 526 · 优美的排列</summary>
+<p><b>题意</b>：用 1 到 n 这 n 个整数组成一个排列 <code>perm</code>（下标从 1 开始）。如果对每个位置 i（1 ≤ i ≤ n），<code>perm[i]</code> 能被 i 整除或 i 能被 <code>perm[i]</code> 整除，就称它是优美的排列。返回优美的排列的数量。</p>
+<p><b>例子</b>：输入 <code>n = 2</code>，输出 <code>2</code>。<code>[1, 2]</code> 和 <code>[2, 1]</code> 都满足：位置 1 上的数总能被 1 整除；<code>[2, 1]</code> 的位置 2 上是 1，2 能被 1 整除。</p>
+<p><b>数据范围</b>：n ≤ 15。</p>
+</details>
+<details id="lc-847"><summary>LeetCode 847 · 访问所有节点的最短路径</summary>
+<p><b>题意</b>：n 个节点（编号 0 到 n − 1）的无向连通图，<code>graph[i]</code> 是与节点 i 相邻的节点列表。返回访问所有节点的最短路径长度（经过的边数）。可以从任意节点出发、在任意节点结束，可以重复访问节点、重复走边。</p>
+<p><b>例子</b>：输入 <code>graph = [[1, 2, 3], [0], [0], [0]]</code>，即边 0–1、0–2、0–3（节点 0 在中间），输出 <code>4</code>，一条最短路径是 1 → 0 → 2 → 0 → 3。</p>
+<p><b>数据范围</b>：n ≤ 12。</p>
+</details>
+<details id="lc-943"><summary>LeetCode 943 · 最短超级串</summary>
+<p><b>题意</b>：给定字符串数组 <code>words</code>，返回一个最短的字符串，使 <code>words</code> 里的每个字符串都是它的子串。有多个最短答案时返回任意一个。保证 <code>words</code> 里没有一个字符串是另一个的子串。</p>
+<p><b>例子</b>：输入 <code>words = ["alex", "loves", "leetcode"]</code>，输出 <code>"alexlovesleetcode"</code>。这三个词任意两个首尾都不重叠，所以按任何顺序直接拼接都是 17 个字母，都是正确答案。</p>
+<p><b>数据范围</b>：<code>words</code> 最多 12 个，每个长度 ≤ 20，只含小写字母且互不相同。</p>
+</details>
+<details id="lc-698"><summary>LeetCode 698 · 划分为 k 个相等的子集</summary>
+<p><b>题意</b>：给定整数数组 <code>nums</code> 和正整数 k，判断能否把 <code>nums</code> 分成 k 个非空子集，使每个子集的元素和都相等。返回 <code>true</code> 或 <code>false</code>。</p>
+<p><b>例子</b>：输入 <code>nums = [4, 3, 2, 3, 5, 2, 1]</code>，<code>k = 4</code>，输出 <code>true</code>。总和 20，每组和为 5：(5)、(1, 4)、(2, 3)、(2, 3)。</p>
+<p><b>数据范围</b>：1 ≤ k ≤ n ≤ 16，1 ≤ <code>nums[i]</code> ≤ 10<sup>4</sup>。</p>
+</details>
+<details id="lc-1125"><summary>LeetCode 1125 · 最小的必要团队</summary>
+<p><b>题意</b>：<code>req_skills</code> 是项目需要的技能列表，<code>people[i]</code> 是第 i 个人掌握的技能列表。如果一组人里，每项需要的技能都至少有一人掌握，就称这组人是必要团队。返回人数最少的必要团队，用人员编号的列表表示，顺序任意；有多个答案时返回任意一个。保证答案存在。</p>
+<p><b>例子</b>：输入 <code>req_skills = ["java", "nodejs", "reactjs"]</code>，<code>people = [["java"], ["nodejs"], ["nodejs", "reactjs"]]</code>，输出 <code>[0, 2]</code>。0 号会 java，2 号会 nodejs 和 reactjs，两人就够；只用一人覆盖不全。</p>
+<p><b>数据范围</b>：<code>req_skills</code> 最多 16 项，<code>people</code> 最多 60 人。</p>
+</details>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>运算符优先级</b>：<code>1 &lt;&lt; n - 1</code> 是 <code>1 &lt;&lt; (n - 1)</code>，不是 <code>(1 &lt;&lt; n) - 1</code>。全集一定写成 <code>(1 &lt;&lt; n) - 1</code>。判断用 <code>(mask &gt;&gt; k) &amp; 1</code>，养成加括号的习惯（第 39 课）。</li>
+  <li><b>用异或“加入”元素</b>：<code>mask ^ (1 &lt;&lt; k)</code> 在第 k 位已经是 1 时会把它去掉。加入用 <code>|</code>，确定在集合里时才用 <code>^</code> 去掉。</li>
+  <li><b>TSP 忘了回起点</b>：<code>shortest[全集][last]</code> 只走到了 last，答案还要加 <code>distance[last][0]</code>。题目说“不用回来”时才不加。</li>
+  <li><b>初始值</b>：TSP 是 <code>shortest[1][0] = 0</code>，不是 <code>shortest[0][0]</code>，起点本身也在集合里。</li>
+  <li><b>n = 1</b>：只有配送站，<code>range(1, n)</code> 是空的，<code>min()</code> 会报错，要单独返回 0。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/bitmask_dp.py</code>。建议顺序：<code>min_assignment_cost</code> → <code>shortest_round_trip</code> →（选做）<code>shortest_round_trip_route</code>。动手前，先用一句话写下 mask 代表哪个集合、表里一格代表什么。</p>
+<pre>uv run dsa/bitmask_dp.py
+uv run pytest tests/test_bitmask_dp.py</pre>
+<p>测试会拿你的结果和“枚举所有排列”的结果比对，还会用 n = 16 的分配和 n = 12 的 TSP 检查速度。</p>
+
+<h2>自测</h2>
+<details><summary>1. 为什么 mask 从小到大循环，就能保证转移用到的状态已经算好？</summary>
+转移用的是“去掉一个元素的集合” mask ^ (1 &lt;&lt; k)，它比 mask 少一个二进制的 1，作为整数一定更小。从小到大循环时，更小的整数在之前就处理过了。</details>
+<details><summary>2. TSP 的状态为什么要同时记集合和当前点，只记集合不行吗？</summary>
+不行。下一步走到哪个点，距离取决于现在停在哪。去过 {0, 1, 3} 停在 1 和停在 3，接下来去 2 的距离分别是 6 和 3，后面的最优走法也不同，不能合成一个状态。</details>
+<details><summary>3. 题目给 n ≤ 50，要求每个点访问一次，还能用状压 DP 吗？</summary>
+不能。2<sup>50</sup> 约 10<sup>15</sup>，状态都存不下。这时要找题目的其他结构（比如图是一棵树、点在一条线上），或者题目只要近似解。看到 n ≤ 15～20 才考虑状压。</details>
+
+<div class="nav"><a href="43-interval-dp.html">← 上一课：区间 DP</a><a href="45-tree-dp.html">下一课：树形 DP →</a></div>
+<script src="anim.js"></script>
+<script src="js/44-bitmask-dp.js"></script>
+</body>
+</html>

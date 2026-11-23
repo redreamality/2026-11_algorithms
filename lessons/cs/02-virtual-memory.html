@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>计算机基础 第 2 课 · 内存管理与虚拟内存</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="cs.css">
+<style>
+/* 置换动画：列 = 每一次访问，行 = 每个页框 */
+.demo table.trace { font-size: 14px; }
+.demo table.trace th, .demo table.trace td { padding: 2px 6px; text-align: center; min-width: 18px; font-family: Consolas, monospace; }
+.demo table.trace td.cur { outline: 2px solid #e65100; outline-offset: -2px; }
+.demo table.trace td.new { background: #ffe0b2; }
+.demo table.trace td.hit { background: #c8e6c9; }
+.demo table.trace td.miss { background: #ffcdd2; }
+.demo table.trace th.cur { background: #ffe0b2; }
+.demo .trace-wrap { overflow-x: auto; }
+/* 地址翻译动画 */
+.demo table.pt td, .demo table.pt th { padding: 2px 10px; font-family: Consolas, monospace; }
+.demo .pair { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+.demo .pair > div > .label { display: block; }
+</style>
+</head>
+<body>
+<!-- 全页共用的箭头。SVG 里写 marker-end="url(#arrow)" 即可 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+  <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0b62c4"/></marker>
+  <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c62828"/></marker>
+  <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e7d32"/></marker>
+</defs></svg>
+
+<p><a href="index.html">← 计算机基础目录</a></p>
+<h1>第 2 课 · 内存管理与虚拟内存</h1>
+<p class="one-line">每个进程看到的都是一套<b>自己的</b>地址，叫虚拟地址。硬件按进程各自的<b>页表</b>，把虚拟地址翻译成真实的内存地址。内存不够时，暂时用不到的<b>页</b>放到磁盘上，用到了再调回来。调回来时如果内存满了，就得挑一页换出去，挑哪一页由<b>页面置换算法</b>决定。</p>
+<p class="prereq">开始前要会：<a href="01-process-scheduling.html">第 1 课 · 进程与进程调度</a>。要用到：进程和它占的内存（<a href="01-process-scheduling.html#program-process">第 1 课第 1 节</a>）、内核、PCB、中断、阻塞状态、上下文切换、fork（<a href="01-process-scheduling.html#fork">第 5 节</a>）、共享内存（<a href="01-process-scheduling.html#ipc">第 11 节</a>）。</p>
+
+<p>还是那家小网店。服务器上同时跑着两个进程：网店程序 <b>shop-server</b>，以及每晚生成销售日报的<b>报表进程</b>。两个程序是分别写的，碰巧都把一个重要变量放在了地址 <code>0x1000</code>：shop-server 在那里存「库存数」，报表进程在那里存「今日销售额」。可它们同时运行，谁也没把谁的数据改坏。这是怎么做到的？这一课就从这个问题讲起。</p>
+
+<p class="roadmap"><b>本课的路线</b>：字节和地址 → 虚拟地址和物理地址 → 为什么要虚拟内存 → 早期的办法：连续分配和碎片 → 分页 → 页表 → 地址翻译计算 → 多级页表 → TLB → 分段（对比）→ 缺页中断 → 局部性 → 页面置换算法 → Belady 异常 → 抖动 → 动手玩 → 共享内存和写时复制 → 题单怎么考。</p>
+
+<h2 id="bytes">1. 字节和地址</h2>
+<div class="term"><b>位（bit）</b>：一个 0 或 1。<b>字节（Byte，B）</b>：8 个位，是内存存取的最小单位。1KB = 1024 B，1MB = 1024 KB，1GB = 1024 MB。</div>
+<div class="term"><b>地址</b>：内存是一长排格子，每格 1 字节，从 0 开始编号。一个格子的编号就是它的地址。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 130" width="640" role="img" aria-label="内存是一排字节格子，每格有编号">
+  <text x="34" y="64" text-anchor="middle">…</text>
+  <rect x="60" y="40" width="64" height="36" class="hot"/><text x="92" y="63" text-anchor="middle" class="mono">3A</text>
+  <rect x="124" y="40" width="64" height="36" class="obj"/><text x="156" y="63" text-anchor="middle" class="mono">00</text>
+  <rect x="188" y="40" width="64" height="36" class="obj"/><text x="220" y="63" text-anchor="middle" class="mono">07</text>
+  <rect x="252" y="40" width="64" height="36" class="obj"/><text x="284" y="63" text-anchor="middle" class="mono">FF</text>
+  <rect x="316" y="40" width="64" height="36" class="obj"/><text x="348" y="63" text-anchor="middle" class="mono">12</text>
+  <rect x="380" y="40" width="64" height="36" class="obj"/><text x="412" y="63" text-anchor="middle" class="mono">9C</text>
+  <rect x="444" y="40" width="64" height="36" class="obj"/><text x="476" y="63" text-anchor="middle" class="mono">00</text>
+  <rect x="508" y="40" width="64" height="36" class="obj"/><text x="540" y="63" text-anchor="middle" class="mono">41</text>
+  <text x="600" y="64" text-anchor="middle">…</text>
+  <text x="92" y="96" text-anchor="middle" class="small mono">0x1000</text>
+  <text x="156" y="96" text-anchor="middle" class="small mono">0x1001</text>
+  <text x="220" y="96" text-anchor="middle" class="small mono">0x1002</text>
+  <text x="284" y="96" text-anchor="middle" class="small mono">0x1003</text>
+  <text x="348" y="96" text-anchor="middle" class="small mono">0x1004</text>
+  <text x="412" y="96" text-anchor="middle" class="small mono">0x1005</text>
+  <text x="476" y="96" text-anchor="middle" class="small mono">0x1006</text>
+  <text x="540" y="96" text-anchor="middle" class="small mono">0x1007</text>
+  <text x="60" y="26" class="small">格子里是存的内容（1 字节）</text>
+  <text x="60" y="122" class="small">格子下面是它的地址：相邻两格的地址差 1</text>
+</svg>
+<figcaption>地址 0x1000 这一格里存着 0x3A。「地址」和「内容」是两回事：地址是门牌号，内容是屋里的东西</figcaption>
+</figure>
+<p>地址习惯用<b>十六进制</b>写，前面加 <code>0x</code>。十六进制每一位是 0～9、A～F（A = 10 … F = 15），<b>一位十六进制正好等于 4 位二进制</b>，所以换算很方便：<code>0x1000</code> = 二进制 <code>0001 0000 0000 0000</code> = 2<sup>12</sup> = 4096。这个数后面会反复出现：<b>4KB = 4096 字节 = 0x1000</b>。</p>
+
+<h2 id="address-space">2. 虚拟地址和物理地址</h2>
+<div class="term"><b>物理地址</b>：内存条上真实格子的编号。整台机器只有一套，所有进程共用。</div>
+<div class="term"><b>虚拟地址</b>（也叫<b>逻辑地址</b>）：进程里的程序使用的地址。shop-server 的代码里写「读 0x1000」，这个 0x1000 就是虚拟地址。</div>
+<div class="term"><b>地址空间</b>：一个进程能使用的全部虚拟地址的范围。每个进程有<b>自己的</b>一套地址空间，都从 0 开始。</div>
+<div class="term"><b>MMU（内存管理单元）</b>：CPU 里的一个硬件部件。程序每访问一次内存，MMU 都把虚拟地址翻译成物理地址，再去访问真正的内存。翻译规则由内核为每个进程分别设置。</div>
+<p>开头的问题就有了答案：两个进程用的 0x1000 都是<b>虚拟</b>地址，属于各自的地址空间。内核给它们设置了不同的翻译规则，同一个 0x1000 落到了两个不同的物理地址上：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 310" width="640" role="img" aria-label="两个进程的虚拟地址 0x1000 被翻译到不同的物理地址">
+  <text x="95" y="24" text-anchor="middle" class="title mono">shop-server</text>
+  <text x="95" y="42" text-anchor="middle" class="small">的地址空间（虚拟）</text>
+  <rect x="20" y="60" width="150" height="36" class="obj"/><text x="95" y="83" text-anchor="middle" class="mono">0x0000–0x0FFF</text>
+  <rect x="20" y="100" width="150" height="36" class="hot"/><text x="95" y="123" text-anchor="middle" class="mono">0x1000–0x1FFF</text>
+  <rect x="20" y="140" width="150" height="36" class="obj"/><text x="95" y="163" text-anchor="middle" class="mono">0x2000–0x2FFF</text>
+  <text x="95" y="198" text-anchor="middle" class="small">0x1000 处存「库存数」</text>
+
+  <text x="545" y="24" text-anchor="middle" class="title">报表进程</text>
+  <text x="545" y="42" text-anchor="middle" class="small">的地址空间（虚拟）</text>
+  <rect x="470" y="60" width="150" height="36" class="obj"/><text x="545" y="83" text-anchor="middle" class="mono">0x0000–0x0FFF</text>
+  <rect x="470" y="100" width="150" height="36" class="ok"/><text x="545" y="123" text-anchor="middle" class="mono">0x1000–0x1FFF</text>
+  <text x="545" y="158" text-anchor="middle" class="small">0x1000 处存「今日销售额」</text>
+
+  <text x="325" y="28" text-anchor="middle" class="title">物理内存（只有一套）</text>
+  <rect x="270" y="40" width="110" height="24" class="muted"/><text x="325" y="57" text-anchor="middle" class="small">0x0000 内核</text>
+  <rect x="270" y="64" width="110" height="24" class="muted"/><text x="325" y="81" text-anchor="middle" class="small mono">0x1000</text>
+  <rect x="270" y="88" width="110" height="24" class="hot"/><text x="325" y="105" text-anchor="middle" class="small">0x2000 库存数</text>
+  <rect x="270" y="112" width="110" height="24" class="muted"/><text x="325" y="129" text-anchor="middle" class="small mono">0x3000</text>
+  <rect x="270" y="136" width="110" height="24" class="muted"/><text x="325" y="153" text-anchor="middle" class="small mono">0x4000</text>
+  <rect x="270" y="160" width="110" height="24" class="muted"/><text x="325" y="177" text-anchor="middle" class="small mono">0x5000</text>
+  <rect x="270" y="184" width="110" height="24" class="muted"/><text x="325" y="201" text-anchor="middle" class="small mono">0x6000</text>
+  <rect x="270" y="208" width="110" height="24" class="muted"/><text x="325" y="225" text-anchor="middle" class="small mono">0x7000</text>
+  <rect x="270" y="232" width="110" height="24" class="muted"/><text x="325" y="249" text-anchor="middle" class="small mono">0x8000</text>
+  <rect x="270" y="256" width="110" height="24" class="ok"/><text x="325" y="273" text-anchor="middle" class="small">0x9000 销售额</text>
+
+  <line x1="172" y1="118" x2="266" y2="100" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="218" y="96" text-anchor="middle" class="small">MMU</text>
+  <line x1="468" y1="118" x2="384" y2="266" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="440" y="210" class="small">MMU</text>
+  <text x="320" y="302" text-anchor="middle">两个进程都访问虚拟地址 0x1000，被翻译到了两个不同的物理地址</text>
+</svg>
+<figcaption>每个进程只看得见自己的地址空间（左右两列），真正的内存（中间）由内核统一分配</figcaption>
+</figure>
+<p>shop-server 访问 0x1000 时，MMU 用 shop-server 的规则翻译成 0x2000；报表进程访问 0x1000 时，用报表进程的规则翻译成 0x9000。「规则」具体长什么样，第 5～7 节讲。</p>
+
+<h2 id="why-virtual">3. 为什么要虚拟内存</h2>
+<p>让程序直接用物理地址，看起来更简单。但多出这一层翻译，换来三个好处：</p>
+<ul>
+  <li><b>隔离</b>：一个进程只能访问自己的地址空间，碰不到别人的内存，也碰不到内核。报表进程写错了地址，最多把自己搞崩，不会改坏 shop-server 的库存数。第 1 课说「进程的内存互相隔离」，靠的就是这个。</li>
+  <li><b>独占的错觉</b>：每个进程都以为自己从 0 开始独占一整片内存。写程序、编译程序时不用关心「运行时会被放在内存的哪里」。</li>
+  <li><b>可以比物理内存大</b>：进程的数据不必全部待在内存里，暂时不用的部分放在磁盘上，要用了再搬回来（第 11 节）。于是所有进程的地址空间加起来，可以远大于内存条的容量。</li>
+</ul>
+<div class="term"><b>虚拟内存</b>：上面这整套机制的名字。进程使用虚拟地址，由 MMU 翻译；内存装不下的部分放到磁盘上，按需调入。</div>
+
+<h2 id="contiguous">4. 早期的办法：连续分配和碎片</h2>
+<p>最直接的翻译规则是：给每个进程在物理内存里划<b>一整块连续</b>的区域，虚拟地址加上这块区域的起始地址就是物理地址。这叫<b>连续分配</b>。它的问题出在进程来来去去之后：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 190" width="640" role="img" aria-label="连续分配产生空洞，首次适应和最佳适应的选择不同">
+  <text x="217" y="30" text-anchor="middle" class="small">① 首次适应放这里</text>
+  <text x="378" y="30" text-anchor="middle" class="small">② 最佳适应放这里</text>
+  <rect x="20" y="40" width="56" height="44" class="muted"/><text x="48" y="60" text-anchor="middle">内核</text><text x="48" y="77" text-anchor="middle" class="small">12KB</text>
+  <rect x="76" y="40" width="94" height="44" class="obj"/><text x="123" y="60" text-anchor="middle" class="mono">shop</text><text x="123" y="77" text-anchor="middle" class="small">20KB</text>
+  <rect x="170" y="40" width="94" height="44" class="plain"/><text x="217" y="60" text-anchor="middle">空闲</text><text x="217" y="77" text-anchor="middle" class="small">20KB</text>
+  <rect x="264" y="40" width="84" height="44" class="obj"/><text x="306" y="60" text-anchor="middle">报表</text><text x="306" y="77" text-anchor="middle" class="small">18KB</text>
+  <rect x="348" y="40" width="61" height="44" class="plain"/><text x="378" y="60" text-anchor="middle">空闲</text><text x="378" y="77" text-anchor="middle" class="small">13KB</text>
+  <rect x="409" y="40" width="70" height="44" class="obj"/><text x="444" y="60" text-anchor="middle">邮件</text><text x="444" y="77" text-anchor="middle" class="small">15KB</text>
+  <rect x="479" y="40" width="141" height="44" class="plain"/><text x="549" y="60" text-anchor="middle">空闲</text><text x="549" y="77" text-anchor="middle" class="small">30KB</text>
+  <text x="20" y="104" class="small">低地址</text><text x="620" y="104" text-anchor="end" class="small">高地址</text>
+  <text x="20" y="128">新进程要 12KB。首次适应：从低地址往后找，第一个够大的是 20KB 的洞，剩下 8KB</text>
+  <text x="20" y="152">最佳适应：挑能放下的最小的洞，是 13KB 的洞，剩下 1KB（太碎，几乎没法再用）</text>
+  <text x="20" y="178" class="title">空闲共 20 + 13 + 30 = 63KB，却放不下一个要 35KB 的进程：外部碎片</text>
+</svg>
+<figcaption>白色是空洞：进程结束后留下的空闲区域。洞越来越多、越来越碎</figcaption>
+</figure>
+<div class="term"><b>外部碎片</b>：没分给任何进程、但因为太零碎、不连续而用不上的空闲内存。</div>
+<div class="term"><b>内部碎片</b>：已经分给了进程、但进程用不上的那部分内存。例如进程要 9000 字节，却按整块分给它 12KB。</div>
+<p>新进程来了，放进哪个空洞？两种常考的策略：</p>
+<ul>
+  <li><b>首次适应</b>：从低地址开始找，用第一个够大的洞。快。</li>
+  <li><b>最佳适应</b>：用所有够大的洞里最小的那个。听起来最省，实际上每次都留下一个极小的、几乎没用的碎块，所以外部碎片反而多。</li>
+</ul>
+<p>不管用哪种策略，只要要求「连续」，外部碎片就躲不开。解决办法是不再要求连续，这就是下一节的分页。</p>
+
+<h2 id="pages">5. 分页：切成一样大的小块</h2>
+<div class="term"><b>页</b>：把每个进程的地址空间切成一样大的小块，每块叫一页，从 0 开始编号。现在最常见的页大小是 <b>4KB</b>。shop-server 的 0x0000–0x0FFF 是页 0，0x1000–0x1FFF 是页 1，依此类推。</div>
+<div class="term"><b>页框</b>（也叫<b>物理块</b>、页帧）：把物理内存也切成同样大小的块，每块叫一个页框，也从 0 编号。</div>
+<p>页和页框一样大，所以<b>任何一页可以放进任何一个空页框</b>，不需要和别的页挨着。一个进程的几页可以散落在内存各处：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 320" width="640" role="img" aria-label="两个进程的页分散放在物理内存的页框里">
+  <text x="85" y="36" text-anchor="middle" class="title mono">shop-server</text>
+  <rect x="20" y="50" width="130" height="34" class="obj"/><text x="85" y="72" text-anchor="middle">页 0</text>
+  <rect x="20" y="90" width="130" height="34" class="hot"/><text x="85" y="112" text-anchor="middle">页 1</text>
+  <rect x="20" y="130" width="130" height="34" class="obj"/><text x="85" y="152" text-anchor="middle">页 2</text>
+  <rect x="20" y="170" width="130" height="34" class="obj"/><text x="85" y="192" text-anchor="middle">页 3</text>
+  <line x1="85" y1="204" x2="85" y2="230" class="dash" marker-end="url(#arrow)"/>
+  <rect x="20" y="232" width="130" height="50" class="muted"/><text x="85" y="254" text-anchor="middle">磁盘</text><text x="85" y="272" text-anchor="middle" class="small">页 3 暂时不在内存</text>
+
+  <text x="555" y="36" text-anchor="middle" class="title">报表进程</text>
+  <rect x="490" y="50" width="130" height="34" class="obj"/><text x="555" y="72" text-anchor="middle">页 0</text>
+  <rect x="490" y="90" width="130" height="34" class="ok"/><text x="555" y="112" text-anchor="middle">页 1</text>
+
+  <text x="320" y="30" text-anchor="middle" class="title">物理内存</text>
+  <rect x="240" y="40" width="160" height="26" class="muted"/><text x="320" y="58" text-anchor="middle" class="small">页框 0：内核</text>
+  <rect x="240" y="66" width="160" height="26" class="muted"/><text x="320" y="84" text-anchor="middle" class="small">页框 1：内核</text>
+  <rect x="240" y="92" width="160" height="26" class="hot"/><text x="320" y="110" text-anchor="middle" class="small">页框 2：shop 的页 1</text>
+  <rect x="240" y="118" width="160" height="26" class="obj"/><text x="320" y="136" text-anchor="middle" class="small">页框 3：报表的页 0</text>
+  <rect x="240" y="144" width="160" height="26" class="plain"/><text x="320" y="162" text-anchor="middle" class="small">页框 4：空闲</text>
+  <rect x="240" y="170" width="160" height="26" class="obj"/><text x="320" y="188" text-anchor="middle" class="small">页框 5：shop 的页 0</text>
+  <rect x="240" y="196" width="160" height="26" class="plain"/><text x="320" y="214" text-anchor="middle" class="small">页框 6：空闲</text>
+  <rect x="240" y="222" width="160" height="26" class="obj"/><text x="320" y="240" text-anchor="middle" class="small">页框 7：shop 的页 2</text>
+  <rect x="240" y="248" width="160" height="26" class="plain"/><text x="320" y="266" text-anchor="middle" class="small">页框 8：空闲</text>
+  <rect x="240" y="274" width="160" height="26" class="ok"/><text x="320" y="292" text-anchor="middle" class="small">页框 9：报表的页 1</text>
+
+  <line x1="150" y1="67" x2="237" y2="181" class="line" marker-end="url(#arrow)"/>
+  <line x1="150" y1="107" x2="237" y2="105" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="150" y1="147" x2="237" y2="233" class="line" marker-end="url(#arrow)"/>
+  <line x1="490" y1="67" x2="403" y2="130" class="line" marker-end="url(#arrow)"/>
+  <line x1="490" y1="107" x2="403" y2="286" class="line" marker-end="url(#arrow)"/>
+</svg>
+<figcaption>每页 4KB，每个页框也是 4KB。页 1（虚拟地址 0x1000 开始的那一页）在两个进程里分别放在页框 2 和页框 9</figcaption>
+</figure>
+<p>这样一来：</p>
+<ul>
+  <li><b>没有外部碎片</b>：任何一个空页框都能用上，不存在「空闲总量够、但不连续所以放不下」的情况。</li>
+  <li><b>只有很小的内部碎片</b>：只有每个进程的最后一页可能没装满。例如 shop-server 的数据有 9000 字节，要 ⌈9000 ÷ 4096⌉ = 3 页 = 12288 字节，最后一页浪费 12288 − 9000 = 3288 字节。平均每个进程浪费半页。</li>
+</ul>
+<p>页大小也是个权衡：页越大，内部碎片越大；页越小，页数越多，下一节的页表就越大。</p>
+
+<h2 id="page-table">6. 页表：记下每一页放在哪个页框</h2>
+<p>页散落在各处，就需要一张表记下「第几页在第几个页框」。</p>
+<div class="term"><b>页表</b>：每个进程一张，第 k 行记录页 k 放在哪个页框。页表本身存放在内存里，由内核维护；进程的 PCB 里记着它的页表在哪。进程被调度上 CPU 时，内核把页表的起始地址放进 CPU 里一个专门的寄存器（<b>页表基址寄存器</b>），MMU 就按这张表翻译。</div>
+<div class="term"><b>页表项</b>：页表的一行。除了页框号，还有几个一位的标记：
+<b>有效位</b>（1 = 这一页在内存里，0 = 不在，可能在磁盘上）、
+<b>修改位</b>（也叫脏位，1 = 调入内存以后被写过）、
+<b>访问位</b>（也叫引用位，1 = 最近被访问过），以及<b>保护位</b>（这一页能不能写、能不能执行）。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 220" width="640" role="img" aria-label="shop-server 的页表">
+  <rect x="110" y="30" width="100" height="30" class="muted"/><text x="160" y="50" text-anchor="middle" class="title">页框号</text>
+  <rect x="210" y="30" width="100" height="30" class="muted"/><text x="260" y="50" text-anchor="middle" class="title">有效位</text>
+  <rect x="310" y="30" width="100" height="30" class="muted"/><text x="360" y="50" text-anchor="middle" class="title">修改位</text>
+  <rect x="410" y="30" width="100" height="30" class="muted"/><text x="460" y="50" text-anchor="middle" class="title">访问位</text>
+
+  <text x="90" y="82" text-anchor="end">页 0</text>
+  <rect x="110" y="60" width="100" height="34" class="plain"/><text x="160" y="82" text-anchor="middle" class="mono">5</text>
+  <rect x="210" y="60" width="100" height="34" class="plain"/><text x="260" y="82" text-anchor="middle" class="mono">1</text>
+  <rect x="310" y="60" width="100" height="34" class="plain"/><text x="360" y="82" text-anchor="middle" class="mono">0</text>
+  <rect x="410" y="60" width="100" height="34" class="plain"/><text x="460" y="82" text-anchor="middle" class="mono">1</text>
+
+  <text x="90" y="116" text-anchor="end">页 1</text>
+  <rect x="110" y="94" width="100" height="34" class="hot"/><text x="160" y="116" text-anchor="middle" class="mono">2</text>
+  <rect x="210" y="94" width="100" height="34" class="hot"/><text x="260" y="116" text-anchor="middle" class="mono">1</text>
+  <rect x="310" y="94" width="100" height="34" class="hot"/><text x="360" y="116" text-anchor="middle" class="mono">1</text>
+  <rect x="410" y="94" width="100" height="34" class="hot"/><text x="460" y="116" text-anchor="middle" class="mono">1</text>
+
+  <text x="90" y="150" text-anchor="end">页 2</text>
+  <rect x="110" y="128" width="100" height="34" class="plain"/><text x="160" y="150" text-anchor="middle" class="mono">7</text>
+  <rect x="210" y="128" width="100" height="34" class="plain"/><text x="260" y="150" text-anchor="middle" class="mono">1</text>
+  <rect x="310" y="128" width="100" height="34" class="plain"/><text x="360" y="150" text-anchor="middle" class="mono">0</text>
+  <rect x="410" y="128" width="100" height="34" class="plain"/><text x="460" y="150" text-anchor="middle" class="mono">0</text>
+
+  <text x="90" y="184" text-anchor="end">页 3</text>
+  <rect x="110" y="162" width="100" height="34" class="bad"/><text x="160" y="184" text-anchor="middle" class="mono">—</text>
+  <rect x="210" y="162" width="100" height="34" class="bad"/><text x="260" y="184" text-anchor="middle" class="mono">0</text>
+  <rect x="310" y="162" width="100" height="34" class="bad"/><text x="360" y="184" text-anchor="middle" class="mono">0</text>
+  <rect x="410" y="162" width="100" height="34" class="bad"/><text x="460" y="184" text-anchor="middle" class="mono">0</text>
+  <text x="525" y="184" class="small">在磁盘上</text>
+  <text x="525" y="116" class="small">库存数在这页，</text>
+  <text x="525" y="132" class="small">刚被改过</text>
+  <text x="320" y="214" text-anchor="middle" class="small">页号不用存在表里：第几行就是第几页</text>
+</svg>
+<figcaption>shop-server 的页表，和上一张图对应。页 3 的有效位是 0，表示它不在内存里</figcaption>
+</figure>
+<p>这几个标记各有用处，后面会一一用到：有效位决定要不要触发缺页中断（第 11 节）；访问位给置换算法判断「最近用没用过」（第 13 节）；修改位决定换出时要不要写回磁盘：没改过的页，磁盘上的那份还是一样的，直接丢掉即可。</p>
+
+<h2 id="translate">7. 地址翻译怎么算</h2>
+<p>一个虚拟地址，先拆成两部分：</p>
+<pre>页号     = 虚拟地址 ÷ 页大小   （取整数部分）
+页内偏移 = 虚拟地址 mod 页大小 （余数：在这一页里的第几个字节）
+物理地址 = 页框号 × 页大小 + 页内偏移</pre>
+<p>页内偏移在翻译前后<b>不变</b>，因为页和页框一样大，第几个字节还是第几个字节。变的只是页号换成了页框号。</p>
+<p><b>先验证开头的例子</b>：shop-server 访问 0x1000 = 4096。4096 ÷ 4096 = 1 余 0，页号 1，偏移 0。查 shop-server 的页表，页 1 在页框 2，物理地址 = 2 × 4096 + 0 = 8192 = 0x2000。报表进程的页 1 在页框 9，物理地址 = 9 × 4096 = 36864 = 0x9000。和第 2 节的图一致。</p>
+<p><b>再算一个</b>：shop-server 访问虚拟地址 0x2134。</p>
+<ol>
+  <li>换成十进制：0x2134 = 2×4096 + 1×256 + 3×16 + 4 = 8500。</li>
+  <li>8500 ÷ 4096 = 2 余 308。页号 2，页内偏移 308（= 0x134）。</li>
+  <li>查页表：页 2 在页框 7。</li>
+  <li>物理地址 = 7 × 4096 + 308 = 28980 = 0x7134。</li>
+</ol>
+<p>页大小是 2 的幂时，有更快的办法：不用除法，直接<b>按二进制位切开</b>。4KB = 2<sup>12</sup>，所以低 12 位就是页内偏移，剩下的高位就是页号：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 210" width="640" role="img" aria-label="把 0x2134 的二进制按位拆成页号和页内偏移">
+  <text x="116" y="34" text-anchor="middle" class="mono title">2</text>
+  <text x="252" y="34" text-anchor="middle" class="mono title">1</text>
+  <text x="388" y="34" text-anchor="middle" class="mono title">3</text>
+  <text x="524" y="34" text-anchor="middle" class="mono title">4</text>
+  <rect x="48" y="44" width="34" height="34" class="hot"/><text x="65" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="82" y="44" width="34" height="34" class="hot"/><text x="99" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="116" y="44" width="34" height="34" class="hot"/><text x="133" y="66" text-anchor="middle" class="mono">1</text>
+  <rect x="150" y="44" width="34" height="34" class="hot"/><text x="167" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="184" y="44" width="34" height="34" class="obj"/><text x="201" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="218" y="44" width="34" height="34" class="obj"/><text x="235" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="252" y="44" width="34" height="34" class="obj"/><text x="269" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="286" y="44" width="34" height="34" class="obj"/><text x="303" y="66" text-anchor="middle" class="mono">1</text>
+  <rect x="320" y="44" width="34" height="34" class="obj"/><text x="337" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="354" y="44" width="34" height="34" class="obj"/><text x="371" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="388" y="44" width="34" height="34" class="obj"/><text x="405" y="66" text-anchor="middle" class="mono">1</text>
+  <rect x="422" y="44" width="34" height="34" class="obj"/><text x="439" y="66" text-anchor="middle" class="mono">1</text>
+  <rect x="456" y="44" width="34" height="34" class="obj"/><text x="473" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="490" y="44" width="34" height="34" class="obj"/><text x="507" y="66" text-anchor="middle" class="mono">1</text>
+  <rect x="524" y="44" width="34" height="34" class="obj"/><text x="541" y="66" text-anchor="middle" class="mono">0</text>
+  <rect x="558" y="44" width="34" height="34" class="obj"/><text x="575" y="66" text-anchor="middle" class="mono">0</text>
+  <line x1="50" y1="90" x2="182" y2="90" class="line" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="116" y="110" text-anchor="middle">高 4 位：页号</text>
+  <text x="116" y="128" text-anchor="middle" class="small mono">0010 = 2</text>
+  <line x1="186" y1="90" x2="590" y2="90" class="line" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="388" y="110" text-anchor="middle">低 12 位：页内偏移</text>
+  <text x="388" y="128" text-anchor="middle" class="small mono">0001 0011 0100 = 0x134 = 308</text>
+  <text x="320" y="166" text-anchor="middle">查页表：页 2 → 页框 7（二进制 0111）</text>
+  <text x="320" y="194" text-anchor="middle">物理地址 = 页框号 0111 接上原样的低 12 位 = 0x7134</text>
+</svg>
+<figcaption>一位十六进制 = 4 位二进制，所以 4KB 页时，十六进制地址的最后 3 位就是页内偏移，前面的就是页号</figcaption>
+</figure>
+<p>由此得到一条笔试常用的规律：<b>页大小是 2<sup>n</sup> 字节，偏移就占 n 位</b>；地址一共 m 位，页号就占 m − n 位，一个地址空间最多有 2<sup>m−n</sup> 页。例如 32 位地址、4KB 页：偏移 12 位，页号 20 位，最多 2<sup>20</sup> 页。</p>
+
+<h2 id="multilevel">8. 多级页表：页表太大怎么办</h2>
+<p>接着上面的数字算：32 位地址、4KB 页，每个进程最多 2<sup>20</sup> = 1048576 页，页表就要有这么多行。每行（页表项）占 4 字节，一张页表就是 2<sup>20</sup> × 4 = 4MB。每个进程都要这么一张，而且必须连续存放（MMU 是按「起始地址 + 页号 × 4」直接找到那一行的）。</p>
+<p>可是 shop-server 实际只用了地址空间里很少几段，绝大多数行都是空的。<b>多级页表</b>的办法是：把页表本身也分页，没用到的部分干脆不建。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 280" width="640" role="img" aria-label="两级页表：一级页号查一级表，二级页号查二级表">
+  <rect x="20" y="24" width="188" height="34" class="hot"/><text x="114" y="46" text-anchor="middle">一级页号（10 位）</text>
+  <rect x="208" y="24" width="187" height="34" class="obj"/><text x="301" y="46" text-anchor="middle">二级页号（10 位）</text>
+  <rect x="395" y="24" width="225" height="34" class="ok"/><text x="507" y="46" text-anchor="middle">页内偏移（12 位）</text>
+
+  <text x="100" y="98" text-anchor="middle" class="title">一级页表</text>
+  <rect x="40" y="108" width="120" height="28" class="hot"/><text x="100" y="127" text-anchor="middle" class="small">第 0 项 → 二级表</text>
+  <rect x="40" y="136" width="120" height="28" class="muted"/><text x="100" y="155" text-anchor="middle" class="small">第 1 项：空</text>
+  <rect x="40" y="164" width="120" height="28" class="muted"/><text x="100" y="183" text-anchor="middle" class="small">……：空</text>
+  <rect x="40" y="192" width="120" height="28" class="obj"/><text x="100" y="211" text-anchor="middle" class="small">第 1023 项 → 二级表</text>
+
+  <text x="320" y="98" text-anchor="middle" class="title">一张二级页表</text>
+  <rect x="260" y="108" width="120" height="28" class="plain"/><text x="320" y="127" text-anchor="middle" class="small">页 0 → 页框 5</text>
+  <rect x="260" y="136" width="120" height="28" class="plain"/><text x="320" y="155" text-anchor="middle" class="small">页 1 → 页框 2</text>
+  <rect x="260" y="164" width="120" height="28" class="plain"/><text x="320" y="183" text-anchor="middle" class="small">页 2 → 页框 7</text>
+  <rect x="260" y="192" width="120" height="28" class="plain"/><text x="320" y="211" text-anchor="middle" class="small">…（共 1024 项）</text>
+
+  <text x="540" y="98" text-anchor="middle" class="title">物理内存</text>
+  <rect x="480" y="122" width="120" height="44" class="ok"/><text x="540" y="149" text-anchor="middle">页框</text>
+
+  <line x1="100" y1="58" x2="100" y2="80" class="line" marker-end="url(#arrow)"/>
+  <line x1="301" y1="58" x2="320" y2="80" class="line" marker-end="url(#arrow)"/>
+  <line x1="507" y1="58" x2="540" y2="80" class="line" marker-end="url(#arrow)"/>
+  <line x1="160" y1="122" x2="257" y2="122" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="380" y1="150" x2="477" y2="144" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="250" text-anchor="middle" class="small">每张二级页表 1024 项 × 4 字节 = 4KB，正好占一个页框</text>
+  <text x="320" y="270" text-anchor="middle" class="small">一级表里为「空」的项，对应的 4MB 地址范围一个都没用，那张二级表就不用建</text>
+</svg>
+<figcaption>32 位地址拆成 10 + 10 + 12。shop-server 只用了开头和末尾两段，只需 1 张一级表 + 2 张二级表，共 12KB，而不是 4MB</figcaption>
+</figure>
+<p>代价是：翻译一个地址要先查一级表、再查二级表，<b>多访问一次内存</b>。级数越多，省的空间越多，访问内存的次数也越多。64 位的机器一般用四级页表。这个代价由下一节的 TLB 来弥补。</p>
+
+<h2 id="tlb">9. TLB（快表）：把常用的页表项记在 CPU 里</h2>
+<p>即使只有一级页表，每次访问内存其实也要访问<b>两次</b>：第一次读页表项拿到页框号，第二次才读真正要的数据。等于内存速度慢了一半。</p>
+<div class="term"><b>TLB</b>（Translation Lookaside Buffer，<b>快表</b>）：MMU 里一块很小、很快的存储，存着最近用过的几十到几千个「页号 → 页框号」。相对地，放在内存里的页表叫<b>慢表</b>。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 230" width="640" role="img" aria-label="先查 TLB，命中直接得到物理地址，未命中再查页表">
+  <rect x="20" y="60" width="130" height="50" rx="4" class="plain"/><text x="85" y="81" text-anchor="middle">CPU 给出</text><text x="85" y="100" text-anchor="middle">虚拟地址</text>
+  <rect x="210" y="60" width="120" height="50" rx="4" class="hot"/><text x="270" y="90" text-anchor="middle" class="title">查 TLB</text>
+  <rect x="450" y="60" width="170" height="50" rx="4" class="ok"/><text x="535" y="81" text-anchor="middle">得到物理地址</text><text x="535" y="100" text-anchor="middle">去内存取数据</text>
+  <rect x="180" y="160" width="180" height="50" rx="4" class="obj"/><text x="270" y="181" text-anchor="middle">查内存里的页表</text><text x="270" y="200" text-anchor="middle" class="small">（多访问一次内存）</text>
+  <line x1="150" y1="85" x2="207" y2="85" class="line" marker-end="url(#arrow)"/>
+  <line x1="330" y1="85" x2="447" y2="85" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="390" y="76" text-anchor="middle">命中</text>
+  <line x1="270" y1="110" x2="270" y2="157" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="280" y="140">未命中</text>
+  <line x1="360" y1="185" x2="533" y2="113" class="line" marker-end="url(#arrow)"/>
+  <text x="440" y="168" class="small">顺手把这一项存进 TLB</text>
+</svg>
+<figcaption>命中时只访问一次内存；未命中时访问两次，并把查到的这一项记进 TLB，下次就能命中</figcaption>
+</figure>
+<p>TLB 很小却很管用，因为程序在一段时间内总是反复访问那几页（第 12 节的局部性）。进程切换时，换了一套页表，TLB 里旧进程的记录就作废了，要清空。这也是第 1 课说「切换进程比切换线程贵」的原因之一。</p>
+<p><b>有效访问时间</b>是「平均每访问一次内存要多久」。设 TLB 查一次 20ns，内存访问一次 100ns，TLB 命中率 90%：</p>
+<pre>命中（90%）  ：查 TLB 20 + 访问数据 100            = 120 ns
+未命中（10%）：查 TLB 20 + 查页表 100 + 访问数据 100 = 220 ns
+有效访问时间 = 0.9 × 120 + 0.1 × 220 = 108 + 22 = 130 ns</pre>
+<p>没有 TLB 时每次都是 100 + 100 = 200ns，有了 TLB 降到 130ns。注意两个常见变化：有的题说「查 TLB 的时间忽略不计」，就是 0.9 × 100 + 0.1 × 200 = 110ns；有的题用两级页表，未命中时要多查一次表，即 20 + 100 + 100 + 100。</p>
+<p>下面的小动画把这一节和第 7 节串起来。输入 shop-server 的一个虚拟地址，看它怎么被拆开、查 TLB、查页表。建议依次输入 <code>0x1004</code>、<code>0x1ABC</code>（同一页，第二次 TLB 命中）、<code>0x3010</code>（页 3 不在内存，会缺页，第 11 节讲）。TLB 能存 2 项，满了换掉最早存进去的。</p>
+<div class="demo" id="mmu"></div>
+
+<h2 id="segmentation">10. 分段和段页式（对比了解）</h2>
+<p>分页是按固定大小机械地切，一页里可能一半是代码、一半是数据。另一种思路是按程序的<b>逻辑结构</b>切：</p>
+<div class="term"><b>段</b>：程序里一个有意义的部分，例如代码段、数据段、栈段，各段长度不一。<b>段表</b>每行记录一段的<b>段基址</b>（在物理内存里从哪开始）和<b>段长</b>。虚拟地址写成（段号，段内偏移）。</div>
+<p>翻译时先检查「段内偏移 &lt; 段长」，不满足就是越界，报错；满足就是 物理地址 = 段基址 + 段内偏移。例如 shop-server 的段 1（数据段）基址 20000、段长 6000：地址（1, 500）→ 20500；地址（1, 7000）越界。</p>
+<p>每段内部是连续的，所以分段又有了外部碎片。<b>段页式</b>把两者结合：先按逻辑分段，每段内部再分页。没有 TLB 时，取一个数据要访问三次内存：段表、页表、数据。</p>
+<table>
+  <tr><th></th><th>分页</th><th>分段</th></tr>
+  <tr><td>块的大小</td><td>固定（如 4KB），由系统决定</td><td>不固定，由程序的结构决定</td></tr>
+  <tr><td>对程序员</td><td>不可见，地址是一维的</td><td>可见，地址是二维的（段号，偏移）</td></tr>
+  <tr><td>碎片</td><td>只有内部碎片（最后一页）</td><td>有外部碎片</td></tr>
+  <tr><td>目的</td><td>提高内存利用率，方便管理</td><td>方便按逻辑共享和保护（如代码段只读）</td></tr>
+</table>
+<p>现在的 Linux、Windows 实际上都以分页为主，下面只讲分页。</p>
+
+<h2 id="page-fault">11. 缺页中断：页不在内存里怎么办</h2>
+<p>第 3 节说过，进程的页不必全在内存里。shop-server 的页 3 就在磁盘上（页表项有效位为 0）。它一访问页 3，就会这样：</p>
+<div class="term"><b>缺页中断</b>：MMU 翻译时发现页表项的有效位是 0，就打断 CPU，让内核来处理（第 1 课讲过，「硬件打断 CPU、让内核来处理」叫中断）。它和普通中断不同的是：它发生在<b>一条指令执行到一半</b>的时候，处理完之后要<b>重新执行这条指令</b>。</div>
+<div class="term"><b>交换区</b>：磁盘上专门划出来存放「被换出内存的页」的区域。把页从内存写到交换区叫<b>换出</b>，从磁盘读回内存叫<b>换入</b>（调入）。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 270" width="640" role="img" aria-label="缺页中断处理的五个步骤">
+  <rect x="60" y="10" width="520" height="38" rx="4" class="bad"/><text x="76" y="34">① 访问 0x3010：MMU 查到页 3 的有效位是 0，触发缺页中断</text>
+  <line x1="320" y1="48" x2="320" y2="60" class="line" marker-end="url(#arrow)"/>
+  <rect x="60" y="62" width="520" height="38" rx="4" class="obj"/><text x="76" y="86">② 内核接手：找一个空闲页框（没有空闲的，就用置换算法换出一页）</text>
+  <line x1="320" y1="100" x2="320" y2="112" class="line" marker-end="url(#arrow)"/>
+  <rect x="60" y="114" width="520" height="38" rx="4" class="hot"/><text x="76" y="138">③ 从磁盘把页 3 读进页框 4。要几毫秒，进程变为阻塞，CPU 先给别人</text>
+  <line x1="320" y1="152" x2="320" y2="164" class="line" marker-end="url(#arrow)"/>
+  <rect x="60" y="166" width="520" height="38" rx="4" class="obj"/><text x="76" y="190">④ 读完：页表项改成「页框 4，有效位 1」，进程回到就绪队列</text>
+  <line x1="320" y1="204" x2="320" y2="216" class="line" marker-end="url(#arrow)"/>
+  <rect x="60" y="218" width="520" height="38" rx="4" class="ok"/><text x="76" y="242">⑤ 再次被调度时，重新执行刚才那条指令，这次翻译成 0x4010</text>
+</svg>
+<figcaption>第 ② 步如果换出的那一页修改位是 1，还要先把它写回磁盘，再读新页</figcaption>
+</figure>
+<p>验算一下第 ⑤ 步：0x3010 的页号是 3、偏移 0x010，页 3 现在在页框 4，物理地址 = 4 × 0x1000 + 0x010 = 0x4010。</p>
+<p>缺页为什么代价那么大？因为<b>磁盘比内存慢得多</b>：内存访问一次约 100ns（纳秒），机械硬盘读一次要几毫秒，1 毫秒 = 1000000 纳秒，相差几万倍；固态硬盘快一些，也还差上百倍。另外，磁盘<b>不能一个字节一个字节地读</b>，每次至少读写一整块，所以操作系统和磁盘之间也按<b>页（块）</b>为单位搬数据。<a href="08-index.html">第 8 课</a>讲数据库索引时，「尽量少读几次磁盘页」就是一切设计的出发点。</p>
+<p>算一下缺页的影响。内存访问 100ns，处理一次缺页 8ms = 8000000ns，缺页率（访问内存时发生缺页的比例）为 0.1%：</p>
+<pre>有效访问时间 = (1 − 0.001) × 100 + 0.001 × 8000000
+            = 99.9 + 8000 = 8099.9 ns</pre>
+<p>一千次里只缺一次页，平均访问时间就慢了约 81 倍。所以缺页率必须非常低，这就要靠下面两节：程序本身的局部性，以及选得好的置换算法。</p>
+
+<h2 id="locality">12. 局部性原理：为什么这套机制行得通</h2>
+<p>只把一部分页放在内存里，能行得通，是因为程序访问内存很有规律：</p>
+<ul>
+  <li><b>时间局部性</b>：刚访问过的地方，很快还会再访问。例如 shop-server 处理订单的循环，循环体的代码一遍遍执行；「库存数」这个变量被反复读写。</li>
+  <li><b>空间局部性</b>：访问了某个地址，很快会访问它旁边的地址。例如顺序遍历一个订单数组，一个接一个地读；指令也大多是一条接一条顺序执行。</li>
+</ul>
+<p>所以在任何一小段时间里，进程真正在用的只有少数几页。这几页留在内存里，缺页就很少。TLB 能有很高的命中率，也是因为局部性。</p>
+
+<h2 id="replacement">13. 页面置换算法：内存满了，换出哪一页</h2>
+<p>缺页时如果没有空闲页框，就必须挑一页换出去，腾出位置。挑得不好，刚换出去的页马上又要用，又得缺页。</p>
+<p>评价算法要用到一个概念：</p>
+<div class="term"><b>页面访问序列</b>（引用串）：进程依次访问的页号。例如本节一直用的这一串（shop-server 处理一批订单时依次访问的页），共 20 次访问：<code>7 0 1 2 0 3 0 4 2 3 0 3 2 1 2 0 1 7 0 1</code>。<b>缺页率</b> = 缺页次数 ÷ 访问次数。</div>
+<p>假设分给 shop-server 3 个页框，一开始都是空的。前 3 次访问（7、0、1）一定缺页，把三个页框装满；第 4 次访问页 2，第一次需要置换。缺页次数<b>包括</b>开头装满页框的那几次，这是最常见的约定。</p>
+<ul>
+  <li><b>最佳置换（OPT）</b>：换出<b>未来最晚才会被用到</b>（或者再也不用）的那一页。缺页次数最少，但要预知未来，实际做不到；它的用处是当标杆，衡量别的算法有多好。</li>
+  <li><b>先进先出（FIFO）</b>：换出<b>最早调入内存</b>的那一页。实现简单（排个队就行），但「来得早」不代表「不常用」：页 0 一直在用，FIFO 也照样把它踢出去。</li>
+  <li><b>最近最久未使用（LRU）</b>：换出<b>最久没被访问</b>的那一页。用「过去」推测「未来」，正是时间局部性：很久没用的，大概率接下来也不用。效果接近 OPT，但每次访问都要记录时间，硬件开销大。</li>
+</ul>
+<p>同一个时刻，三种算法的选择可能各不相同。看第 6 次访问（页 3），此时页框里是 2、0、1：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 220" width="640" role="img" aria-label="第 6 次访问页 3 时三种算法各换出哪一页">
+  <text x="20" y="46" class="small">序列</text>
+  <rect x="50" y="28" width="28" height="28" class="obj"/><text x="64" y="47" text-anchor="middle" class="mono">7</text>
+  <rect x="78" y="28" width="28" height="28" class="obj"/><text x="92" y="47" text-anchor="middle" class="mono">0</text>
+  <rect x="106" y="28" width="28" height="28" class="obj"/><text x="120" y="47" text-anchor="middle" class="mono">1</text>
+  <rect x="134" y="28" width="28" height="28" class="obj"/><text x="148" y="47" text-anchor="middle" class="mono">2</text>
+  <rect x="162" y="28" width="28" height="28" class="obj"/><text x="176" y="47" text-anchor="middle" class="mono">0</text>
+  <rect x="190" y="28" width="28" height="28" class="hot"/><text x="204" y="47" text-anchor="middle" class="mono">3</text>
+  <rect x="218" y="28" width="28" height="28" class="muted"/><text x="232" y="47" text-anchor="middle" class="mono">0</text>
+  <rect x="246" y="28" width="28" height="28" class="muted"/><text x="260" y="47" text-anchor="middle" class="mono">4</text>
+  <rect x="274" y="28" width="28" height="28" class="muted"/><text x="288" y="47" text-anchor="middle" class="mono">2</text>
+  <rect x="302" y="28" width="28" height="28" class="muted"/><text x="316" y="47" text-anchor="middle" class="mono">3</text>
+  <rect x="330" y="28" width="28" height="28" class="muted"/><text x="344" y="47" text-anchor="middle" class="mono">0</text>
+  <rect x="358" y="28" width="28" height="28" class="muted"/><text x="372" y="47" text-anchor="middle" class="mono">3</text>
+  <rect x="386" y="28" width="28" height="28" class="muted"/><text x="400" y="47" text-anchor="middle" class="mono">2</text>
+  <rect x="414" y="28" width="28" height="28" class="muted"/><text x="428" y="47" text-anchor="middle" class="mono">1</text>
+  <text x="456" y="47" class="mono">…</text>
+  <text x="64" y="20" text-anchor="middle" class="small">1</text>
+  <text x="204" y="20" text-anchor="middle" class="small">6</text>
+  <text x="232" y="20" text-anchor="middle" class="small">7</text>
+  <text x="288" y="20" text-anchor="middle" class="small">9</text>
+  <text x="428" y="20" text-anchor="middle" class="small">14</text>
+  <text x="20" y="84">现在页框里：<tspan class="mono">2 0 1</tspan>（都已满），要调入页 3，换出谁？</text>
+  <text x="20" y="122" class="title">FIFO</text><text x="80" y="122">换出 0：三页里 0 最早进来（第 2 次访问时调入）</text>
+  <text x="20" y="158" class="title">LRU</text><text x="80" y="158">换出 1：最久没用（最近一次用是第 3 次，0 是第 5 次，2 是第 4 次）</text>
+  <text x="20" y="194" class="title">OPT</text><text x="80" y="194">换出 1：往后看，0 第 7 次用，2 第 9 次用，1 要到第 14 次，最晚</text>
+</svg>
+<figcaption>小数字是访问的序号。灰色的是「未来」：只有 OPT 能看，FIFO 和 LRU 只看过去</figcaption>
+</figure>
+<p>把 20 次访问全部走完（可以在第 16 节的动画里一步步看），3 个页框下：</p>
+<table>
+  <tr><th>算法</th><th>缺页次数</th><th>缺页率</th></tr>
+  <tr><td>OPT</td><td>9</td><td>9 ÷ 20 = 45%</td></tr>
+  <tr><td>LRU</td><td>12</td><td>12 ÷ 20 = 60%</td></tr>
+  <tr><td>FIFO</td><td>15</td><td>15 ÷ 20 = 75%</td></tr>
+</table>
+
+<h3 id="clock">CLOCK（时钟）算法：LRU 的便宜近似</h3>
+<p>真正的 LRU 每次访问都要更新记录，太贵。CLOCK 只用页表项里那个<b>访问位</b>：每次访问一页，硬件把它的访问位置 1。所有页框排成一圈，一根指针绕圈转：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 200" width="640" role="img" aria-label="CLOCK 算法：指针跳过访问位为 1 的页并清零，换出访问位为 0 的页">
+  <line x1="120" y1="22" x2="120" y2="56" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <text x="130" y="30" class="small">指针从这里开始</text>
+  <rect x="60" y="60" width="120" height="50" rx="4" class="obj"/><text x="120" y="82" text-anchor="middle">页 2</text><text x="120" y="100" text-anchor="middle" class="small">访问位 1 → 清成 0</text>
+  <rect x="260" y="60" width="120" height="50" rx="4" class="obj"/><text x="320" y="82" text-anchor="middle">页 0</text><text x="320" y="100" text-anchor="middle" class="small">访问位 1 → 清成 0</text>
+  <rect x="460" y="60" width="120" height="50" rx="4" class="bad"/><text x="520" y="82" text-anchor="middle">页 3</text><text x="520" y="100" text-anchor="middle" class="small">访问位 0 → 换出</text>
+  <line x1="180" y1="85" x2="257" y2="85" class="line" marker-end="url(#arrow)"/>
+  <line x1="380" y1="85" x2="457" y2="85" class="line" marker-end="url(#arrow)"/>
+  <path d="M 520,112 Q 320,160 120,112" class="dash" marker-end="url(#arrow)"/>
+  <text x="320" y="176" text-anchor="middle" class="small">转到头再回到开头，所以叫「时钟」。最坏转一整圈，必然能找到访问位为 0 的页</text>
+  <text x="320" y="194" text-anchor="middle" class="small">访问位为 1 的页得到「第二次机会」，所以 CLOCK 也叫二次机会算法</text>
+</svg>
+<figcaption>扫到访问位 1：清成 0，放过它，往下走；扫到访问位 0：换出它，新页放进这个页框</figcaption>
+</figure>
+<p>在本节这串序列上，3 个页框的 CLOCK 缺页 14 次，介于 LRU（12）和 FIFO（15）之间。<b>改进型 CLOCK</b>再加上修改位：优先换出「没访问过、也没修改过」的页，因为它不用写回磁盘。</p>
+
+<h2 id="belady">14. Belady 异常：页框多了，缺页反而更多</h2>
+<p>直觉上，多给一个页框，缺页只会更少。但 FIFO 有时恰恰相反。换一串访问序列 <code>1 2 3 4 1 2 5 1 2 3 4 5</code>，用 FIFO：</p>
+<figure class="fig">
+<svg viewBox="0 0 640 200" width="640" role="img" aria-label="FIFO 下 3 个页框缺页 9 次，4 个页框缺页 10 次">
+  <text x="20" y="49">访问</text>
+  <rect x="140" y="30" width="40" height="28" class="muted"/><text x="160" y="49" text-anchor="middle" class="mono">1</text>
+  <rect x="180" y="30" width="40" height="28" class="muted"/><text x="200" y="49" text-anchor="middle" class="mono">2</text>
+  <rect x="220" y="30" width="40" height="28" class="muted"/><text x="240" y="49" text-anchor="middle" class="mono">3</text>
+  <rect x="260" y="30" width="40" height="28" class="muted"/><text x="280" y="49" text-anchor="middle" class="mono">4</text>
+  <rect x="300" y="30" width="40" height="28" class="muted"/><text x="320" y="49" text-anchor="middle" class="mono">1</text>
+  <rect x="340" y="30" width="40" height="28" class="muted"/><text x="360" y="49" text-anchor="middle" class="mono">2</text>
+  <rect x="380" y="30" width="40" height="28" class="muted"/><text x="400" y="49" text-anchor="middle" class="mono">5</text>
+  <rect x="420" y="30" width="40" height="28" class="muted"/><text x="440" y="49" text-anchor="middle" class="mono">1</text>
+  <rect x="460" y="30" width="40" height="28" class="muted"/><text x="480" y="49" text-anchor="middle" class="mono">2</text>
+  <rect x="500" y="30" width="40" height="28" class="muted"/><text x="520" y="49" text-anchor="middle" class="mono">3</text>
+  <rect x="540" y="30" width="40" height="28" class="muted"/><text x="560" y="49" text-anchor="middle" class="mono">4</text>
+  <rect x="580" y="30" width="40" height="28" class="muted"/><text x="600" y="49" text-anchor="middle" class="mono">5</text>
+
+  <text x="20" y="88">3 个页框</text><text x="20" y="104" class="small">缺页 9 次</text>
+  <rect x="140" y="74" width="40" height="28" class="bad"/><text x="160" y="93" text-anchor="middle">缺</text>
+  <rect x="180" y="74" width="40" height="28" class="bad"/><text x="200" y="93" text-anchor="middle">缺</text>
+  <rect x="220" y="74" width="40" height="28" class="bad"/><text x="240" y="93" text-anchor="middle">缺</text>
+  <rect x="260" y="74" width="40" height="28" class="bad"/><text x="280" y="93" text-anchor="middle">缺</text>
+  <rect x="300" y="74" width="40" height="28" class="bad"/><text x="320" y="93" text-anchor="middle">缺</text>
+  <rect x="340" y="74" width="40" height="28" class="bad"/><text x="360" y="93" text-anchor="middle">缺</text>
+  <rect x="380" y="74" width="40" height="28" class="bad"/><text x="400" y="93" text-anchor="middle">缺</text>
+  <rect x="420" y="74" width="40" height="28" class="ok"/><text x="440" y="93" text-anchor="middle">中</text>
+  <rect x="460" y="74" width="40" height="28" class="ok"/><text x="480" y="93" text-anchor="middle">中</text>
+  <rect x="500" y="74" width="40" height="28" class="bad"/><text x="520" y="93" text-anchor="middle">缺</text>
+  <rect x="540" y="74" width="40" height="28" class="bad"/><text x="560" y="93" text-anchor="middle">缺</text>
+  <rect x="580" y="74" width="40" height="28" class="ok"/><text x="600" y="93" text-anchor="middle">中</text>
+
+  <text x="20" y="132">4 个页框</text><text x="20" y="148" class="small">缺页 10 次</text>
+  <rect x="140" y="118" width="40" height="28" class="bad"/><text x="160" y="137" text-anchor="middle">缺</text>
+  <rect x="180" y="118" width="40" height="28" class="bad"/><text x="200" y="137" text-anchor="middle">缺</text>
+  <rect x="220" y="118" width="40" height="28" class="bad"/><text x="240" y="137" text-anchor="middle">缺</text>
+  <rect x="260" y="118" width="40" height="28" class="bad"/><text x="280" y="137" text-anchor="middle">缺</text>
+  <rect x="300" y="118" width="40" height="28" class="ok"/><text x="320" y="137" text-anchor="middle">中</text>
+  <rect x="340" y="118" width="40" height="28" class="ok"/><text x="360" y="137" text-anchor="middle">中</text>
+  <rect x="380" y="118" width="40" height="28" class="bad"/><text x="400" y="137" text-anchor="middle">缺</text>
+  <rect x="420" y="118" width="40" height="28" class="bad"/><text x="440" y="137" text-anchor="middle">缺</text>
+  <rect x="460" y="118" width="40" height="28" class="bad"/><text x="480" y="137" text-anchor="middle">缺</text>
+  <rect x="500" y="118" width="40" height="28" class="bad"/><text x="520" y="137" text-anchor="middle">缺</text>
+  <rect x="540" y="118" width="40" height="28" class="bad"/><text x="560" y="137" text-anchor="middle">缺</text>
+  <rect x="580" y="118" width="40" height="28" class="bad"/><text x="600" y="137" text-anchor="middle">缺</text>
+  <text x="320" y="186" text-anchor="middle">多给一个页框，缺页反而从 9 次变成 10 次</text>
+</svg>
+<figcaption>红 = 缺页，绿 = 命中。4 个页框时，第 7 次访问页 5 把页 1 换了出去，紧接着的 1、2、3、4、5 一个接一个都缺页</figcaption>
+</figure>
+<p>这叫 <b>Belady 异常</b>。原因是 FIFO 只看「谁来得早」，页框数变了，换出的顺序就整个变了，没有「页框多的时候，内存里的页一定包含页框少时的那些页」这种保证。<b>LRU 和 OPT 不会出现 Belady 异常</b>：它们按「最近用过 / 未来要用」排序，页框多时保留的页总是包含页框少时保留的页（这一类算法叫栈算法）。同一串序列，LRU 是 10 次 → 8 次，OPT 是 7 次 → 6 次。考试只要记住：<b>会出现 Belady 异常的是 FIFO</b>。</p>
+
+<h2 id="thrashing">15. 抖动：一直在换页，什么正事也做不了</h2>
+<p>如果分给每个进程的页框太少，比它在一小段时间里经常要用的那几页还少，就会出现：刚换出去的页马上要用，换回来又挤走另一页常用的……进程大部分时间都阻塞在等磁盘上。</p>
+<div class="term"><b>抖动</b>（颠簸）：页面在内存和磁盘之间频繁换进换出，系统忙于处理缺页，CPU 利用率急剧下降。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 220" width="640" role="img" aria-label="同时运行的进程过多时 CPU 利用率骤降">
+  <line x1="60" y1="180" x2="610" y2="180" class="line" marker-end="url(#arrow)"/>
+  <line x1="60" y1="180" x2="60" y2="16" class="line" marker-end="url(#arrow)"/>
+  <text x="70" y="22" class="small">CPU 利用率</text>
+  <text x="335" y="206" text-anchor="middle" class="small">同时运行的进程数（多道程序度）</text>
+  <path d="M 60,172 C 160,60 260,40 340,44 C 400,48 430,150 560,170" class="arrow-blue"/>
+  <line x1="340" y1="40" x2="340" y2="180" class="dash"/>
+  <text x="330" y="100" text-anchor="end" class="small">进程多了，CPU 更忙</text>
+  <text x="420" y="80" class="small" style="fill:#c62828">再多：每个进程页框太少，</text>
+  <text x="420" y="96" class="small" style="fill:#c62828">开始抖动</text>
+</svg>
+<figcaption>危险在于：CPU 利用率一低，系统可能以为「CPU 闲着」又放进更多进程，抖动更严重</figcaption>
+</figure>
+<p>抖动的根源是<b>页框不够</b>，换一个更好的置换算法救不了。对策：减少同时运行的进程数（把一些进程暂时整个换出去）、给进程分配足够的页框（让它在一段时间里常用的那几页都能留在内存里，这组页叫<b>工作集</b>）、加内存。</p>
+
+<h2 id="demo">16. 动手玩：页面置换模拟器</h2>
+<p>默认是第 13 节那串序列和 3 个页框。点一种算法，动画每访问一页走一帧：表格的每一列是一次访问，每一行是一个页框；绿色表示命中，红色表示缺页，橙色是刚调入的页；下面的文字说明换出了谁、为什么。建议先依次点 <b>FIFO</b>、<b>LRU</b>、<b>OPT</b> 对照上面的表（15、12、9），再把页框数改成 4 试一遍（FIFO 10、LRU 8、OPT 8）。最后点 <b>Belady 异常</b>，分别在页框数 3 和 4 下各跑一次。</p>
+<div class="demo" id="paging"></div>
+
+<h2 id="shared-cow">17. 共享内存和写时复制</h2>
+<p>第 1 课预告过：共享内存是最快的进程间通信方式。有了页表，它的实现一句话就能说清：<b>让两个进程的页表项指向同一个页框</b>。</p>
+<figure class="fig">
+<svg viewBox="0 0 640 150" width="640" role="img" aria-label="两个进程的页表项指向同一个页框，实现共享内存">
+  <rect x="20" y="40" width="170" height="60" rx="4" class="obj"/><text x="105" y="64" text-anchor="middle" class="mono">shop-server 页表</text><text x="105" y="86" text-anchor="middle">页 4 → 页框 6</text>
+  <rect x="450" y="40" width="170" height="60" rx="4" class="obj"/><text x="535" y="64" text-anchor="middle">报表进程的页表</text><text x="535" y="86" text-anchor="middle">页 2 → 页框 6</text>
+  <rect x="250" y="40" width="140" height="60" rx="4" class="hot"/><text x="320" y="64" text-anchor="middle" class="title">页框 6</text><text x="320" y="86" text-anchor="middle" class="small">今天的订单记录</text>
+  <line x1="190" y1="70" x2="247" y2="70" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="450" y1="70" x2="393" y2="70" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <text x="320" y="132" text-anchor="middle">shop-server 写进去的订单，报表进程立刻就能读到，中间不经过内核复制</text>
+</svg>
+<figcaption>两个进程用的虚拟地址可以不同（页 4 和页 2），只要页表项指向同一个页框</figcaption>
+</figure>
+<p>所以共享内存快：写进去就等于对方看到了，不需要像管道、消息队列那样经内核复制一遍数据。但两个进程同时改同一处会出错，所以要加锁，<a href="03-deadlock.html">第 3 课</a>讲。</p>
+<p>同样的技巧还让 <code>fork</code> 变快了。第 1 课说 fork「把当前进程几乎原样复制一份」，如果真的把 shop-server 几百 MB 的内存逐字节复制，fork 会很慢；而且子进程常常 fork 完马上去运行别的程序，复制的内容全白费。实际的做法是：</p>
+<div class="term"><b>写时复制（Copy-On-Write，COW）</b>：fork 时只复制页表，父子进程的页表项指向<b>同一批页框</b>，并且都标成<b>只读</b>。谁也不写，就一直共用；某一方要写某一页时，触发一次缺页中断（写了只读页），内核这时才把<b>那一页</b>复制一份给它，改成可写。</div>
+<figure class="fig">
+<svg viewBox="0 0 640 250" width="640" role="img" aria-label="写时复制：fork 后共用页框，子进程写时才复制那一页">
+  <text x="20" y="24" class="title">① fork 刚结束：共用，全部只读</text>
+  <rect x="20" y="40" width="150" height="50" rx="4" class="obj"/><text x="95" y="61" text-anchor="middle">父进程页表</text><text x="95" y="81" text-anchor="middle" class="small">页 0 → 页框 5（只读）</text>
+  <rect x="470" y="40" width="150" height="50" rx="4" class="obj"/><text x="545" y="61" text-anchor="middle">子进程页表</text><text x="545" y="81" text-anchor="middle" class="small">页 0 → 页框 5（只读）</text>
+  <rect x="250" y="40" width="140" height="50" rx="4" class="ok"/><text x="320" y="70" text-anchor="middle">页框 5</text>
+  <line x1="170" y1="65" x2="247" y2="65" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="470" y1="65" x2="393" y2="65" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+
+  <text x="20" y="134" class="title">② 子进程要写页 0：只复制这一页</text>
+  <rect x="20" y="150" width="150" height="50" rx="4" class="obj"/><text x="95" y="171" text-anchor="middle">父进程页表</text><text x="95" y="191" text-anchor="middle" class="small">页 0 → 页框 5（可写）</text>
+  <rect x="470" y="150" width="150" height="50" rx="4" class="hot"/><text x="545" y="171" text-anchor="middle">子进程页表</text><text x="545" y="191" text-anchor="middle" class="small">页 0 → 页框 8（可写）</text>
+  <rect x="250" y="150" width="140" height="50" rx="4" class="ok"/><text x="320" y="180" text-anchor="middle">页框 5</text>
+  <rect x="250" y="210" width="140" height="34" rx="4" class="hot"/><text x="320" y="232" text-anchor="middle">页框 8：副本</text>
+  <line x1="170" y1="175" x2="247" y2="175" class="arrow-blue" marker-end="url(#arrow-blue)"/>
+  <line x1="470" y1="185" x2="393" y2="222" class="arrow-red" marker-end="url(#arrow-red)"/>
+  <line x1="320" y1="200" x2="320" y2="208" class="line"/>
+</svg>
+<figcaption>没被写过的页永远不复制。fork 的开销从「复制全部内存」降到「复制一张页表」</figcaption>
+</figure>
+<p>这就是 fork 快的原因。第 ② 步里，只剩父进程一个在用页框 5，内核把它改回可写即可。</p>
+
+<h2 id="exam">18. 题单怎么考</h2>
+<p>牛客「操作系统专项」里和本课有关的题，基本就是下面这几类。做题卡住时，回到右边那一节：</p>
+<table class="qmap">
+  <tr><th>题型</th><th>怎么想</th><th>回看</th></tr>
+  <tr><td>给页大小、页表和逻辑地址，求物理地址</td><td>页号 = 地址 ÷ 页大小，偏移 = 余数；物理地址 = 页框号 × 页大小 + 偏移。十六进制时直接按位切</td><td><a href="#translate">7</a>、<a href="#mmu">小动画</a></td></tr>
+  <tr><td>地址多少位、页多大，求页号位数 / 页表大小</td><td>页大小 2<sup>n</sup> → 偏移 n 位；页表大小 = 页数 × 页表项大小</td><td><a href="#translate">7</a>、<a href="#multilevel">8</a></td></tr>
+  <tr><td>给 TLB 命中率和访问时间，求有效访问时间</td><td>命中：TLB + 1 次访存；未命中：TLB + 2 次访存；按命中率加权。看清 TLB 时间是否忽略</td><td><a href="#tlb">9</a></td></tr>
+  <tr><td>给访问序列和页框数，求 FIFO / LRU / OPT 缺页次数或缺页率</td><td>画表一步步走；开头装满页框的几次也算缺页</td><td><a href="#replacement">13</a>、<a href="#demo">动画</a></td></tr>
+  <tr><td>哪种算法会出现 Belady 异常</td><td>FIFO；LRU、OPT 不会</td><td><a href="#belady">14</a></td></tr>
+  <tr><td>CLOCK 算法、访问位和修改位的作用</td><td>访问位 1 给第二次机会；修改位 1 换出要写回</td><td><a href="#clock">CLOCK</a>、<a href="#page-table">6</a></td></tr>
+  <tr><td>抖动的原因和对策</td><td>页框不够；减少进程数、加页框，换算法没用</td><td><a href="#thrashing">15</a></td></tr>
+  <tr><td>缺页中断和普通中断的区别</td><td>在指令执行中间产生，处理完重新执行该指令，一条指令可能缺页多次</td><td><a href="#page-fault">11</a></td></tr>
+  <tr><td>内部碎片 / 外部碎片，首次适应 / 最佳适应</td><td>分页只有内部碎片；连续分配和分段有外部碎片</td><td><a href="#contiguous">4</a>、<a href="#pages">5</a></td></tr>
+  <tr><td>分页和分段的区别、段页式访存次数</td><td>页固定、对用户不可见；段按逻辑、二维地址；段页式无 TLB 时访存 3 次</td><td><a href="#segmentation">10</a></td></tr>
+  <tr><td>虚拟内存的作用、依据的原理</td><td>隔离、独占错觉、比物理内存大；理论依据是局部性原理</td><td><a href="#why-virtual">3</a>、<a href="#locality">12</a></td></tr>
+  <tr><td>共享内存怎么实现、fork 为什么快</td><td>页表项指向同一页框；写时复制</td><td><a href="#shared-cow">17</a></td></tr>
+</table>
+
+<h2 id="self-test">自测</h2>
+<details><summary>1. 页大小 1KB，某进程的页表中页 2 对应页框 5。逻辑地址 2500（十进制）对应的物理地址是多少？</summary>
+1KB = 1024 字节。2500 ÷ 1024 = 2 余 452，所以页号 2、页内偏移 452。页 2 在页框 5，物理地址 = 5 × 1024 + 452 = 5120 + 452 = 5572。</details>
+<details><summary>2. 查 TLB 要 10ns，访问一次内存要 100ns，TLB 命中率 95%，只有一级页表。有效访问时间是多少？</summary>
+命中：10 + 100 = 110ns；未命中：10 + 100（查页表）+ 100（取数据）= 210ns。有效访问时间 = 0.95 × 110 + 0.05 × 210 = 104.5 + 10.5 = 115ns。</details>
+<details><summary>3. 32 位逻辑地址，页大小 4KB，页表项 4 字节，一级页表。页号占几位？每个进程的页表多大？</summary>
+4KB = 2<sup>12</sup>，偏移 12 位，页号 32 − 12 = 20 位。页表有 2<sup>20</sup> 项，每项 4 字节，共 2<sup>22</sup> 字节 = 4MB。这正是要用多级页表的原因。</details>
+<details><summary>4. 分配 3 个页框（初始为空），访问序列 1 2 3 4 1 2 5 1 2 3 4 5，用 LRU，缺页几次？</summary>
+10 次。前 7 次都缺页：1、2、3 装满页框；4 换出最久没用的 1；1 换出 2；2 换出 3；5 换出 4，此时页框里是 5、1、2。接着 1、2 命中。3 缺页，三页里最近用过的时间是 5（第 7 次）、1（第 8 次）、2（第 9 次），换出 5；4 缺页换出 1；5 缺页换出 2。缺页 7 + 3 = 10 次。可以把这串序列填进上面的动画，用 LRU 验证。</details>
+<details><summary>5. 下列页面置换算法中，可能出现 Belady 异常的是？A. OPT　B. LRU　C. FIFO　D. 都不会</summary>
+C。FIFO 只按调入的先后换出，页框数一变，换出顺序整个变了。同一串序列 1 2 3 4 1 2 5 1 2 3 4 5，FIFO 在 3 个页框时缺页 9 次，4 个页框时反而 10 次。LRU 和 OPT 页框越多缺页只会越少或不变。</details>
+<details><summary>6. 页大小 4KB，一个进程需要 10000 字节，按页分配。要几页？内部碎片多大？</summary>
+10000 ÷ 4096 ≈ 2.44，向上取整为 3 页，共 3 × 4096 = 12288 字节。内部碎片 = 12288 − 10000 = 2288 字节。</details>
+<details><summary>7. 系统发生抖动，下列措施最有效的是？A. 换一个更快的 CPU　B. 增大磁盘交换区　C. 减少同时运行的进程数　D. 把 FIFO 换成 LRU</summary>
+C。抖动的根本原因是每个进程分到的页框太少，常用的页都放不下。减少进程数，每个进程就能分到更多页框。A 解决不了等磁盘；B 只让更多页可以被换出，换页更多了；D 可能稍好一点，但页框不够时任何算法都会频繁缺页。</details>
+<details><summary>8. 父进程 fork 出子进程后，子进程立即修改了一个全局变量。这时内核做了什么？父进程看到这个变量变了吗？</summary>
+fork 后父子进程的页表指向同一批页框，且都标为只读。子进程写这个变量所在的页，触发缺页中断，内核把<b>这一页</b>复制到一个新页框，让子进程的页表项指向副本并改成可写，然后重新执行写指令。父进程仍然指向原来的页框，看到的还是旧值。这就是写时复制。</details>
+
+<div class="nav"><a href="01-process-scheduling.html">← 上一课：进程与进程调度</a><a href="03-deadlock.html">下一课：并发、锁与死锁 →</a></div>
+<script src="../anim.js"></script>
+<script src="js/02-virtual-memory.js"></script>
+</body>
+</html>

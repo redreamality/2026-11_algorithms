@@ -94,7 +94,7 @@ spanner = StockSpanner()
 </table>
 <p>记忆方法：<b>找更大的，就让小的被弹走，所以栈里剩下的从底到顶是递减的；找更小的，反过来。</b>“左边第一个”不需要另写一遍：弹完之后、入栈之前，栈顶正好是当前元素左边第一个比它大（或小）的元素。最大矩形那道题就同时用到了左右两边。</p>
 
-<h2>题 1：每日温度（LeetCode 739）</h2>
+<h2 id="daily-temperatures">题 1：每日温度（LeetCode 739）</h2>
 <p><b>题意</b>：给出每天的气温 <code>temperatures</code>，对每一天，求“还要再等几天才会遇到更高的气温”；之后再也没有更高的气温，就填 0。</p>
 <p><b>例子</b>：<code>[73, 74, 75, 71, 69, 72, 76, 73]</code> 的答案是 <code>[1, 1, 4, 2, 1, 1, 0, 0]</code>。比如第 2 天是 75 度，之后的 71、69、72 都不比它高，第 6 天的 76 度才更高，所以要等 6 − 2 = 4 天。</p>
 <p><b>暴力做法为什么慢</b>：对每一天，都从第二天开始往后一天天找，直到找到更热的一天。如果气温一直在下降（例如 <code>[90, 80, 70, 60, ...]</code>），每一天都要扫到数组末尾，总共要比较 n + (n−1) + … + 1 ≈ n²/2 次，是 O(n²)。n = 10 万时就是 50 亿次比较，会超时。</p>
@@ -115,7 +115,7 @@ spanner = StockSpanner()
 <p><b>为什么是对的</b>：第 j 天在第 i 天被弹出，我们要确认 i 确实是 j 之后<b>第一个</b>更热的日子。假设 j 和 i 之间有某一天 k 比 j 热，那么在处理第 k 天时，j 还在栈里（j 只会被比它热的日子弹出），k 比 j 热，就会把 j 弹出。这和“j 一直留到第 i 天才被弹出”矛盾。所以 j 和 i 之间没有比 j 热的日子。</p>
 <p><b>复杂度</b>：每个下标入栈、出栈各最多一次，时间 O(n)；栈和答案数组是 O(n) 的额外空间。</p>
 
-<h2>题 2：下一个更大元素（LeetCode 496 和 503）</h2>
+<h2 id="next-greater-element">题 2：下一个更大元素（LeetCode 496 和 503）</h2>
 <p><b>496 题意</b>：<code>numbers</code> 里的数互不相同，<code>query_numbers</code> 是从 <code>numbers</code> 里挑出的一些数。对 <code>query_numbers</code> 里的每个数 x，在 <code>numbers</code> 里找到 x 的位置，往右看，第一个比 x 大的数是多少？没有就是 −1。</p>
 <p><b>例子</b>：<code>query_numbers = [4, 1, 2]</code>，<code>numbers = [1, 3, 4, 2]</code>，答案 <code>[-1, 3, -1]</code>。4 的右边只有 2，没有更大的；1 的右边第一个更大的是 3；2 在最右边，右边什么都没有。</p>
 <p><b>暴力做法为什么慢</b>：每个询问都先在 <code>numbers</code> 里找到 x，再往右扫，最坏要 O(len(query_numbers) × len(numbers))。</p>
@@ -126,7 +126,7 @@ spanner = StockSpanner()
 <p><b>为什么两遍就够</b>：从任何一个位置出发，往后绕一整圈最多经过 n − 1 个别的元素，它们全都在“第二遍”里出现过。</p>
 <p><b>复杂度</b>：496 是 O(len(numbers) + len(query_numbers))；503 遍历 2n 个位置，每个下标最多入栈出栈一次，仍是 O(n)。</p>
 
-<h2>题 3：柱状图中最大的矩形（LeetCode 84）</h2>
+<h2 id="largest-rectangle">题 3：柱状图中最大的矩形（LeetCode 84）</h2>
 <p><b>题意</b>：<code>heights[i]</code> 是第 i 根柱子的高度，每根宽 1，紧挨着排成一排。问在柱子范围内能画出的最大矩形面积。</p>
 <p><b>例子</b>：<code>heights = [2, 1, 5, 6, 2, 3]</code>，答案是 10：下标 2、3 两根柱子（高 5 和 6）合起来，高度只能取较矮的 5，宽 2，面积 10。</p>
 <p><b>暴力做法为什么慢</b>：枚举矩形的左边界和右边界，一共约 n²/2 种组合，每种组合的高度是这段区间里最矮的那根柱子。就算边扩右边界边更新最小值，也要 O(n²)。</p>
@@ -168,7 +168,7 @@ spanner = StockSpanner()
 <p><b>关于相等高度</b>：弹出条件用的是 <code>&gt;</code>，两根一样高的柱子都会留在栈里。这时靠左的那根算出来的宽度是完整的，靠右的那根会算少一点，但最大值不受影响，所以结果仍然正确。</p>
 <p><b>复杂度</b>：时间 O(n)，空间 O(n)。</p>
 
-<h2>题 4：接雨水（LeetCode 42）</h2>
+<h2 id="trapping-rain-water">题 4：接雨水（LeetCode 42）</h2>
 <p><b>题意</b>：<code>heights[i]</code> 是第 i 根柱子的高度，宽度都是 1。下雨后，柱子之间的凹槽能存多少格水？</p>
 <p><b>例子</b>：<code>[0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1]</code> 能存 6 格水。</p>
 <p><b>先想清楚一列能存多少水</b>：第 i 列头顶的水面高度，取决于它左边最高的柱子和右边最高的柱子中<b>较矮</b>的那一个（水会从矮的那边流走）。所以第 i 列的水量 = min(左边最高, 右边最高) − heights[i]，算出来是负数就当 0。</p>
@@ -209,6 +209,57 @@ spanner = StockSpanner()
   <tr><td>402</td><td>移掉 K 位数字</td><td>递增栈，贪心地删掉前面大的数字</td></tr>
   <tr><td>316</td><td>去除重复字母</td><td>递增栈 + 记录剩余次数</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-739"><summary>LeetCode 739 · 每日温度</summary>
+<p><b>题意</b>：给出每天的气温 <code>temperatures</code>，返回数组 <code>answer</code>，<code>answer[i]</code> 是第 i 天之后还要等几天才会出现更高的气温，之后都没有更高的气温就填 0。完整讲解见 <a href="#daily-temperatures">正文第 1 题</a>。</p>
+</details>
+<details id="lc-496"><summary>LeetCode 496 · 下一个更大元素 I</summary>
+<p><b>题意</b>：<code>nums1</code> 是 <code>nums2</code> 的子集，两个数组里的数各自互不相同；对 <code>nums1</code> 里的每个数，返回它在 <code>nums2</code> 中右边第一个比它大的数，没有就是 −1。完整讲解见 <a href="#next-greater-element">正文第 2 题</a>。</p>
+</details>
+<details id="lc-503"><summary>LeetCode 503 · 下一个更大元素 II</summary>
+<p><b>题意</b>：<code>nums</code> 是循环数组（最后一个元素的下一个是第一个元素），对每个位置返回沿循环顺序往后第一个比它大的数，没有就是 −1。完整讲解见 <a href="#next-greater-element">正文第 2 题</a>。</p>
+</details>
+<details id="lc-84"><summary>LeetCode 84 · 柱状图中最大的矩形</summary>
+<p><b>题意</b>：<code>heights[i]</code> 是宽为 1 的第 i 根柱子的高度，柱子紧挨着排列，返回柱状图中能勾勒出的最大矩形面积。完整讲解见 <a href="#largest-rectangle">正文第 3 题</a>。</p>
+</details>
+<details id="lc-42"><summary>LeetCode 42 · 接雨水</summary>
+<p><b>题意</b>：<code>height[i]</code> 是宽为 1 的第 i 根柱子的高度，返回下雨之后柱子之间一共能接多少单位的雨水。完整讲解见 <a href="#trapping-rain-water">正文第 4 题</a>。</p>
+</details>
+<details id="lc-901"><summary>LeetCode 901 · 股票价格跨度</summary>
+<p><b>题意</b>：设计类 <code>StockSpanner</code>，按天依次接收股票价格：</p>
+<ul>
+  <li><code>StockSpanner()</code>：初始化。</li>
+  <li><code>next(price)</code>：传入今天的价格，返回今天的<b>跨度</b>：从今天开始往回数，连续多少天的价格都小于或等于今天的价格（包括今天）。</li>
+</ul>
+<p><b>例子</b>：依次调用 <code>next</code>，传入 <code>100, 80, 60, 70, 60, 75, 85</code>，返回 <code>1, 1, 1, 2, 1, 4, 6</code>。比如传入 75 时，往回数 60、70、60 都不超过 75，再往前的 80 比 75 大，所以跨度是 4（含今天）；传入 85 时，往回一直数到 100 才停，跨度是 6。</p>
+<p><b>数据范围</b>：1 ≤ price ≤ 10<sup>5</sup>；<code>next</code> 最多调用 10<sup>4</sup> 次。</p>
+</details>
+<details id="lc-85"><summary>LeetCode 85 · 最大矩形</summary>
+<p><b>题意</b>：给出一个只含 <code>'0'</code> 和 <code>'1'</code> 的 rows × cols 二维矩阵，找出只包含 <code>'1'</code> 的最大矩形，返回它的面积。</p>
+<p><b>例子</b>：输入</p>
+<pre>matrix = [["1","0","1","0","0"],
+          ["1","0","1","1","1"],
+          ["1","1","1","1","1"],
+          ["1","0","0","1","0"]]</pre>
+<p>输出 <code>6</code>：第 1、2 行（从 0 数）的第 2～4 列全是 <code>'1'</code>，组成 2 × 3 的矩形；没有更大的全 <code>'1'</code> 矩形。</p>
+<p><b>数据范围</b>：1 ≤ rows, cols ≤ 200。</p>
+</details>
+<details id="lc-907"><summary>LeetCode 907 · 子数组的最小值之和</summary>
+<p><b>题意</b>：给出整数数组 <code>arr</code>，对它的<b>每一个连续子数组</b>取最小值，返回这些最小值的总和。答案可能很大，返回对 10<sup>9</sup> + 7 取模的结果。</p>
+<p><b>例子</b>：输入 <code>arr = [3, 1, 2, 4]</code>，输出 <code>17</code>。10 个子数组的最小值依次是：[3] 3、[1] 1、[2] 2、[4] 4、[3,1] 1、[1,2] 1、[2,4] 2、[3,1,2] 1、[1,2,4] 1、[3,1,2,4] 1，加起来是 17。</p>
+<p><b>数据范围</b>：1 ≤ arr.length ≤ 3 × 10<sup>4</sup>，1 ≤ arr[i] ≤ 3 × 10<sup>4</sup>；元素可以重复。</p>
+</details>
+<details id="lc-402"><summary>LeetCode 402 · 移掉 K 位数字</summary>
+<p><b>题意</b>：给出用字符串表示的非负整数 <code>num</code> 和整数 <code>k</code>，从中删掉 k 位数字（剩下的数字保持原来的相对顺序），让剩下的数最小，以字符串返回。结果不能有前导零；数字全删光时返回 <code>"0"</code>。</p>
+<p><b>例子</b>：输入 <code>num = "1432219", k = 3</code>，输出 <code>"1219"</code>：删掉 4、3、2（第一个 2）。再如 <code>num = "10200", k = 1</code> 删掉 1 得到 <code>"0200"</code>，去掉前导零后是 <code>"200"</code>；<code>num = "10", k = 2</code> 全删光，返回 <code>"0"</code>。</p>
+<p><b>数据范围</b>：1 ≤ k ≤ num.length ≤ 10<sup>5</sup>；num 只含数字，除了 <code>"0"</code> 本身外没有前导零。</p>
+</details>
+<details id="lc-316"><summary>LeetCode 316 · 去除重复字母</summary>
+<p><b>题意</b>：给出字符串 <code>s</code>，删掉其中重复的字母，使每个字母只出现一次。结果必须是 s 的子序列（保持字母原来的相对顺序），并且在所有可能的结果中<b>字典序最小</b>。</p>
+<p><b>例子</b>：输入 <code>s = "bcabc"</code>，输出 <code>"abc"</code>。再如 <code>s = "cbacdcbc"</code>，输出 <code>"acdb"</code>：a 后面 c、d、b 都还出现过，所以结果可以以 a 开头；以 a 开头的合法结果只有 <code>"acdb"</code>、<code>"adcb"</code>、<code>"adbc"</code> 三个，其中 <code>"acdb"</code> 字典序最小。注意 <code>"abcd"</code> 不行：b 在下标 6，它后面没有 d。</p>
+<p><b>数据范围</b>：1 ≤ s.length ≤ 10<sup>4</sup>；s 只含小写英文字母。</p>
+</details>
 
 <h2>复杂度汇总</h2>
 <table>

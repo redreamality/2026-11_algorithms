@@ -98,8 +98,59 @@ class WeightedPicker:
   <tr><td>1248</td><td>统计「优美子数组」</td><td>前缀和 + 哈希计数</td></tr>
   <tr><td>437</td><td>路径总和 III</td><td>在二叉树上做前缀和 + 哈希计数</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-303"><summary>LeetCode 303 · 区域和检索 - 数组不可变</summary>
+<p><b>题意</b>：实现 <code>NumArray</code> 类，构造时传入数组 <code>nums</code>，之后多次调用 <code>sumRange(left, right)</code>，返回下标 left 到 right（两端都包含）的元素和，数组不会被修改。完整讲解见 <a href="#range-sum-query">正文第 1 题</a>。</p>
+</details>
+<details id="lc-1"><summary>LeetCode 1 · 两数之和</summary>
+<p><b>题意</b>：在未排序的整数数组里找两个不同下标的数，使和等于 <code>target</code>，返回这两个下标，顺序任意，题目保证恰好有一个答案。完整讲解见 <a href="#two-sum">正文第 2 题</a>。</p>
+</details>
+<details id="lc-560"><summary>LeetCode 560 · 和为 K 的子数组</summary>
+<p><b>题意</b>：给整数数组 <code>nums</code>（可以有负数）和整数 <code>k</code>，返回和恰好为 k 的非空子数组的个数。完整讲解见 <a href="#subarray-sum-equals-k">正文第 3 题</a>。</p>
+</details>
+<details id="lc-724"><summary>LeetCode 724 · 寻找数组的中心下标</summary>
+<p><b>题意</b>：数组的中心下标是这样一个下标：它左侧所有元素的和等于右侧所有元素的和，它自己不算在任何一侧。中心下标在最左端时，左侧和视为 0；在最右端时，右侧和视为 0。返回最靠左的中心下标，不存在返回 -1。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 7, 3, 6, 5, 6]</code>，输出 <code>3</code>：下标 3 左侧 1 + 7 + 3 = 11，右侧 5 + 6 = 11。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 10<sup>4</sup>；-1000 ≤ nums[i] ≤ 1000，可以是负数。</p>
+</details>
+<details id="lc-238"><summary>LeetCode 238 · 除自身以外数组的乘积</summary>
+<p><b>题意</b>：给整数数组 <code>nums</code>，返回数组 <code>answer</code>，其中 <code>answer[i]</code> 等于 <code>nums</code> 中除 <code>nums[i]</code> 以外所有元素的乘积。<b>不能用除法</b>，并且要在 O(n) 时间内完成。题目保证任意前缀和后缀的乘积都在 32 位整数范围内。进阶要求 O(1) 额外空间（输出数组不算）。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 2, 3, 4]</code>，输出 <code>[24, 12, 8, 6]</code>：例如 answer[0] = 2 × 3 × 4 = 24，answer[2] = 1 × 2 × 4 = 8。</p>
+<p><b>数据范围</b>：2 ≤ n ≤ 10<sup>5</sup>；-30 ≤ nums[i] ≤ 30，可以是 0 或负数。</p>
+</details>
+<details id="lc-304"><summary>LeetCode 304 · 二维区域和检索 - 矩阵不可变</summary>
+<p><b>题意</b>：实现 <code>NumMatrix</code> 类，构造时传入二维矩阵 <code>matrix</code>，之后多次调用 <code>sumRegion(row1, col1, row2, col2)</code>，返回以 (row1, col1) 为左上角、(row2, col2) 为右下角的子矩阵（边界都包含）的元素和。矩阵不会被修改，要求 <code>sumRegion</code> 的时间复杂度为 O(1)。</p>
+<p><b>例子</b>：<code>matrix = [[3, 0, 1, 4, 2], [5, 6, 3, 2, 1], [1, 2, 0, 1, 5], [4, 1, 0, 1, 7], [1, 0, 3, 0, 5]]</code>，<code>sumRegion(2, 1, 4, 3)</code> 返回 <code>8</code>：第 2～4 行、第 1～3 列是 [2, 0, 1]、[1, 0, 1]、[0, 3, 0]，和为 3 + 2 + 3 = 8。<code>sumRegion(1, 1, 2, 2)</code> 返回 11，<code>sumRegion(1, 2, 2, 4)</code> 返回 12。</p>
+<p><b>数据范围</b>：1 ≤ 行数, 列数 ≤ 200；最多调用 10<sup>4</sup> 次 <code>sumRegion</code>。</p>
+</details>
+<details id="lc-974"><summary>LeetCode 974 · 和可被 K 整除的子数组</summary>
+<p><b>题意</b>：给整数数组 <code>nums</code> 和整数 <code>k</code>，返回元素和能被 k 整除的非空子数组的个数。</p>
+<p><b>例子</b>：输入 <code>nums = [4, 5, 0, -2, -3, 1]</code>，<code>k = 5</code>，输出 <code>7</code>：这 7 个子数组是 [4, 5, 0, -2, -3, 1]、[5]、[5, 0]、[5, 0, -2, -3]、[0]、[0, -2, -3]、[-2, -3]。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 3 × 10<sup>4</sup>；-10<sup>4</sup> ≤ nums[i] ≤ 10<sup>4</sup>，可以是负数；2 ≤ k ≤ 10<sup>4</sup>。</p>
+</details>
+<details id="lc-523"><summary>LeetCode 523 · 连续的子数组和</summary>
+<p><b>题意</b>：给整数数组 <code>nums</code> 和整数 <code>k</code>，判断是否存在一个“好的子数组”：长度<b>至少为 2</b>，并且元素和是 k 的倍数（0 也算 k 的倍数）。存在返回 <code>true</code>，否则返回 <code>false</code>。</p>
+<p><b>例子</b>：输入 <code>nums = [23, 2, 4, 6, 7]</code>，<code>k = 6</code>，输出 <code>true</code>：子数组 [2, 4] 长度为 2，和为 6，是 6 的倍数。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 10<sup>5</sup>；0 ≤ nums[i] ≤ 10<sup>9</sup>；0 ≤ sum(nums) ≤ 2<sup>31</sup> - 1；1 ≤ k ≤ 2<sup>31</sup> - 1。</p>
+</details>
+<details id="lc-525"><summary>LeetCode 525 · 连续数组</summary>
+<p><b>题意</b>：给只含 0 和 1 的数组 <code>nums</code>，找出 0 和 1 个数相同的最长子数组，返回它的长度。</p>
+<p><b>例子</b>：输入 <code>nums = [0, 1]</code>，输出 <code>2</code>：整个数组含一个 0 和一个 1。示例 2：<code>nums = [0, 1, 0]</code>，输出 <code>2</code>：[0, 1] 或 [1, 0]，整个数组有两个 0、一个 1，不满足。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 10<sup>5</sup>。</p>
+</details>
+<details id="lc-1248"><summary>LeetCode 1248 · 统计「优美子数组」</summary>
+<p><b>题意</b>：给整数数组 <code>nums</code> 和整数 <code>k</code>。如果一个子数组里<b>恰好</b>有 k 个奇数，就叫它「优美子数组」。返回 <code>nums</code> 中优美子数组的个数。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 1, 2, 1, 1]</code>，<code>k = 3</code>，输出 <code>2</code>：只有 [1, 1, 2, 1] 和 [1, 2, 1, 1] 恰好含 3 个奇数。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 5 × 10<sup>4</sup>；1 ≤ nums[i] ≤ 10<sup>5</sup>；1 ≤ k ≤ n。</p>
+</details>
+<details id="lc-437"><summary>LeetCode 437 · 路径总和 III</summary>
+<p><b>题意</b>：给二叉树的根结点 <code>root</code> 和整数 <code>targetSum</code>，返回结点值之和等于 <code>targetSum</code> 的路径条数。路径不必从根结点开始，也不必在叶结点结束，但方向必须向下（只能从父结点走到子结点）。</p>
+<p><b>例子</b>：输入 <code>root = [10, 5, -3, 3, 2, null, 11, 3, -2, null, 1]</code>（按层序写出，<code>null</code> 表示该位置没有结点），<code>targetSum = 8</code>，输出 <code>3</code>：三条路径是 5 → 3、5 → 2 → 1、-3 → 11。</p>
+<p><b>数据范围</b>：结点数在 [0, 1000] 之间；-10<sup>9</sup> ≤ Node.val ≤ 10<sup>9</sup>，可以是负数；-1000 ≤ targetSum ≤ 1000。</p>
+</details>
 
-<h2>第 1 题：区域和检索（前缀和）</h2>
+<h2 id="range-sum-query">第 1 题：区域和检索（前缀和）</h2>
 <p><b>题意</b>：给一个数组 <code>numbers</code>，之后会有很多次查询，每次给出 <code>left</code> 和 <code>right</code>，要返回 <code>numbers[left]</code> 到 <code>numbers[right]</code>（两端都包含）的和。数组本身不会被修改。</p>
 <p><b>例子</b>：<code>numbers = [-2, 0, 3, -5, 2, -1]</code>。<code>sum_range(0, 2)</code> 返回 -2 + 0 + 3 = 1；<code>sum_range(2, 5)</code> 返回 3 - 5 + 2 - 1 = -1。</p>
 <p><b>暴力做法为什么慢</b>：每次查询都从 left 加到 right，一次 O(n)。如果有 q 次查询，总共 O(q · n)。查询次数很多时，同样的加法被重复做了无数遍。</p>
@@ -115,7 +166,7 @@ class WeightedPicker:
 <p><b>为什么是对的</b>：<code>prefix_sum[right + 1]</code> 是 numbers[0] 到 numbers[right] 的和，<code>prefix_sum[left]</code> 是 numbers[0] 到 numbers[left - 1] 的和。前者减后者，开头那一段 numbers[0..left - 1] 正好抵消，剩下的就是 numbers[left..right]。</p>
 <p><b>复杂度</b>：构造 O(n)，每次查询 O(1)，额外空间 O(n)。这是典型的“用空间换时间”：多存一个数组，换来每次查询从 O(n) 变成 O(1)。</p>
 
-<h2>第 2 题：两数之和（哈希表）</h2>
+<h2 id="two-sum">第 2 题：两数之和（哈希表）</h2>
 <p><b>题意</b>：数组 <code>numbers</code> <b>没有排序</b>，找两个不同位置的数，使它们的和等于 <code>target</code>，返回两个下标。题目保证恰好有一个答案。</p>
 <p><b>例子</b>：<code>numbers = [2, 7, 11, 15]</code>，<code>target = 9</code>，返回 <code>[0, 1]</code>。<code>numbers = [3, 3]</code>，<code>target = 6</code>，返回 <code>[0, 1]</code>（同一个值出现两次，可以用两次，但不能把同一个位置用两次）。</p>
 <p><b>暴力做法为什么慢</b>：两层循环试所有的对，O(n²)。上一课的对撞指针要求有序，先排序会把下标打乱，还得另外记原下标，也不是最直接的办法。</p>
@@ -130,7 +181,7 @@ for i, number in enumerate(numbers):
 <p><b>为什么是对的</b>：设答案是下标 a &lt; b。走到 b 时，a 已经被记进 dict，<code>target - numbers[b]</code> 正好是 <code>numbers[a]</code>，一定能查到。</p>
 <p><b>复杂度</b>：一遍循环，每次查和记都是 O(1)，时间 O(n)；dict 最多存 n 个数，空间 O(n)。</p>
 
-<h2>第 3 题：和为 K 的子数组（前缀和 + 哈希计数）</h2>
+<h2 id="subarray-sum-equals-k">第 3 题：和为 K 的子数组（前缀和 + 哈希计数）</h2>
 <p><b>题意</b>：给数组 <code>numbers</code>（可以有负数和 0）和整数 <code>k</code>，数一数有多少个连续子数组的和恰好等于 k。</p>
 <p><b>例子</b>：<code>numbers = [1, 1, 1]</code>，<code>k = 2</code>，答案是 2：下标 0～1 的 [1, 1] 和下标 1～2 的 [1, 1]，内容一样但位置不同，算两个。<code>numbers = [1, 2, 3]</code>，<code>k = 3</code>，答案是 2：[1, 2] 和 [3]。</p>
 <p><b>暴力做法为什么慢</b>：枚举起点和终点，用前缀和 O(1) 算每一段的和，也还有 O(n²) 段要看。</p>

@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 45 课 · 树形 DP</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.tree { position: relative; width: 440px; max-width: 100%; margin: 6px 0 26px; }
+.tree svg { position: absolute; left: 0; top: 0; }
+.tree .box { position: absolute; transform: translate(-50%, -50%); background: #fff; }
+.tree .box.hot { background: #ffe0b2; }
+.tree .box.found { background: #ffcdd2; border-color: #c62828; }
+.tree .box.done { background: #c8e6c9; border-color: #2e7d32; }
+.tree .ret { position: absolute; transform: translate(-50%, 0); font-size: 12px; line-height: 1.4; padding: 0 3px; color: #0b62c4; background: #fcfcfc; white-space: nowrap; }
+.adjacency { font-family: Consolas, monospace; font-size: 14px; margin: 4px 0; }
+.adjacency .hot { background: #ffe0b2; }
+.steps li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 45 课 · 树形 DP</h1>
+<p class="one-line">树形 DP 的状态定义在“<b>以 v 为根的子树</b>”上：先算完所有孩子，再用孩子的结果拼出 v 的结果。说白了就是第 31 课的<b>后序位置汇总</b>，只是每个节点要交给父亲的不止一个数。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#unpack">解包（一次返回两个数）</a>、<a href="python-basics.html#comprehension">推导式与生成器表达式</a>、<a href="python-basics.html#loop-tools"><code>range</code> 倒序（本课还会用到 <code>reversed</code>，下面就地讲）</a>、<a href="python-basics.html#dict-tools"><code>setdefault</code></a>、<a href="python-basics.html#type-hints">类型标注</a>；前面的课 —— <a href="10-binary-tree.html">第 10 课 · 二叉树与遍历（后序）</a>、<a href="31-tree-patterns.html">第 31 课 · 二叉树高频题（后序位置汇总、直径）</a>、<a href="13-graph-traversal.html">第 13 课 · 图的表示与 BFS（邻接表）</a>、<a href="05-recursion.html">第 5 课 · 递归（递归深度）</a>、<a href="37-dp-1d.html">第 37 课 · 一维 DP（打家劫舍）</a>。</p>
+
+<p>本课一条主线：一棵 6 个节点的树。先用第 31 课的 <code>TreeNode</code> 二叉树形式做打家劫舍 III（题 1），再把<b>同一棵树</b>换成笔试常见的“节点编号 + 边列表”输入，做同一道题的一般版本（题 2）和树的直径（题 3）。</p>
+<div class="row"><span class="label">二叉树形式（层序）：</span><code>[3, 4, 5, 1, 3, None, 1]</code></div>
+<div class="row"><span class="label">边列表形式：</span><code>values = [3, 4, 5, 1, 3, 1]</code>，<code>edges = [(0, 1), (0, 2), (1, 3), (1, 4), (2, 5)]</code><span class="label">（节点编号按层序从 0 编起）</span></div>
+<pre>             节点 0（价值 3）
+            /              \
+     节点 1（4）          节点 2（5）
+      /       \                 \
+ 节点 3（1） 节点 4（3）      节点 5（1）</pre>
+
+<h2>先定义几个词</h2>
+<ul>
+  <li><b>子树</b>：节点 v 和它下面所有的后代组成的那棵树，叫“以 v 为根的子树”。叶子的子树只有它自己。</li>
+  <li><b>后序</b>（第 10 课）：先处理所有孩子，再处理自己。只有在这个时刻，所有孩子的结果才都已经算好。</li>
+  <li><b>树形 DP</b>：状态写成 <code>dp[v]</code> 或 <code>dp[v][几种情况]</code>，代表“以 v 为根的子树”的某个最优值；转移只用 v 的孩子的状态；按后序（自底向上）计算。答案通常在根上，或者是所有节点里的最大值。</li>
+</ul>
+<p>和第 31 课的关系：第 31 课的递归函数每个节点只返回一个数（深度、是否对称……）。树形 DP 常常要返回<b>几个数</b>，因为父亲做决定时，需要知道孩子在不同情况下的结果（比如“孩子被选”和“孩子没被选”）。</p>
+
+<h2>实战里怎么写：父子表 + 倒序处理</h2>
+<p>业务里的树很少是 <code>left</code> / <code>right</code>，常见的是“每条记录有一个父亲”：组织架构（每人一个上级）、目录（每个目录一个父目录）、评论楼中楼。典型需求是<b>自底向上汇总</b>：</p>
+<table>
+  <tr><th>场景</th><th>每个节点算什么</th><th>从孩子那里要什么</th></tr>
+  <tr><td>目录占用空间（<code>du</code> 命令）</td><td>这个目录连同子目录的总大小</td><td>每个子目录的总大小</td></tr>
+  <tr><td>团建邀请：直属上下级不能同时来</td><td>邀请 / 不邀请这个人时，他这一支的最大开心值</td><td>每个下属的两种结果</td></tr>
+  <tr><td>机房网线连成一棵树，最远的两台机器</td><td>往下最远能走几根网线</td><td>每个孩子往下最远的距离</td></tr>
+</table>
+<p>组织架构、目录可能很深，所以业务代码一般<b>不用递归</b>：先从根出发得到一个“父亲总在孩子前面”的顺序，再<b>倒着</b>处理，孩子就总在父亲之前算好：</p>
+<pre>def folder_sizes(parent_of, own_size):            # parent_of[目录] = 父目录，根的父目录是 None
+    children = {}
+    for folder, parent in parent_of.items():
+        if parent is None:
+            root = folder
+        else:
+            children.setdefault(parent, []).append(folder)
+
+    order = [root]
+    for folder in order:                          # 一边遍历一边往后追加：从根开始的 BFS 顺序
+        order.extend(children.get(folder, []))
+
+    total = {}
+    for folder in reversed(order):                # 倒过来：孩子一定先算好
+        total[folder] = own_size[folder] + sum(total[child] for child in children.get(folder, []))
+    return total
+
+folder_sizes({"/": None, "/home": "/", "/var": "/"}, {"/": 1, "/home": 30, "/var": 12})
+# {'/var': 12, '/home': 30, '/': 43}</pre>
+<p>两处 Python 细节：<code>for folder in order</code> 的循环体里往 <code>order</code> 末尾追加元素，循环会继续走到这些新元素，所以这一个循环就完成了从根开始的 BFS（效果和第 13 课用 <code>deque</code> 的队列写法一样，只是用过的元素不弹出）；<code>reversed(order)</code> 从最后一个元素往前遍历列表，不复制列表，和 <code>order[::-1]</code> 的顺序一样。</p>
+<p>完整可运行的版本在 <code>examples/tree_dp_in_practice.py</code>（<code>uv run examples/tree_dp_in_practice.py</code>），包括团建邀请名单和最远的两台机器。下面按题讲原理。</p>
+
+<h2 id="house-robber-tree">题 1：打家劫舍 III（LeetCode 337）</h2>
+<p><b>题意</b>：房子连成一棵二叉树，有边直接相连的两间房子（父子）不能在同一晚都偷。最多能偷多少？</p>
+<p><b>例子</b>：上面那棵树，偷节点 1 和节点 2（4 + 5 = 9）最多。偷根再偷三个孙子只有 3 + 1 + 3 + 1 = 8。</p>
+<p><b>回顾第 37 课</b>：一排房子的打家劫舍，每间房子只有“偷 / 不偷”两种选择，不偷时左边那间随意，偷时左边那间不能偷。树上一样，只是“左边那一间”变成了“所有孩子”。</p>
+<p><b>直接写递归为什么慢</b>：最直接的想法是 <code>rob(node) = max(偷 node + 四个孙子的 rob, 两个孩子的 rob)</code>。算 <code>rob(根)</code> 时要算孙子的 rob；算 <code>rob(孩子)</code> 时又要算这些孙子的 rob。同一棵子树被算了好几遍，越往下重复越多。</p>
+<p><b>关键观察</b>：父亲做决定时，只需要知道每个孩子在两种情况下的结果：“孩子被偷时孩子这棵子树最多多少”和“孩子没被偷时最多多少”。那就让每个节点<b>一次返回这两个数</b>，每棵子树只算一遍。</p>
+<p><b>套四步法</b>（第 37 课）：</p>
+<ol class="steps">
+  <li>状态：对每个节点 v，<code>take_this</code> = 偷 v 时，以 v 为根的子树最多偷多少；<code>skip_this</code> = 不偷 v 时最多偷多少。</li>
+  <li>转移：偷 v，两个孩子都不能偷：<code>take_this = v.val + left_skip + right_skip</code>。不偷 v，每个孩子偷不偷随意，各取大的：<code>skip_this = max(left_take, left_skip) + max(right_take, right_skip)</code>。</li>
+  <li>初始值：空树返回 <code>(0, 0)</code>。</li>
+  <li>遍历顺序：后序，先递归算两个孩子，再算自己。答案是根的两个数里大的。</li>
+</ol>
+<pre>def rob_tree(root):
+    def best_pair(node):                     # 返回 (偷 node 时的最大值, 不偷 node 时的最大值)
+        if node is None:
+            return 0, 0
+        left_take, left_skip = best_pair(node.left)
+        right_take, right_skip = best_pair(node.right)
+        take_this = node.val + left_skip + right_skip
+        skip_this = max(left_take, left_skip) + max(right_take, right_skip)
+        return take_this, skip_this
+
+    return max(best_pair(root))</pre>
+<p>在例子上从下往上算：三个叶子 (1, 0)、(3, 0)、(1, 0)；节点 1 偷 = 4 + 0 + 0 = 4，不偷 = 1 + 3 = 4；节点 2 偷 = 5，不偷 = 1；根偷 = 3 + 4 + 1 = 8，不偷 = max(4, 4) + max(5, 1) = 9。答案 9。下面动画的第一个按钮就是这个过程。</p>
+<p><b>为什么对</b>：以 v 为根的子树里的任何一种偷法，v 要么被偷、要么没被偷。被偷时孩子都不能偷，两个孩子的子树又互不影响，各自取“不偷孩子”的最优；没被偷时孩子不受限制，各自取两种里的最优。两种情况都考虑了，所以不会漏。</p>
+<p><b>复杂度</b>：每个节点只访问一次，O(n) 时间；递归深度是树高 h，额外空间 O(h)。</p>
+
+<h2>笔试里的树：边列表、邻接表、递归深度</h2>
+<p>笔试（尤其是 ACM 模式）很少给 <code>TreeNode</code>，通常这样给一棵树：第一行 n，下面 n − 1 行每行两个编号 a b，表示 a 和 b 之间有一条边。<b>边没有方向</b>，也不说谁是父亲。处理分三步：</p>
+<ol class="steps">
+  <li><b>建邻接表</b>（第 13 课）：<code>adjacency[v]</code> = 和 v 相连的所有节点。边没有方向，所以 a 记进 b 的列表，b 也记进 a 的列表。</li>
+  <li><b>自己选根、定父子</b>：通常选 0（或题目说的 1）当根。从根出发 BFS，第一次走到一个节点时，记下是从哪个节点走过来的，那就是它的 <code>parent</code>。之后遍历邻居时，<b>跳过 parent</b>，剩下的就是孩子；不跳过会走回头路。</li>
+  <li><b>注意递归深度</b>：n 常常到 10<sup>5</sup>，如果树退化成一条长链，递归要嵌套 10<sup>5</sup> 层，超过 Python 默认约 1000 层的上限，抛 <code>RecursionError</code>（第 5 课）。调大上限（<code>sys.setrecursionlimit</code>）在一些环境里会直接把程序撑崩，最稳的是<b>不递归</b>：BFS 得到的顺序里父亲总在孩子前面，<b>倒着处理</b>这个顺序，就是自底向上。</li>
+</ol>
+<pre>def children_first_order(node_count, edges, root=0):
+    adjacency = [[] for _ in range(node_count)]
+    for first, second in edges:                 # 边没有方向，两头都记
+        adjacency[first].append(second)
+        adjacency[second].append(first)
+    parent = [-1] * node_count
+    parent[root] = root                         # 根的父亲记成自己，表示“已经走到过”
+    order = [root]
+    for node in order:                          # BFS：一边遍历一边追加
+        for neighbor in adjacency[node]:
+            if parent[neighbor] == -1:
+                parent[neighbor] = node
+                order.append(neighbor)
+    return adjacency, parent, order             # reversed(order) 就是“孩子总在父亲前面”</pre>
+<p>后面两题都用这个模板。倒着处理 <code>order</code> 时，节点 v 的孩子就是 <code>adjacency[v]</code> 里不等于 <code>parent[v]</code> 的那些。</p>
+
+<h2>题 2：同一道题换成边列表（没有上司的舞会）</h2>
+<p><b>题意</b>：n 个节点，<code>values[v]</code> 是节点 v 的价值，<code>edges</code> 是 n − 1 条边。有边相连的两个节点不能都选，选出的价值总和最大是多少？这道题有个有名的说法叫“没有上司的舞会”：公司的上下级关系是一棵树，直属上下级不能同时来，求来的人开心值总和最大。和题 1 的区别只有两点：输入是边列表；每个节点的孩子可以不止两个。</p>
+<p><b>例子</b>：<code>values = [3, 4, 5, 1, 3, 1]</code>，<code>edges = [(0, 1), (0, 2), (1, 3), (1, 4), (2, 5)]</code>，就是主线那棵树，答案 9。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>take[v]</code> = 选 v 时以 v 为根的子树的最大总和；<code>skip[v]</code> = 不选 v 时的最大总和。</li>
+  <li>转移：对 v 的每个孩子 child，<code>take[v] += skip[child]</code>，<code>skip[v] += max(take[child], skip[child])</code>。</li>
+  <li>初始值：<code>take[v] = values[v]</code>，<code>skip[v] = 0</code>（还没加任何孩子时）。</li>
+  <li>遍历顺序：倒着处理 BFS 顺序。答案是 <code>max(take[0], skip[0])</code>。</li>
+</ol>
+<pre>def max_non_adjacent_total(values, edges):
+    if not values:
+        return 0
+    adjacency, parent, order = children_first_order(len(values), edges)
+    take = list(values)
+    skip = [0] * len(values)
+    for node in reversed(order):                 # 孩子一定先算好
+        for child in adjacency[node]:
+            if child != parent[node]:
+                take[node] += skip[child]
+                skip[node] += max(take[child], skip[child])
+    return max(take[0], skip[0])</pre>
+<p><b>复杂度</b>：建邻接表 O(n)，BFS O(n)，倒序处理时每条边看两次，总共 O(n) 时间、O(n) 空间，没有递归。</p>
+
+<h2 id="tree-diameter">题 3：树的直径（LeetCode 1245）</h2>
+<p><b>题意</b>：n 个节点、n − 1 条边的树，最远的两个节点之间有几条边？</p>
+<p><b>例子</b>：主线那棵树，节点 3 → 1 → 0 → 2 → 5 有 4 条边，是最长的，答案 4。</p>
+<p><b>回顾第 31 课</b>：二叉树的直径。每条路径都有一个最高点，以 v 为最高点的最长路径 = 往左走到最深 + 往右走到最深。递归函数返回深度，答案另外记。</p>
+<p><b>推广到一般的树</b>：孩子可以有很多个。以 v 为最高点的路径，最多从<b>两个</b>孩子方向往下走（一条路径经过 v 时，只能从一边进、另一边出）。所以要找<b>最深的两个</b>孩子方向。</p>
+<p><b>套四步法</b>：</p>
+<ol class="steps">
+  <li>状态：<code>deepest[v]</code> = 从 v 只往下走（走向孩子），最多能走几条边。叶子是 0。</li>
+  <li>转移：每个孩子 child 方向能走 <code>deepest[child] + 1</code> 条边。<code>deepest[v]</code> 取其中最大的；同时用<b>最大的两个之和</b>更新答案 <code>longest</code>（只有一个孩子时第二大算 0）。</li>
+  <li>初始值：<code>deepest[v] = 0</code>，<code>longest = 0</code>。</li>
+  <li>遍历顺序：倒着处理 BFS 顺序。答案是 <code>longest</code>，<b>不是</b> <code>deepest[0]</code>。</li>
+</ol>
+<pre>def tree_diameter(node_count, edges):
+    if node_count &lt;= 1:
+        return 0
+    adjacency, parent, order = children_first_order(node_count, edges)
+    deepest = [0] * node_count
+    longest = 0
+    for node in reversed(order):
+        first, second = 0, 0                     # 最深和第二深的孩子方向
+        for child in adjacency[node]:
+            if child != parent[node]:
+                depth = deepest[child] + 1
+                if depth &gt; first:
+                    first, second = depth, first
+                elif depth &gt; second:
+                    second = depth
+        deepest[node] = first                    # 交给父亲的是一条往下的直线
+        longest = max(longest, first + second)   # 以 node 为最高点的最长路径
+    return longest</pre>
+<p><b>为什么对</b>：和第 31 课一样。最长路径一定有一个最高点（离根最近的那个节点），处理到这个节点时，它的两段分别落在两个不同的孩子方向里，长度都不会超过那个方向的最深值，而最深的两个方向之和正好能取到。所以 <code>longest</code> 一定会被更新成答案。</p>
+<p><b>复杂度</b>：O(n) 时间、O(n) 空间。</p>
+<p><b>另一种写法：两次 BFS</b>。从任意节点 BFS 找到最远的节点 A，再从 A 出发 BFS 找到最远的节点 B，A 到 B 就是一条直径。要输出具体路径时这种写法更顺手（<code>examples/tree_dp_in_practice.py</code> 里用的就是它）。但它只适用于边权都非负的直径，树形 DP 的写法能推广到更多题。</p>
+
+<h2>动手玩</h2>
+<p><b>打家劫舍 III</b>：后序处理主线那棵二叉树，方框里是房子的钱，橙色是正在处理的节点，处理完变绿，下面的蓝字是交给父亲的两个数“偷 / 不偷”。最后一帧用红色标出被偷的房子。</p>
+<p><b>树的直径</b>：同一棵树换成边列表，方框里是<b>节点编号</b>。先建邻接表、BFS 得到顺序，再倒着处理；蓝字是 <code>deepest</code>，下方记录 <code>longest</code>。最后一帧标出整条直径。</p>
+<div class="demo" id="tree-dp"></div>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>题</th><th>每个节点的状态</th><th>从孩子要什么</th><th>时间</th><th>空间</th></tr>
+  <tr><td>打家劫舍 III</td><td>(偷, 不偷)</td><td>每个孩子的 (偷, 不偷)</td><td>O(n)</td><td>O(h) 递归</td></tr>
+  <tr><td>没有上司的舞会</td><td>take[v]、skip[v]</td><td>同上，孩子不限个数</td><td>O(n)</td><td>O(n)</td></tr>
+  <tr><td>树的直径</td><td>deepest[v]</td><td>每个孩子的 deepest，取最大的两个</td><td>O(n)</td><td>O(n)</td></tr>
+  <tr><td>目录总大小</td><td>total[v]</td><td>每个孩子的 total，求和</td><td>O(n)</td><td>O(n)</td></tr>
+</table>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li>输入是一棵树（<b>n 个点、n − 1 条边、连通</b>，或者给了每个点的父亲），问最大 / 最小 / 方案数。</li>
+  <li>“相邻的不能同时选”“每个点要被覆盖”“选一些点使……”：每个节点要区分几种情况（选 / 不选、被覆盖 / 没被覆盖），返回多个数。</li>
+  <li>“最长路径”“最远的两个点”：最高点 + 最深的两个方向。</li>
+  <li>“每个子树的……”：后序汇总。</li>
+</ul>
+
+<h2>LeetCode 对应题目</h2>
+<table>
+  <tr><th>题号</th><th>中文题名</th><th>本课对应</th></tr>
+  <tr><td>337</td><td>打家劫舍 III</td><td>题 1</td></tr>
+  <tr><td>1245</td><td>树的直径</td><td>题 3（会员题；543 是二叉树版，第 31 课）</td></tr>
+  <tr><td>124</td><td>二叉树中的最大路径和</td><td>练手：直径的带权版，负数的孩子方向不如不要（和 0 取大）</td></tr>
+  <tr><td>968</td><td>监控二叉树</td><td>练手：每个节点三种状态（装了摄像头 / 被覆盖 / 没被覆盖）</td></tr>
+  <tr><td>2246</td><td>相邻字符不同的最长路径</td><td>练手：题 3 + 一个条件，字符相同的孩子方向跳过</td></tr>
+  <tr><td>834</td><td>树中距离之和</td><td>进阶：换根 DP，先自底向上一遍，再自顶向下一遍</td></tr>
+</table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-337"><summary>LeetCode 337 · 打家劫舍 III</summary>
+<p><b>题意</b>：房屋排成一棵二叉树，入口是根 <code>root</code>，节点值是屋里的钱；同一晚偷了两个直接相连（父子）的房屋就会报警，返回不触发报警时能偷到的最高金额。完整讲解见 <a href="#house-robber-tree">正文题 1</a>。</p>
+</details>
+<details id="lc-1245"><summary>LeetCode 1245 · 树的直径（会员题）</summary>
+<p><b>题意</b>：给定无向树的边列表 <code>edges</code>（节点编号 0 到 n − 1），返回树的直径，即树上最长路径的边数。完整讲解见 <a href="#tree-diameter">正文题 3</a>。</p>
+</details>
+<details id="lc-124"><summary>LeetCode 124 · 二叉树中的最大路径和</summary>
+<p><b>题意</b>：二叉树中的路径是一串节点，相邻两个节点之间有边相连，同一个节点最多出现一次；路径至少含一个节点，不一定经过根。路径和是路径上节点值的总和。返回所有非空路径中的最大路径和。</p>
+<p><b>例子</b>：输入 <code>root = [-10, 9, 20, null, null, 15, 7]</code>，即根 -10 的左孩子是 9，右孩子是 20，20 的左右孩子是 15 和 7；输出 <code>42</code>，最优路径是 15 → 20 → 7。</p>
+<p><b>数据范围</b>：节点数 ≤ 3 × 10<sup>4</sup>，-1000 ≤ 节点值 ≤ 1000（可以是负数）。</p>
+</details>
+<details id="lc-968"><summary>LeetCode 968 · 监控二叉树</summary>
+<p><b>题意</b>：在二叉树的节点上安装摄像头，每个摄像头能监视它所在的节点、它的父节点和它的直接子节点。返回监视所有节点所需的最少摄像头数量。</p>
+<p><b>例子</b>：输入 <code>root = [0, 0, null, 0, 0]</code>，即根只有左孩子，这个左孩子有两个孩子；输出 <code>1</code>，摄像头装在根的左孩子上，就能同时监视根和它的两个孩子。</p>
+<p><b>数据范围</b>：节点数 ≤ 1000，节点值都是 0。</p>
+</details>
+<details id="lc-2246"><summary>LeetCode 2246 · 相邻字符不同的最长路径</summary>
+<p><b>题意</b>：一棵 n 个节点的树，根是节点 0，用数组 <code>parent</code> 表示，<code>parent[i]</code> 是节点 i 的父节点，<code>parent[0] = -1</code>。字符串 <code>s</code> 的 <code>s[i]</code> 是节点 i 的字符。返回最长路径的长度，要求路径上任意相邻的两个节点字符不同。这里路径长度是路径上的<b>节点数</b>，不是边数。</p>
+<p><b>例子</b>：输入 <code>parent = [-1, 0, 0, 1, 1, 2]</code>，<code>s = "abacbe"</code>，即边 0–1、0–2、1–3、1–4、2–5，字符依次是 a、b、a、c、b、e；输出 <code>3</code>，最长路径是 3 → 1 → 0（c、b、a）。0 和 2 都是 a，所以路径不能经过边 0–2。</p>
+<p><b>数据范围</b>：n ≤ 10<sup>5</sup>，<code>s</code> 只含小写字母。</p>
+</details>
+<details id="lc-834"><summary>LeetCode 834 · 树中距离之和</summary>
+<p><b>题意</b>：一棵 n 个节点（编号 0 到 n − 1）的无向树，<code>edges</code> 是边列表。返回长度为 n 的数组 <code>answer</code>，<code>answer[i]</code> 是节点 i 到其他所有节点的距离（边数）之和。</p>
+<p><b>例子</b>：输入 <code>n = 6</code>，<code>edges = [[0, 1], [0, 2], [2, 3], [2, 4], [2, 5]]</code>，输出 <code>[8, 12, 6, 10, 10, 10]</code>。以节点 0 为例：到 1、2 的距离各是 1，到 3、4、5 的距离各是 2，和为 1 + 1 + 2 + 2 + 2 = 8。</p>
+<p><b>数据范围</b>：n ≤ 3 × 10<sup>4</sup>。</p>
+</details>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>邻接表只记了一个方向</b>：边没有方向，<code>a</code> 和 <code>b</code> 要互相记。</li>
+  <li><b>遍历邻居时没跳过父亲</b>：会把父亲当成孩子，结果翻倍甚至死循环。</li>
+  <li><b>递归写法在长链上 <code>RecursionError</code></b>：笔试里 n 上万就用 BFS 顺序倒着处理。</li>
+  <li><b>直径返回了 <code>deepest[0]</code></b>：那只是从根往下的最长直线。答案是所有节点里“最深两个方向之和”的最大值。</li>
+  <li><b>打家劫舍 III 写成“偷根就偷所有孙子”</b>：不偷孩子时，孙子也可以不偷。用两个状态就不会想错。</li>
+  <li>节点编号从 1 开始的题目，列表开 <code>n + 1</code> 个，或者读入时统一减 1。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/tree_dp.py</code>。建议顺序：<code>build_adjacency_list</code> → <code>rob_tree</code> → <code>max_non_adjacent_total</code> → <code>tree_diameter</code>。动手前，先用一句话写下每个节点要交给父亲哪几个数。</p>
+<pre>uv run dsa/tree_dp.py
+uv run pytest tests/test_tree_dp.py</pre>
+<p>测试会拿你的结果和暴力枚举（所有选法、每个点 BFS 一遍）比对，还会用 2 万个节点的长链检查你没有用递归。</p>
+
+<h2>自测</h2>
+<details><summary>1. 打家劫舍 III 为什么每个节点要返回两个数，一个不够吗？</summary>
+只返回“这棵子树最多偷多少”时，父亲不知道这个最优值是不是偷了孩子本身。父亲想偷自己，就必须知道“不偷孩子时孩子子树最多多少”。所以要把两种情况分开返回。</details>
+<details><summary>2. 边列表给出的树，为什么倒着处理 BFS 顺序就是自底向上？</summary>
+BFS 从根开始，一个节点只有在它的父亲被处理之后才会被加进 order，所以 order 里父亲总在孩子前面。倒过来，孩子就总在父亲前面，处理父亲时所有孩子都已经算好了，效果和后序遍历一样，但没有递归。</details>
+<details><summary>3. 树的直径为什么要记“最深的两个”孩子方向，而不是“最深的一个”？</summary>
+以 v 为最高点的路径从一个孩子方向上来、经过 v、再从另一个孩子方向下去，长度是两个方向之和。只记最深的一个，就只能算出从 v 往下的直线，漏掉拐弯的路径。交给父亲的仍然只是最深的一个（deepest[v]），因为父亲只能从 v 接一条往下的直线。</details>
+
+<div class="nav"><a href="44-bitmask-dp.html">← 上一课：状压 DP</a><a href="46-shortest-path-variants.html">下一课：最短路变种 →</a></div>
+<script src="anim.js"></script>
+<script src="js/45-tree-dp.js"></script>
+</body>
+</html>

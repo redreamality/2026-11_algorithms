@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第 40 课 · 数论模板</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.nt-grid { display: grid; grid-template-columns: repeat(10, 44px); gap: 4px; margin: 8px 0; }
+.nt-grid .box { padding: 4px 0; }
+.box.prime { background: #c8e6c9; border-color: #2e7d32; }
+.box.crossed { background: #eee; color: #aaa; text-decoration: line-through; border-color: #bbb; }
+.box.gone { background: #ffcdd2; border-color: #c62828; }
+.box.current { background: #ffe0b2; border-color: #e65100; font-weight: bold; }
+.nt-table td, .nt-table th { padding: 3px 10px; font-family: Consolas, monospace; }
+.nt-table tr.hot td { background: #ffe0b2; }
+.nt-table tr.done td { background: #c8e6c9; }
+.steps li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<p><a href="index.html">← 目录</a></p>
+<h1>第 40 课 · 数论模板</h1>
+<p class="one-line">笔试里的“数学题”翻来覆去就是几块模板：<b>辗转相除求最大公约数</b>、<b>试除和筛法找质数</b>、<b>边算边取模</b>、<b>快速幂</b>、<b>用逆元代替除法</b>、<b>预处理阶乘算组合数</b>。这一课用一道抽奖题把它们串起来。</p>
+<p class="prereq">开始前要会：Python —— <a href="python-basics.html#numbers">整数运算（<code>//</code>、<code>%</code>、大整数不溢出）</a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#loop-tools"><code>enumerate</code></a>、<a href="python-basics.html#class">类</a>、<a href="python-basics.html#exceptions">异常（<code>raise ValueError</code>）</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>、<a href="05-recursion.html">第 5 课 · 递归与分治（递归快速幂）</a>、<a href="39-bit-manipulation.html">第 39 课 · 位运算（<code>&amp; 1</code>、<code>&gt;&gt;</code>）</a>。本课用到的数学名词（质数、同余、组合数……）都在下面第一节先定义。</p>
+
+<h2>主线题目：幸运卡</h2>
+<p>整课只用这一道题。它是牛客、蚂蚁笔试里很典型的出法：</p>
+<p><b>题意</b>：抽奖箱里有编号 1, 2, …, 20 的 20 张卡。编号是质数的卡叫<b>幸运卡</b>。随机抽 2 张（不放回），两张都是幸运卡的概率是多少？答案是一个分数 P / Q，请输出 <b>P · Q⁻¹ mod (10<sup>9</sup> + 7)</b>。</p>
+<p>先不管最后那句奇怪的输出格式，手算一下：</p>
+<ol class="steps">
+  <li>1..20 里的质数是 2、3、5、7、11、13、17、19，共 <b>8</b> 张幸运卡。（怎么让程序找出来：质数判断、筛法两节。）</li>
+  <li>从 20 张里选 2 张，一共 C(20, 2) = 20 × 19 / 2 = <b>190</b> 种选法；从 8 张幸运卡里选 2 张，有 C(8, 2) = 8 × 7 / 2 = <b>28</b> 种。（组合数怎么取模：最后一节。）</li>
+  <li>概率 = 28 / 190。分子分母同时除以最大公约数 2，约分成 <b>14 / 95</b>。（最大公约数怎么求：辗转相除一节。）</li>
+  <li>“输出 14 · 95⁻¹ mod (10<sup>9</sup> + 7)”到底是什么意思、为什么要这样出题：取模、快速幂、逆元三节。最终答案是 <b>242105265</b>。</li>
+</ol>
+<p>数字大一点，比如 10<sup>5</sup> 张卡抽 3 张，手算就不行了，必须靠下面这些模板。</p>
+
+<h2>先认识几个词</h2>
+<p>下面所有的数都是非负整数。</p>
+<table>
+  <tr><th>名词</th><th>定义</th><th>主线里的例子</th></tr>
+  <tr><td><b>整除</b>、<b>因数</b>、<b>倍数</b></td><td>如果 a % b == 0，就说 b <b>整除</b> a，b 是 a 的<b>因数</b>（也叫约数），a 是 b 的<b>倍数</b></td><td>190 % 2 == 0：2 是 190 的因数，190 是 2 的倍数</td></tr>
+  <tr><td><b>质数</b>（素数）</td><td>大于 1，而且因数只有 1 和它自己的数。<b>1 不是质数</b>；大于 1 又不是质数的数叫<b>合数</b></td><td>19 是质数；20 = 4 × 5 是合数</td></tr>
+  <tr><td><b>最大公约数</b> gcd(a, b)</td><td>a 和 b 共同的因数里最大的那个</td><td>gcd(190, 28) = 2</td></tr>
+  <tr><td><b>最小公倍数</b> lcm(a, b)</td><td>a 和 b 共同的倍数里最小的正数</td><td>lcm(190, 28) = 2660</td></tr>
+  <tr><td><b>模</b>、<b>取模</b></td><td>a % m 叫 a <b>对 m 取模</b>，m 叫<b>模数</b>。结果一定在 0..m-1 之间</td><td>190 % 11 = 3</td></tr>
+  <tr><td><b>同余</b> a ≡ b (mod m)</td><td>a % m == b % m，读作“a 和 b 模 m 同余”。意思是在只看余数的世界里，a 和 b 是同一个数</td><td>190 ≡ 14 (mod 11)，因为两个数除以 11 都余 3</td></tr>
+  <tr><td><b>阶乘</b> n!</td><td>1 × 2 × … × n，约定 0! = 1</td><td>5! = 120</td></tr>
+  <tr><td><b>组合数</b> C(n, k)</td><td>从 n 个不同的东西里选 k 个（不管顺序）的选法数。公式 C(n, k) = n! / (k! · (n-k)!)；k &gt; n 时为 0</td><td>C(20, 2) = 190，C(8, 2) = 28</td></tr>
+</table>
+<p><a href="21-backtracking.html">第 21 课</a>用回溯把组合一个个<b>列出来</b>；这一课只<b>数</b>有多少个，用公式，不用列。</p>
+
+<h2>实战里怎么写：标准库全都有</h2>
+<p>真实项目里这一课的东西几乎不用手写，Python 标准库都包好了。质数判断是例外，标准库没有，要自己写几行。</p>
+<table>
+  <tr><th>想做什么</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>精确的分数，自动约分</td><td><code>fractions.Fraction(28, 190)</code> → <code>Fraction(14, 95)</code></td><td>每次运算都做一次 gcd</td></tr>
+  <tr><td>最大公约数、最小公倍数</td><td><code>math.gcd</code>、<code>math.lcm</code>（3.9+）</td><td>O(log n)</td></tr>
+  <tr><td>组合数（精确值）</td><td><code>math.comb(n, k)</code>（3.8+）</td><td>结果是大整数，n 大了会很慢</td></tr>
+  <tr><td>带取模的幂</td><td><code>pow(base, exponent, modulus)</code>，三个参数</td><td>O(log exponent)，就是下面要手写的快速幂</td></tr>
+  <tr><td>取模下的逆元</td><td><code>pow(value, -1, modulus)</code>（3.8+），或 <code>pow(value, modulus - 2, modulus)</code></td><td>O(log modulus)</td></tr>
+</table>
+<pre>import math
+from fractions import Fraction
+
+MOD = 10**9 + 7
+
+Fraction(math.comb(8, 2), math.comb(20, 2))     # Fraction(14, 95)，给人看的精确答案
+math.gcd(190, 28), math.lcm(190, 28)             # (2, 2660)
+
+answer = 14 * pow(95, MOD - 2, MOD) % MOD        # 242105265，笔试要的格式
+answer == 28 * pow(190, -1, MOD) % MOD           # True：约不约分结果一样，两种求逆元写法也一样
+answer * 95 % MOD == 14                          # True：乘回分母就得到分子</pre>
+<p>完整可运行的版本在 <code>examples/number_theory_in_practice.py</code>（<code>uv run examples/number_theory_in_practice.py</code>），里面还实际计时对比了“边乘边取模”和“大整数直接乘”。下面一块一块看这些工具底层在做什么；笔试时也常要求不用库、自己默写。</p>
+
+<h2>最大公约数：辗转相除法</h2>
+<p><b>要解决的问题</b>：28 / 190 约分，要先知道 gcd(190, 28)。</p>
+<p><b>暴力为什么慢</b>：从 28 往下一个个试“能不能同时整除两个数”，最坏要试 min(a, b) 次。数到 10<sup>18</sup> 就试不完了。</p>
+<p><b>关键观察</b>：gcd(a, b) = gcd(b, a % b)。为什么：设 a = q·b + r（q 是商，r = a % b）。任何同时整除 a 和 b 的数 d，也整除 a - q·b = r；反过来，任何同时整除 b 和 r 的数，也整除 q·b + r = a。所以“a 和 b 的公因数”和“b 和 r 的公因数”是同一批数，最大的那个当然也一样。</p>
+<p>一直替换下去，第二个数越来越小，变成 0 时停：gcd(a, 0) = a（任何数都整除 0）。</p>
+<table class="nt-table">
+  <tr><th>first</th><th>second</th><th>first % second</th></tr>
+  <tr><td>190</td><td>28</td><td>22</td></tr>
+  <tr><td>28</td><td>22</td><td>6</td></tr>
+  <tr><td>22</td><td>6</td><td>4</td></tr>
+  <tr><td>6</td><td>4</td><td>2</td></tr>
+  <tr><td>4</td><td>2</td><td>0</td></tr>
+  <tr class="done"><td>2</td><td>0</td><td>停：答案 2</td></tr>
+</table>
+<pre>def gcd(first, second):
+    while second:
+        first, second = second, first % second
+    return first
+
+def lcm(first, second):
+    if first == 0 or second == 0:
+        return 0
+    return first // gcd(first, second) * second     # 先除后乘，中间结果小
+
+gcd(190, 28), gcd(28, 190), lcm(190, 28)            # (2, 2, 2660)</pre>
+<p>参数顺序反了也没关系：gcd(28, 190) 第一步 28 % 190 = 28，两个数正好换过来。</p>
+<p><b>最小公倍数</b>：lcm(a, b) = a × b / gcd(a, b)。直觉：a × b 一定是公倍数，但把两边共有的因数算了两遍，除掉一份 gcd 就是最小的。用处是通分：1/190 + 1/28 的公分母取 lcm(190, 28) = 2660。</p>
+<p><b>复杂度</b>：O(log min(a, b))。原因是 a % b 一定小于 a 的一半（b ≤ a/2 时，余数 &lt; b ≤ a/2；b &gt; a/2 时，余数 = a - b &lt; a/2），所以每两步 first 至少减半。10<sup>18</sup> 级别的数也只要不到一百步。</p>
+
+<h2>质数判断：试除到 √n</h2>
+<p><b>要解决的问题</b>：判断一张卡的编号是不是质数，比如 19。</p>
+<p><b>暴力</b>：用 2, 3, …, n-1 挨个去除，都除不尽就是质数。O(n)，判断 10<sup>9</sup> + 7 要试十亿次。</p>
+<p><b>关键观察</b>：如果 n = a × b 而且 a ≤ b，那么 a × a ≤ a × b = n，也就是 a ≤ √n。所以<b>合数一定有一个不超过 √n 的因数</b>。只要试到 √n，都除不尽就是质数。</p>
+<p>以 19 为例：√19 ≈ 4.36，只试 2、3、4 —— 都除不尽，19 是质数。以 20 为例：试 2 就除尽了，20 是合数。</p>
+<pre>def is_prime(number):
+    if number &lt; 2:                       # 0 和 1 不是质数
+        return False
+    divisor = 2
+    while divisor * divisor &lt;= number:   # 等价于 divisor &lt;= √number，但不用浮点数
+        if number % divisor == 0:
+            return False
+        divisor += 1
+    return True
+
+[card for card in range(1, 21) if is_prime(card)]   # [2, 3, 5, 7, 11, 13, 17, 19]
+is_prime(10**9 + 7)                                 # True，只试了约 31623 次</pre>
+<p>为什么写 <code>divisor * divisor &lt;= number</code> 而不写 <code>divisor &lt;= number ** 0.5</code>：<code>** 0.5</code> 算出来的是浮点数，数很大时有误差（见<a href="python-basics.html#numbers">预备课</a> 0.1 + 0.2 的例子），可能少试一个。整数乘法没有误差。</p>
+<p><b>复杂度</b>：O(√n)。</p>
+
+<h2>埃氏筛：一次找出 1..n 的所有质数</h2>
+<p><b>要解决的问题</b>：数出 1..20（或 1..10<sup>5</sup>）里一共有几张幸运卡。</p>
+<p><b>用上面的 is_prime 为什么不够好</b>：每个数各试一遍，总共 O(n√n)。n = 10<sup>6</sup> 时大约 10<sup>9</sup> 次，太慢。</p>
+<p><b>关键观察</b>：与其一个个“问”是不是质数，不如反过来，把<b>合数划掉</b>：找到一个质数 p，它的倍数 2p、3p、… 一定不是质数。从小到大做，<b>剩下没被划掉的就是质数</b>。这个方法叫<b>埃拉托斯特尼筛法</b>（简称埃氏筛）。</p>
+<ol class="steps">
+  <li>准备一张表 <code>is_prime_flags</code>，0..n 先全记成 True，再把 0 和 1 改成 False。</li>
+  <li>从 prime = 2 开始。如果 prime 还没被划掉，它就是质数，把它的倍数全划掉。</li>
+  <li><b>从 prime × prime 开始划</b>：比它小的倍数 2·prime、3·prime、…、(prime-1)·prime，都有一个更小的因数，之前已经被划掉了。例如 prime = 3 时，6 已经被 2 划掉，直接从 9 开始。</li>
+  <li><b>prime × prime &gt; n 就可以停</b>：再往后的数，倍数的起点都超过 n 了，什么也划不掉。这和试除到 √n 是同一个道理。</li>
+</ol>
+<p>筛 1..20：prime = 2 划掉 4、6、8、…、20；prime = 3 从 9 开始，划掉 9、15（12 和 18 已经被 2 划掉）；prime = 4 已被划掉，跳过；prime = 5 时 25 &gt; 20，停。剩下 2、3、5、7、11、13、17、19。下面「动手玩」里能一步步看。</p>
+<pre>def primes_up_to(limit):
+    if limit &lt; 2:
+        return []
+    is_prime_flags = [True] * (limit + 1)
+    is_prime_flags[0] = is_prime_flags[1] = False
+    prime = 2
+    while prime * prime &lt;= limit:
+        if is_prime_flags[prime]:
+            for multiple in range(prime * prime, limit + 1, prime):
+                is_prime_flags[multiple] = False
+        prime += 1
+    return [number for number, flag in enumerate(is_prime_flags) if flag]
+
+primes_up_to(20)            # [2, 3, 5, 7, 11, 13, 17, 19]
+len(primes_up_to(10**5))    # 9592：10 万张卡里有 9592 张幸运卡</pre>
+<p><b>复杂度</b>：O(n log log n)，结论记住即可：log log n 增长极慢，n = 10<sup>6</sup> 时只有 3 左右，可以当成“几乎线性”。空间 O(n)。</p>
+<p><b>怎么选</b>：只判断一两个数，用试除；要 1..n 里所有质数（或者要判断很多个不超过 n 的数），先筛一次，之后查表 O(1)。</p>
+
+<h2>取模：为什么题目要你输出 “mod 10<sup>9</sup> + 7”</h2>
+<p>主线题的答案是 14 / 95，是个分数；换成 10<sup>5</sup> 张卡抽 5 万张，分子分母都有三万多位。题目不想让你输出这种东西，于是规定：<b>所有结果都对 MOD = 10<sup>9</sup> + 7 取模后再输出</b>。Python 的整数不会溢出，但仍然必须照做，原因有三条：</p>
+<ul>
+  <li><b>判题只认那一个整数</b>。评测机逐字比对输出，你输出精确值就是答案错误（Wrong Answer）。分数更没法直接输出，后面会看到它在取模下怎样变成一个整数。</li>
+  <li><b>大整数的运算不是 O(1)</b>。两个 d 位的整数相乘，耗时随 d 增长。数越乘越长，整个程序就从 O(n) 退化成远超 O(n)。实测 10<sup>5</sup>! 用大整数直接连乘要 4 秒左右，边乘边取模只要 0.03 秒，笔试时限通常是 1～2 秒。另外，Python 默认拒绝把超过 4300 位的整数转成字符串，直接 <code>print</code> 会报 <code>ValueError</code>。</li>
+  <li><b>出题人要照顾 C++、Java</b>。那些语言的整数是 64 位，超过约 9.2 × 10<sup>18</sup> 就溢出成错误的值。取模让每一步的数都很小，所有语言都能算。</li>
+</ul>
+<p><b>为什么偏偏是 10<sup>9</sup> + 7</b>：它是质数（后面求逆元要用到）；它小于 2<sup>30</sup>，两个小于它的数相乘不超过 10<sup>18</sup>，在 64 位整数里放得下。另一个常见的模数 998244353 也是质数，同样的道理。</p>
+
+<h3>加、减、乘可以“边算边取模”</h3>
+<p>同余有一个关键性质：<b>先取模再算，和算完再取模，结果同余</b>。所以每一步都可以取模，让数一直保持在 0..MOD-1：</p>
+<table>
+  <tr><th>运算</th><th>写法</th><th>用主线数字验证（mod 11）</th></tr>
+  <tr><td>加</td><td><code>(a + b) % MOD</code> 等于 <code>(a % MOD + b % MOD) % MOD</code></td><td>(190 + 28) % 11 = 218 % 11 = 9；(3 + 6) % 11 = 9</td></tr>
+  <tr><td>乘</td><td><code>(a * b) % MOD</code> 等于 <code>(a % MOD) * (b % MOD) % MOD</code></td><td>190 × 28 % 11 = 5320 % 11 = 7；3 × 6 % 11 = 18 % 11 = 7</td></tr>
+  <tr><td>减</td><td><code>(a - b + MOD) % MOD</code>（a、b 已经在 0..MOD-1 里）</td><td>(190 % 11 − 28 % 11) = 3 − 6 = −3，加 11 再取模得 8；(190 − 28) % 11 = 162 % 11 = 8</td></tr>
+  <tr><td><b>除</b></td><td><b>不能</b>直接取模，要换成乘逆元（下面讲）</td><td>190 / 95 = 2；但 190 % 11 = 3，95 % 11 = 7，3 / 7 都不是整数</td></tr>
+</table>
+<p><b>减法为什么要加 MOD</b>：两个取过模的数相减，结果可能是负数（上面的 3 − 6 = −3）。C++、Java 里 <code>-3 % 11</code> 是 <code>-3</code>，输出负数就错了，所以要先加一个 MOD 变成非负再取模。在 Python 里 <code>%</code> 的结果和除数同号（<a href="python-basics.html#numbers">预备课</a>讲过），<code>(-3) % 11</code> 本来就是 8，不加也对；但笔试题解大多是从 C++ 改写来的，你的代码也可能要改写成别的语言，所以统一写成 <code>(a - b + MOD) % MOD</code>，养成习惯不会错。</p>
+<p>主线里的用处：“抽 2 张<b>不全是</b>幸运卡”的概率是 1 − 14/95，取模写成 <code>(1 - answer + MOD) % MOD</code>。</p>
+<pre>MOD = 10**9 + 7
+factorial = 1
+for number in range(1, 10**5 + 1):
+    factorial = factorial * number % MOD     # 每乘一次就取模，数永远小于 MOD</pre>
+
+<h2>带取模的快速幂（迭代版）</h2>
+<p>求逆元要算 95<sup>MOD−2</sup>，指数是十亿级别，乘十亿次显然不行。<a href="05-recursion.html">第 5 课</a>写过递归快速幂：x<sup>n</sup> = (x<sup>n//2</sup>)<sup>2</sup>，n 是奇数再多乘一个 x，O(log n)。笔试里更常见的是下面这种<b>迭代写法</b>，再在每次乘法后取模。</p>
+<p><b>关键观察</b>：把指数写成二进制。用 mod 11 下算 7<sup>9</sup> 举例：9 = 二进制 <code>1001</code> = 8 + 1，所以 7<sup>9</sup> = 7<sup>8</sup> × 7<sup>1</sup>。而 7<sup>1</sup>、7<sup>2</sup>、7<sup>4</sup>、7<sup>8</sup> 可以由前一个<b>平方</b>得到。于是从指数的最低位开始：</p>
+<ul>
+  <li>当前位是 1（<code>exponent &amp; 1</code>，第 39 课）：把当前的 base 乘进结果。</li>
+  <li>不管是不是 1：base 自己平方一次（7 → 7<sup>2</sup> → 7<sup>4</sup> → 7<sup>8</sup>），指数右移一位（<code>exponent &gt;&gt;= 1</code>）。</li>
+</ul>
+<table class="nt-table">
+  <tr><th>exponent（二进制）</th><th>最低位</th><th>base（代表）</th><th>result</th></tr>
+  <tr><td>1001</td><td>1</td><td>7（7<sup>1</sup>）</td><td>1 × 7 % 11 = 7</td></tr>
+  <tr><td>100</td><td>0</td><td>5（7<sup>2</sup> = 49，49 % 11 = 5）</td><td>7</td></tr>
+  <tr><td>10</td><td>0</td><td>3（7<sup>4</sup>，5 × 5 % 11 = 3）</td><td>7</td></tr>
+  <tr><td>1</td><td>1</td><td>9（7<sup>8</sup>，3 × 3 % 11 = 9）</td><td>7 × 9 % 11 = 63 % 11 = 8</td></tr>
+  <tr class="done"><td>0</td><td colspan="2">停</td><td>7<sup>9</sup> mod 11 = 8</td></tr>
+</table>
+<pre>def mod_pow(base, exponent, modulus):
+    if exponent &lt; 0:
+        raise ValueError("exponent must be &gt;= 0")
+    result = 1 % modulus              # modulus 是 1 时，任何数取模都是 0
+    base %= modulus
+    while exponent &gt; 0:
+        if exponent &amp; 1:              # 当前最低位是 1
+            result = result * base % modulus
+        base = base * base % modulus  # base^1 → base^2 → base^4 → ...
+        exponent &gt;&gt;= 1                # 去掉最低位
+    return result
+
+mod_pow(7, 9, 11)                     # 8
+mod_pow(2, 10**18, 10**9 + 7) == pow(2, 10**18, 10**9 + 7)   # True，只循环 60 次</pre>
+<p><b>复杂度</b>：O(log exponent)，循环次数等于指数的二进制位数。实战里直接写 Python 内置的 <code>pow(base, exponent, modulus)</code>，它就是这个算法，用 C 实现；<b>不要写成 <code>base ** exponent % modulus</code></b>，那会先算出完整的大整数再取模，指数大了根本算不完。</p>
+
+<h2>乘法逆元：用乘法代替除法</h2>
+<p><b>定义</b>：在模 p 下，如果 a × x ≡ 1 (mod p)，就说 x 是 a 的<b>乘法逆元</b>（简称逆元），记作 a<sup>−1</sup>。它的作用就像普通算术里的 1/a：<b>除以 a，换成乘以 a<sup>−1</sup></b>。</p>
+<p>例子（mod 11）：7 × 8 = 56 = 5 × 11 + 1，所以 7<sup>−1</sup> ≡ 8 (mod 11)。</p>
+<p><b>逆元什么时候存在</b>：当且仅当 gcd(a, p) = 1（a 和 p 没有大于 1 的公因数）。p 是质数时，只要 a 不是 p 的倍数，gcd 一定是 1，逆元一定存在。这就是题目爱用质数当模数的原因。</p>
+<p><b>费马小定理</b>：p 是质数，a 不是 p 的倍数，则 a<sup>p−1</sup> ≡ 1 (mod p)。证明不展开，用主线数字验证一下：7<sup>10</sup> = 7<sup>9</sup> × 7 ≡ 8 × 7 = 56 ≡ 1 (mod 11)，成立。</p>
+<p>把 a<sup>p−1</sup> 拆成 a × a<sup>p−2</sup>：a × a<sup>p−2</sup> ≡ 1，所以 <b>a<sup>p−2</sup> 就是 a 的逆元</b>，用快速幂 O(log p) 算出来。检查：7<sup>11−2</sup> = 7<sup>9</sup> ≡ 8 (mod 11)，正是上一节算的结果。</p>
+<pre>def mod_inverse(value, prime_modulus=10**9 + 7):
+    if value % prime_modulus == 0:
+        raise ValueError("value is a multiple of the modulus, no inverse")
+    return mod_pow(value, prime_modulus - 2, prime_modulus)
+
+mod_inverse(7, 11)      # 8
+# Python 3.8+ 也可以写 pow(7, -1, 11)，结果一样；模数不是质数时它也能用（只要 gcd 是 1）</pre>
+
+<h3>分数怎么取模</h3>
+<p>“输出 P · Q<sup>−1</sup> mod MOD”的意思就是：<b>把除以 Q 换成乘以 Q 的逆元</b>。这样每个分数都对应 0..MOD-1 里唯一的一个整数。先在 mod 11 下手算 14 / 95：</p>
+<ol class="steps">
+  <li>95 % 11 = 7，7 的逆元是 8，所以 95<sup>−1</sup> ≡ 8。</li>
+  <li>14 × 8 = 112，112 % 11 = 2。所以 14 / 95 ≡ 2 (mod 11)。</li>
+  <li>检查：把 2 乘回分母，95 × 2 = 190，190 % 11 = 3 = 14 % 11。确实“2 乘以 95 等于 14”（在只看余数的世界里）。</li>
+</ol>
+<p>换成 MOD = 10<sup>9</sup> + 7 也是一样的步骤，结果是 <code>14 * pow(95, MOD - 2, MOD) % MOD</code> = <b>242105265</b>。<b>不约分也得到同一个数</b>：28 · 190<sup>−1</sup> 也是 242105265，因为 28/190 和 14/95 本来就是同一个分数。所以笔试里不必先求 gcd 约分（除非题目要求输出最简分数）。</p>
+
+<h2>组合数 C(n, k) mod p：预处理阶乘 + 逆元</h2>
+<p><b>要解决的问题</b>：C(n, k) = n! / (k! · (n−k)!)。分子分母取模后不能直接相除，要换成乘逆元：C(n, k) ≡ n! × (k!)<sup>−1</sup> × ((n−k)!)<sup>−1</sup>。</p>
+<p><b>每次现算为什么慢</b>：算一个阶乘 O(n)，再做两次快速幂；如果题目要查很多次组合数（比如对每个 k 都要一个 C(n, k)），重复算阶乘太浪费。</p>
+<p><b>做法</b>：一次性预处理两张表，之后每次查询 O(1)。</p>
+<ol class="steps">
+  <li><code>factorials[i]</code> = i! mod p：从 <code>factorials[0] = 1</code> 开始，<code>factorials[i] = factorials[i-1] * i % p</code>。</li>
+  <li><code>inverse_factorials[i]</code> = (i!)<sup>−1</sup> mod p：只对最大的 <code>factorials[max_n]</code> 做一次快速幂求逆元，然后<b>从大往小推</b>：<code>inverse_factorials[i-1] = inverse_factorials[i] * i % p</code>。为什么：1 / (i−1)! = i / i!，也就是 (i−1)! 的逆元 = i! 的逆元 × i。</li>
+  <li>查询：<code>factorials[n] * inverse_factorials[k] % p * inverse_factorials[n-k] % p</code>。k &lt; 0 或 k &gt; n 时直接返回 0。</li>
+</ol>
+<pre>class CombinationTable:
+    def __init__(self, max_n, modulus=10**9 + 7):
+        self.max_n, self.modulus = max_n, modulus
+        self.factorials = [1] * (max_n + 1)
+        for number in range(1, max_n + 1):
+            self.factorials[number] = self.factorials[number - 1] * number % modulus
+        self.inverse_factorials = [1] * (max_n + 1)
+        self.inverse_factorials[max_n] = mod_inverse(self.factorials[max_n], modulus)
+        for number in range(max_n, 0, -1):
+            self.inverse_factorials[number - 1] = self.inverse_factorials[number] * number % modulus
+
+    def choose(self, n, k):
+        if n &gt; self.max_n:
+            raise ValueError("table is too small")
+        if k &lt; 0 or k &gt; n:
+            return 0
+        return (self.factorials[n] * self.inverse_factorials[k] % self.modulus
+                * self.inverse_factorials[n - k] % self.modulus)
+
+table = CombinationTable(20)
+table.choose(20, 2), table.choose(8, 2)     # (190, 28)</pre>
+<p><b>复杂度</b>：预处理 O(max_n + log p)，每次查询 O(1)。</p>
+<p><b>注意 p 要大于 max_n</b>：否则 p! 及以后的阶乘都是 p 的倍数，没有逆元。10<sup>9</sup> + 7 远大于笔试里的 n（一般 ≤ 10<sup>6</sup>），不用担心。</p>
+
+<h2>把主线拼起来</h2>
+<pre>MOD = 10**9 + 7
+
+def lucky_draw_probability(card_count, draw_count):
+    lucky_count = len(primes_up_to(card_count))         # 筛法数幸运卡
+    table = CombinationTable(card_count)                # 预处理阶乘和逆元
+    favorable = table.choose(lucky_count, draw_count)   # C(8, 2) = 28
+    total = table.choose(card_count, draw_count)        # C(20, 2) = 190
+    return favorable * mod_inverse(total, MOD) % MOD    # 28 · 190⁻¹
+
+lucky_draw_probability(20, 2)       # 242105265，也就是 14/95
+lucky_draw_probability(10**5, 3)    # 859555632，不到一秒</pre>
+
+<h2>动手玩</h2>
+<p>三个按钮对应主线的三步。<b>辗转相除</b>：gcd(190, 28)，每一步橙色行是正在算的 first % second，看第二个数怎样很快变成 0。<b>埃氏筛</b>：1..20 的卡片，橙色是当前的质数，红色是这一步刚被划掉的倍数，灰色是之前划掉的，绿色是确定的质数。<b>快速幂</b>：7<sup>9</sup> mod 11，看指数二进制的每一位决定 base 要不要乘进结果。</p>
+<div class="demo" id="number-theory"></div>
+
+<h2>复杂度汇总</h2>
+<table>
+  <tr><th>模板</th><th>时间</th><th>额外空间</th><th>标准库</th></tr>
+  <tr><td>gcd / lcm（辗转相除）</td><td>O(log min(a, b))</td><td>O(1)</td><td><code>math.gcd</code>、<code>math.lcm</code></td></tr>
+  <tr><td>质数判断（试除）</td><td>O(√n)</td><td>O(1)</td><td>无</td></tr>
+  <tr><td>埃氏筛 1..n</td><td>O(n log log n)</td><td>O(n)</td><td>无</td></tr>
+  <tr><td>带取模的快速幂</td><td>O(log exponent)</td><td>O(1)</td><td><code>pow(a, b, m)</code></td></tr>
+  <tr><td>逆元（费马小定理）</td><td>O(log p)</td><td>O(1)</td><td><code>pow(a, -1, p)</code></td></tr>
+  <tr><td>组合数表</td><td>预处理 O(n + log p)，查询 O(1)</td><td>O(n)</td><td><code>math.comb</code>（精确值，不取模）</td></tr>
+</table>
+
+<h2>怎么认出这类题</h2>
+<ul>
+  <li>题目说“答案可能很大，请<b>对 10<sup>9</sup> + 7 取模</b>”：每一步加减乘都要 % MOD，减法加 MOD。</li>
+  <li>“输出 <b>P · Q<sup>−1</sup> mod</b> …”“答案是分数，输出其在模意义下的值”：逆元。</li>
+  <li>“<b>方案数</b>”“选法有多少种”，又要取模：组合数表；n 到 10<sup>5</sup>～10<sup>6</sup> 就预处理阶乘。</li>
+  <li>“a<sup>b</sup> mod m”，b 可以到 10<sup>18</sup>：快速幂。</li>
+  <li>“约分”“最简分数”“两个周期什么时候重合”“能不能平分成若干等份”：gcd / lcm。</li>
+  <li>“1..n 里的质数”“质数个数”，n 到 10<sup>6</sup>：筛法；只判断一个数：试除。</li>
+</ul>
+
+<h2>对应练习题</h2>
+<table>
+  <tr><th>题号</th><th>题名</th><th>本课对应</th></tr>
+  <tr><td>LeetCode 1979</td><td>找出数组的最大公约数</td><td>gcd 练手</td></tr>
+  <tr><td>LeetCode 204</td><td>计数质数</td><td>埃氏筛</td></tr>
+  <tr><td>LeetCode 50</td><td>Pow(x, n)</td><td>迭代快速幂（不取模，注意负指数）</td></tr>
+  <tr><td>LeetCode 372</td><td>超级次方</td><td>取模快速幂（模数 1337 不是质数，只用快速幂，不用逆元）</td></tr>
+  <tr><td>LeetCode 1922</td><td>统计好数字的数目</td><td>取模快速幂 + 乘法取模</td></tr>
+  <tr><td>LeetCode 62</td><td>不同路径</td><td>可以用组合数 C(m+n−2, m−1) 一步算出</td></tr>
+  <tr><td>牛客</td><td>搜“组合数取模”“乘法逆元”“快速幂”</td><td>ACM 模式的模板题，和主线题同一个套路</td></tr>
+</table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-1979"><summary>LeetCode 1979 · 找出数组的最大公约数</summary>
+<p><b>题意</b>：给整数数组 <code>nums</code>，返回数组中最大数和最小数的最大公约数。</p>
+<p><b>例子</b>：输入 <code>nums = [2, 5, 6, 9, 10]</code>，输出 <code>2</code>。最小数是 2，最大数是 10，gcd(2, 10) = 2。</p>
+<p><b>数据范围</b>：2 ≤ nums.length ≤ 1000，1 ≤ nums[i] ≤ 1000。</p>
+</details>
+<details id="lc-204"><summary>LeetCode 204 · 计数质数</summary>
+<p><b>题意</b>：给整数 n，返回<b>小于</b> n 的质数的个数（不含 n 本身）。</p>
+<p><b>例子</b>：输入 <code>n = 10</code>，输出 <code>4</code>。小于 10 的质数是 2、3、5、7。n = 0 和 n = 1 时输出 0。</p>
+<p><b>数据范围</b>：0 ≤ n ≤ 5 × 10<sup>6</sup>。</p>
+</details>
+<details id="lc-50"><summary>LeetCode 50 · Pow(x, n)</summary>
+<p><b>题意</b>：实现 pow(x, n)，计算浮点数 x 的整数 n 次幂 x<sup>n</sup>。n 可以是负数，此时结果是 1 / x<sup>−n</sup>。</p>
+<p><b>例子</b>：输入 <code>x = 2.00000, n = 10</code>，输出 <code>1024.00000</code>。示例 3 输入 <code>x = 2.00000, n = -2</code>，输出 <code>0.25000</code>，因为 2<sup>−2</sup> = 1/4。</p>
+<p><b>数据范围</b>：−100.0 &lt; x &lt; 100.0，−2<sup>31</sup> ≤ n ≤ 2<sup>31</sup> − 1，x 不为零或者 n &gt; 0，−10<sup>4</sup> ≤ x<sup>n</sup> ≤ 10<sup>4</sup>。</p>
+</details>
+<details id="lc-372"><summary>LeetCode 372 · 超级次方</summary>
+<p><b>题意</b>：计算 a<sup>b</sup> 对 1337 取模。a 是正整数；b 是一个非常大的正整数，以十进制各位数字组成的数组给出，例如 <code>[1, 0]</code> 表示 10。</p>
+<p><b>例子</b>：输入 <code>a = 2, b = [1, 0]</code>，输出 <code>1024</code>。b 表示 10，2<sup>10</sup> = 1024，比 1337 小，取模后不变。</p>
+<p><b>数据范围</b>：1 ≤ a ≤ 2<sup>31</sup> − 1，1 ≤ b.length ≤ 2000，0 ≤ b[i] ≤ 9，b 不含前导 0。</p>
+</details>
+<details id="lc-1922"><summary>LeetCode 1922 · 统计好数字的数目</summary>
+<p><b>题意</b>：一个数字字符串是“好数字”，当且仅当（下标从 0 开始）偶数下标处的数字是偶数（0、2、4、6、8），奇数下标处的数字是质数（2、3、5、7）。例如 "2582" 是好数字，"3245" 不是（下标 0 的 3 不是偶数）。给整数 n，返回长度为 n 的好数字字符串的总数，结果对 10<sup>9</sup> + 7 取余。字符串可以有前导 0。</p>
+<p><b>例子</b>：输入 <code>n = 1</code>，输出 <code>5</code>，即 "0"、"2"、"4"、"6"、"8"。示例 2 输入 <code>n = 4</code>，输出 <code>400</code> = 5 × 4 × 5 × 4。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 10<sup>15</sup>，结果对 10<sup>9</sup> + 7 取余。</p>
+</details>
+<details id="lc-62"><summary>LeetCode 62 · 不同路径</summary>
+<p><b>题意</b>：机器人在 m × n 网格的左上角，每次只能向下或向右移动一步，返回到达右下角的不同路径数。</p>
+<p><b>例子</b>：输入 <code>m = 3, n = 7</code>，输出 <code>28</code>。一共要走 2 步向下、6 步向右，共 8 步，从中选出哪 2 步向下：C(8, 2) = 28。</p>
+<p><b>数据范围</b>：1 ≤ m, n ≤ 100，题目保证答案 ≤ 2 × 10<sup>9</sup>（不用取模）。</p>
+</details>
+
+<h2>最容易错的地方</h2>
+<ul>
+  <li><b>1 不是质数</b>：is_prime(1) 要返回 False，筛法里 is_prime_flags[1] 要先改成 False。</li>
+  <li><b>写成 <code>base ** exponent % modulus</code></b>：先算出完整的大整数再取模，指数一大就跑不完。用 <code>pow(base, exponent, modulus)</code>。</li>
+  <li><b>除法直接取模</b>：<code>(a // b) % MOD</code> 只在 a 本来就能被 b 整除、而且 a 没取过模时才对；一旦 a 是取模后的数，必须换成乘逆元。</li>
+  <li><b>减法出负数</b>：写成 <code>(a - b + MOD) % MOD</code>。Python 不加也对，但改写成别的语言就错了。</li>
+  <li><b>忘了中间取模</b>：<code>a * b * c % MOD</code> 在 Python 里结果对，但中间结果多了一倍位数；在 C++ 里直接溢出。写成 <code>a * b % MOD * c % MOD</code>。</li>
+  <li><b>模数不是质数还用费马小定理</b>：比如模数是 10<sup>9</sup>，a<sup>p−2</sup> 不是逆元。这时用 <code>pow(a, -1, m)</code>（要求 gcd(a, m) = 1），或者扩展欧几里得算法（本课不讲）。</li>
+  <li><b>筛法从 2·prime 开始划</b>：结果仍然对，只是多做了无用功；从 <code>prime * prime</code> 开始才是 O(n log log n) 的标准写法。</li>
+</ul>
+
+<h2>练习</h2>
+<p>补全 <code>dsa/number_theory.py</code>。建议顺序：<code>gcd</code> → <code>lcm</code> → <code>is_prime</code> → <code>primes_up_to</code> → <code>mod_pow</code> → <code>mod_inverse</code> → <code>CombinationTable</code> → <code>fraction_mod</code> → <code>lucky_draw_probability</code>（主线题，把前面的全用上）。</p>
+<pre>uv run dsa/number_theory.py                    # 每个函数跑几个例子，打印「输入、期望、实际」
+uv run pytest tests/test_number_theory.py      # 正式测试，含 10^5、10^6 规模的计时</pre>
+
+<h2>自测</h2>
+<details><summary>1. 为什么 gcd(a, b) = gcd(b, a % b)？</summary>
+设 a = q·b + r，r = a % b。能同时整除 a 和 b 的数，也能整除 r = a − q·b；能同时整除 b 和 r 的数，也能整除 a = q·b + r。两组公因数完全相同，最大的那个也相同。</details>
+<details><summary>2. Python 整数不会溢出，为什么主线题还是要边算边取模，而不是最后算出精确的 C(n, k) 再取模？</summary>
+三个原因：判题机只认取模后的那个整数；大整数相乘的耗时随位数增长，10<sup>5</sup>! 直接连乘要几秒，边乘边取模只要几十毫秒；而且答案是分数，精确值没法表示成一个整数输出，只能用 P · Q<sup>−1</sup> mod p 的形式。</details>
+<details><summary>3. 预处理组合数表时，为什么 inverse_factorials 要从大往小推，而不是对每个 i! 各做一次快速幂？</summary>
+各做一次快速幂是 O(n log p)；从大往小推只做一次快速幂，其余每项一次乘法：(i−1)! 的逆元 = i! 的逆元 × i，因为 1/(i−1)! = i / i!。总共 O(n + log p)。</details>
+<details><summary>4. 14/95 mod 11 等于 2。怎样不用逆元，直接检查这个答案对不对？</summary>
+把 2 乘回分母：95 × 2 = 190，190 % 11 = 3，而 14 % 11 = 3，两边同余，所以对。这正是逆元的定义：x 是 P/Q 的取模值，当且仅当 Q · x ≡ P (mod p)。</details>
+
+<div class="nav"><a href="39-bit-manipulation.html">← 上一课：位运算技巧</a><a href="41-difference-array.html">下一课：差分数组 →</a></div>
+<script src="anim.js"></script>
+<script src="js/40-number-theory.js"></script>
+</body>
+</html>

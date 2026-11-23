@@ -77,7 +77,7 @@ def first_bad_version(versions, is_bad):
   <li>暴力做法是“把答案从小到大一个个试”：几乎都可以改成二分答案。</li>
 </ul>
 
-<h2>题一：查找左右边界（LeetCode 34）</h2>
+<h2 id="search-range">题一：查找左右边界（LeetCode 34）</h2>
 <div class="problem">
 <p><b>题意：</b>在升序数组里找 target 第一次和最后一次出现的下标，没有就返回 <code>[-1, -1]</code>。例如 <code>nums = [5, 7, 7, 8, 8, 10]</code>，target = 8，答案是 <code>[3, 4]</code>；target = 6，答案是 <code>[-1, -1]</code>。要求 O(log n)。</p>
 <p><b>暴力做法为什么慢：</b>从头扫一遍是 O(n)。“先用普通二分找到一个 8，再往左右两边一格格扩展”看起来快，但如果数组里全是 8，往两边扩展就要走 n 步，最坏仍然是 O(n)。</p>
@@ -91,7 +91,7 @@ def first_bad_version(versions, is_bad):
 <p><b>复杂度：</b>两次二分，O(log n)。</p>
 </div>
 
-<h2>题二：搜索旋转排序数组（LeetCode 33）——本课重点</h2>
+<h2 id="search-rotated">题二：搜索旋转排序数组（LeetCode 33）——本课重点</h2>
 <div class="problem">
 <p><b>题意：</b>一个升序、元素互不相同的数组，在某处被切成两段并对调，比如 <code>[0, 1, 2, 4, 5, 6, 7]</code> 变成 <code>[4, 5, 6, 7, 0, 1, 2]</code>。在里面找 target 的下标，找不到返回 -1，要求 O(log n)。例如 target = 0 返回 4，target = 3 返回 -1。</p>
 <p><b>暴力做法为什么慢：</b>从头扫一遍是 O(n)。也可以先二分找到切开的位置，再在其中一段上普通二分，这样是对的，但要写两次二分。下面的做法只用一次。</p>
@@ -112,7 +112,7 @@ def first_bad_version(versions, is_bad):
 <p><b>二分答案：</b>点<b>珂珂吃香蕉</b>，下面一排是候选速度 1 到 11。每试一个速度，就算一遍要几个小时：来得及的变绿，来不及的变灰。注意绿色一定都在灰色的右边，这就是可以二分的原因。</p>
 <div class="demo" id="binary-search-advanced"></div>
 
-<h2>题三：寻找峰值（LeetCode 162）</h2>
+<h2 id="find-peak">题三：寻找峰值（LeetCode 162）</h2>
 <div class="problem">
 <p><b>题意：</b>峰值是严格大于左右邻居的元素。数组两端之外都当作负无穷，相邻元素互不相等。返回任意一个峰值的下标，要求 O(log n)。例如 <code>[1, 2, 3, 1]</code> 返回 2（值 3）；<code>[1, 2, 1, 3, 5, 6, 4]</code> 返回 1 或 5 都对。</p>
 <p><b>暴力做法为什么慢：</b>从左往右找第一个比右边邻居大的元素，O(n)。</p>
@@ -126,7 +126,7 @@ def first_bad_version(versions, is_bad):
 <p><b>复杂度：</b>O(log n)。</p>
 </div>
 
-<h2>题四：二分答案——珂珂吃香蕉（LeetCode 875）、在 D 天内送达包裹（LeetCode 1011）</h2>
+<h2 id="binary-search-answer">题四：二分答案——珂珂吃香蕉（LeetCode 875）、在 D 天内送达包裹（LeetCode 1011）</h2>
 <div class="problem">
 <p><b>珂珂吃香蕉的题意：</b>有几堆香蕉 <code>piles</code>，珂珂每小时选一堆吃 <code>eating_speed</code> 根；如果这堆不到 <code>eating_speed</code> 根，就吃完这堆，这一小时剩下的时间不再吃别的。问要在 <code>hours</code> 小时内吃完，最小的速度是多少。例如 <code>piles = [3, 6, 7, 11]</code>，<code>hours = 8</code>：速度 4 时，四堆分别要 1、2、2、3 小时，共 8 小时，刚好来得及；速度 3 要 1 + 2 + 3 + 4 = 10 小时，来不及。答案是 4。</p>
 <p><b>暴力做法为什么慢：</b>从速度 1 开始一个个试，每试一次要把所有堆算一遍。设最大的一堆有 m 根，最坏要试 m 次，总共 O(n · m)。m 可以大到 10<sup>9</sup>，太慢了。</p>
@@ -176,6 +176,53 @@ def first_bad_version(versions, is_bad):
   <tr><td>74</td><td>搜索二维矩阵</td><td>进阶：把二维下标当成一维来二分</td></tr>
   <tr><td>410</td><td>分割数组的最大值</td><td>进阶：和送包裹几乎是同一道题</td></tr>
 </table>
+<h3>题单里每道题的题意</h3>
+<p>正文讲过的题，点链接回到正文；其余的展开看题意，先自己想用本课哪个技巧。</p>
+<details id="lc-34"><summary>LeetCode 34 · 在排序数组中查找元素的第一个和最后一个位置</summary>
+<p><b>题意</b>：给定非递减排列的整数数组 <code>nums</code> 和目标值 <code>target</code>，返回 <code>target</code> 第一次和最后一次出现的下标 <code>[start, end]</code>；不存在时返回 <code>[-1, -1]</code>。要求时间复杂度 O(log n)。完整讲解见 <a href="#search-range">正文第 1 题</a>。</p>
+</details>
+<details id="lc-33"><summary>LeetCode 33 · 搜索旋转排序数组</summary>
+<p><b>题意</b>：升序且元素互不相同的数组在某个未知下标处旋转（例如 <code>[0, 1, 2, 4, 5, 6, 7]</code> 变成 <code>[4, 5, 6, 7, 0, 1, 2]</code>），给定 <code>target</code>，存在则返回其下标，否则返回 -1。要求时间复杂度 O(log n)。完整讲解见 <a href="#search-rotated">正文第 2 题</a>。</p>
+</details>
+<details id="lc-162"><summary>LeetCode 162 · 寻找峰值</summary>
+<p><b>题意</b>：峰值元素是严格大于左右相邻值的元素。给定数组 <code>nums</code>（相邻元素不相等，视 <code>nums[-1] = nums[n] = -∞</code>），返回任意一个峰值的下标。要求时间复杂度 O(log n)。完整讲解见 <a href="#find-peak">正文第 3 题</a>。</p>
+</details>
+<details id="lc-875"><summary>LeetCode 875 · 爱吃香蕉的珂珂</summary>
+<p><b>题意</b>：有 <code>piles.length</code> 堆香蕉，每小时选一堆吃 <code>k</code> 根，一堆不足 <code>k</code> 根就吃完这堆，这一小时内不再吃别的；返回能在 <code>h</code> 小时内吃完全部香蕉的最小整数速度 <code>k</code>。完整讲解见 <a href="#binary-search-answer">正文第 4 题</a>。</p>
+</details>
+<details id="lc-1011"><summary>LeetCode 1011 · 在 D 天内送达包裹的能力</summary>
+<p><b>题意</b>：传送带上的包裹必须按 <code>weights</code> 给出的顺序装船，每天装载的总重量不能超过船的运载能力；返回能在 <code>days</code> 天内送完所有包裹的最低运载能力。完整讲解见 <a href="#binary-search-answer">正文第 4 题</a>。</p>
+</details>
+<details id="lc-35"><summary>LeetCode 35 · 搜索插入位置</summary>
+<p><b>题意</b>：给定一个无重复元素的升序数组 <code>nums</code> 和目标值 <code>target</code>。如果 <code>target</code> 在数组中，返回它的下标；否则返回它按顺序插入后所在的下标。要求时间复杂度 O(log n)。</p>
+<p><b>例子</b>：输入 <code>nums = [1, 3, 5, 6]</code>，<code>target = 5</code>，输出 <code>2</code>。若 <code>target = 2</code>，输出 <code>1</code>（插在 1 和 3 之间）。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 10<sup>4</sup>，-10<sup>4</sup> ≤ nums[i]、target ≤ 10<sup>4</sup>；插入位置可能是 n（比所有元素都大时）。</p>
+</details>
+<details id="lc-69"><summary>LeetCode 69 · x 的平方根</summary>
+<p><b>题意</b>：给定非负整数 <code>x</code>，返回它的算术平方根，结果只保留整数部分（小数部分舍去）。不允许使用任何内置的指数函数或运算符，例如 <code>pow(x, 0.5)</code> 和 <code>x ** 0.5</code>。</p>
+<p><b>例子</b>：输入 <code>x = 8</code>，输出 <code>2</code>。8 的平方根是 2.828…，舍去小数部分得 2。</p>
+<p><b>数据范围</b>：0 ≤ x ≤ 2<sup>31</sup> − 1。</p>
+</details>
+<details id="lc-153"><summary>LeetCode 153 · 寻找旋转排序数组中的最小值</summary>
+<p><b>题意</b>：长度为 n、元素互不相同的升序数组，经过 1 到 n 次旋转（每次旋转把最后一个元素移到最前面）后得到 <code>nums</code>。返回数组中的最小元素。要求时间复杂度 O(log n)。</p>
+<p><b>例子</b>：输入 <code>nums = [3, 4, 5, 1, 2]</code>，输出 <code>1</code>。原数组是 <code>[1, 2, 3, 4, 5]</code>，旋转了 3 次。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 5000，-5000 ≤ nums[i] ≤ 5000，元素互不相同；旋转 n 次时数组就是原来的升序数组。</p>
+</details>
+<details id="lc-81"><summary>LeetCode 81 · 搜索旋转排序数组 II</summary>
+<p><b>题意</b>：非降序数组（<b>可能有重复元素</b>）在某个未知下标处旋转后得到 <code>nums</code>。给定 <code>target</code>，判断它是否在数组中，返回 <code>true</code> 或 <code>false</code>。要求尽可能减少整个操作的步骤。</p>
+<p><b>例子</b>：输入 <code>nums = [2, 5, 6, 0, 0, 1, 2]</code>，<code>target = 0</code>，输出 <code>true</code>；同一个数组配 <code>target = 3</code>，输出 <code>false</code>。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 5000，-10<sup>4</sup> ≤ nums[i]、target ≤ 10<sup>4</sup>。</p>
+</details>
+<details id="lc-74"><summary>LeetCode 74 · 搜索二维矩阵</summary>
+<p><b>题意</b>：给定 m × n 的整数矩阵 <code>matrix</code>，每一行从左到右非严格递增，且每行的第一个整数大于前一行的最后一个整数。判断 <code>target</code> 是否在矩阵中，返回 <code>true</code> 或 <code>false</code>。</p>
+<p><b>例子</b>：输入 <code>matrix = [[1, 3, 5, 7], [10, 11, 16, 20], [23, 30, 34, 60]]</code>，<code>target = 3</code>，输出 <code>true</code>（3 在第一行）。</p>
+<p><b>数据范围</b>：1 ≤ m, n ≤ 100，-10<sup>4</sup> ≤ matrix[i][j]、target ≤ 10<sup>4</sup>。</p>
+</details>
+<details id="lc-410"><summary>LeetCode 410 · 分割数组的最大值</summary>
+<p><b>题意</b>：给定非负整数数组 <code>nums</code> 和整数 <code>k</code>，把 <code>nums</code> 分成 <code>k</code> 个非空的连续子数组，使这 <code>k</code> 个子数组各自和的最大值最小。返回这个最小的最大值。</p>
+<p><b>例子</b>：输入 <code>nums = [7, 2, 5, 10, 8]</code>，<code>k = 2</code>，输出 <code>18</code>。共有 4 种分法，最好的是 <code>[7, 2, 5]</code> 和 <code>[10, 8]</code>，两段的和分别是 14 和 18，最大值 18 是所有分法里最小的。</p>
+<p><b>数据范围</b>：1 ≤ n ≤ 1000，0 ≤ nums[i] ≤ 10<sup>6</sup>，1 ≤ k ≤ min(50, n)。</p>
+</details>
 
 <h2>练习</h2>
 <p>补全 <code>dsa/binary_search_advanced.py</code>。建议顺序：<code>first_position</code> → <code>last_position</code> → <code>search_range</code> → <code>search_rotated</code> → <code>find_peak_element</code> → <code>hours_needed</code> → <code>min_eating_speed</code> → <code>days_needed</code> → <code>ship_within_days</code>。写完一题就运行一次，看打印出来的「输入、期望、实际」是否一致：</p>
