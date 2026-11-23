@@ -21,13 +21,18 @@
 <h1>第 41 课 · 差分数组</h1>
 <p class="one-line">差分数组 = <b>只记“相邻两个数差了多少”</b>。给一整段数同时加上同一个值，在差分数组里只要改<b>两格</b>，O(1)；所有修改做完，再做一遍前缀和（第 27 课）就还原出最终数组。差分和前缀和是一对逆操作。</p>
 
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
+
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#itertools">itertools.accumulate</a>、<a href="python-basics.html#loop-tools"><code>enumerate</code>、<code>zip</code></a>、<a href="python-basics.html#unpack">解包（<code>for first, last, seats in bookings</code>）</a>、<a href="python-basics.html#class">类与 <code>__init__</code></a>、<a href="python-basics.html#dunder"><code>__len__</code></a>、<a href="python-basics.html#exceptions"><code>raise IndexError</code></a>、<a href="python-basics.html#dict-tools"><code>defaultdict</code></a>、<a href="python-basics.html#datetime"><code>date</code> 与 <code>timedelta</code></a>；前面的课 —— <a href="27-prefix-sum.html">第 27 课 · 前缀和</a>（本课处处用到，尤其是“多一格”的写法）、<a href="34-intervals.html">第 34 课 · 区间问题</a>（会议室 II 用堆做过一次，本课换一种做法）。</p>
 
 <h2>类比：公交车的上下车记录</h2>
 <p>想知道公交车开到每一站时车上有几个人，司机不用每站数一遍人头，只要记“这一站上了几个、下了几个”。从起点开始把这些变化量一路加起来，就得到每一站车上的人数。</p>
 <p>“每站的变化量”就是差分，“一路加起来”就是前缀和。一个乘客从第 2 站坐到第 5 站，在记录里只占两笔：第 2 站 +1，第 6 站（他已经下车）-1，中间那几站的记录一个字都不用改。这就是本课的全部想法。</p>
 
-<h2>实战里怎么写：先看真实代码里的差分</h2>
+<h2>应用场景：先看真实代码里的差分</h2>
 <p>差分适合“<b>先攒一大批区间修改，最后才要结果</b>”的场景。标准库没有专门的差分工具，但还原那一步就是 <code>accumulate</code>：</p>
 <table>
   <tr><th>场景</th><th>做法</th><th>代价</th></tr>
