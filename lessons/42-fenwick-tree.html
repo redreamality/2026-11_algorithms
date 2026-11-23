@@ -23,6 +23,11 @@
 <h1>第 42 课 · 树状数组（Fenwick Tree）</h1>
 <p class="one-line">树状数组 = <b>把前缀和拆成几块提前存好</b>，每一块的长度由下标的 lowbit 决定。改一个数只要更新 O(log n) 块，求前缀和只要加 O(log n) 块。它解决的是第 27 课前缀和“数组一改就要重算”的问题。</p>
 
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
+
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#class">类与 <code>__init__</code></a>、<a href="python-basics.html#dunder"><code>__len__</code>、<code>__getitem__</code>、<code>__setitem__</code></a>、<a href="python-basics.html#exceptions"><code>raise IndexError</code></a>、<a href="python-basics.html#comprehension">推导式（dict 推导式）</a>、<a href="python-basics.html#sets"><code>set</code></a>、<a href="python-basics.html#loop-tools"><code>enumerate</code></a>、<a href="python-basics.html#sortedcontainers"><code>SortedList</code></a>；前面的课 —— <a href="27-prefix-sum.html">第 27 课 · 前缀和</a>（<code>prefix_sum[count]</code> 的含义、区间和 = 两个前缀和相减）、<a href="39-bit-manipulation.html">第 39 课 · 位运算</a>（<code>&amp;</code>、<code>number &amp; -number</code> 只留下最低位的 1）、<a href="41-difference-array.html">第 41 课 · 差分数组</a>（区间加只改两格；本课沿用它的主线例子）、<a href="06-binary-search.html">第 6 课 · 二分查找</a>（实战里的 <code>bisect_right</code>）。</p>
 
 <h2>为什么需要它</h2>
