@@ -29,6 +29,11 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 46 课 · 最短路变种</h1>
 <p class="one-line">第 13 课的 BFS 和第 16 课的 Dijkstra 之外，还有三个常用的最短路算法：边权只有 0 和 1 时用 <b>0-1 BFS</b>（deque 头插尾插，O(V + E)）；要<b>任意两点</b>之间的最短路、点又不多时用 <b>Floyd-Warshall</b>（三重循环，O(n³)）；有<b>负权边</b>时用 <b>Bellman-Ford</b>（所有边松弛 V − 1 轮）。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#dict-tools">dict 的 get 与 setdefault</a>、<a href="python-basics.html#numbers">math.inf</a>、<a href="python-basics.html#comprehension">推导式（嵌套的 dict 推导式建表）</a>、<a href="python-basics.html#unpack">解包</a>；前面的课 —— <a href="03-stack-queue.html">第 3 课 · 栈与队列（<code>deque</code> 的 <code>appendleft</code>）</a>、<a href="13-graph-traversal.html">第 13 课 · 图的表示与 BFS</a>（邻接矩阵、V 和 E）、<a href="16-dijkstra.html">第 16 课 · Dijkstra</a>（松弛、过期记录）、<a href="19-dp-memo.html">第 19 课 · 动态规划</a>（Floyd 是一张 DP 表）、<a href="35-grid-search.html">第 35 课 · 网格搜索</a>（网格是隐式的图）。</p>
 
 <h2>主线例子：收费站</h2>
