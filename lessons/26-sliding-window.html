@@ -14,6 +14,8 @@
 .box.done { background: #c8e6c9; border-color: #2e7d32; }
 .box.out { opacity: .35; }
 .cells .box { min-width: 26px; padding: 6px 4px; }
+.lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+.lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -21,7 +23,18 @@
 <h1>第 26 课 · 滑动窗口</h1>
 <p class="one-line">滑动窗口 = <b>用两个同方向走的下标框住一段连续区间，右边界负责把新元素放进来，左边界负责把旧元素请出去</b>。枚举所有子串或子数组要 O(n²)，滑动窗口只要 O(n)。</p>
 
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#window-definition">先理解窗口</a>
+  <a href="#window-template">通用模板</a>
+  <a href="#recognize-window">如何识别</a>
+  <a href="#longest-substring-no-repeat">逐题套用</a>
+  <a href="#practice-window">题单与练习</a>
+</nav>
+
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#loop-tools">enumerate</a>、<a href="python-basics.html#dict-tools">dict 的 setdefault / get</a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#class">类与 <code>__init__</code></a>、<a href="python-basics.html#type-hints">类型标注（<code>dict[str, ...]</code>）</a>；前面的课 —— <a href="03-stack-queue.html">第 3 课 · 栈与队列</a>（<code>deque</code>）、<a href="04-hash-table.html">第 4 课 · 哈希表</a>（用 dict 计数）、<a href="25-two-pointers.html">第 25 课 · 双指针</a>（两个下标同方向走、不回头）。</p>
+
+<h2>先看本课的阅读顺序</h2>
+<p>先把“窗口”想成一段连续的内容，再记住右边扩张、左边收缩的模板。之后遇到每道题，只需要回答三个问题：窗口里要维护什么？什么时候不合法？答案应该在收缩前还是收缩后记录？</p>
 
 <h2>实战里怎么写：先看真实代码里的滑动窗口</h2>
 <p>真实项目里最常见的是“按时间滑动的窗口”：限流、移动平均、最近 N 条日志、近 7 天销售额。几乎都用标准库 <code>collections.deque</code>，它两端进出都是 O(1)（<code>list.pop(0)</code> 是 O(n)，不要用）。</p>
@@ -53,7 +66,7 @@ class RateLimiter:
 recent_errors = deque(maxlen=100)          # maxlen=N：最多存 N 条，满了再 append 就自动从左边挤掉最旧的</pre>
 <p>完整可运行的版本在 <code>examples/sliding_window_in_practice.py</code>（<code>uv run examples/sliding_window_in_practice.py</code>），还有移动平均和滚动和的例子。限流器里“右边进、左边出、每个元素只进出一次”，正是下面面试题用的同一个模板。</p>
 
-<h2>窗口是什么</h2>
+<h2 id="window-definition">窗口是什么</h2>
 <p>窗口就是数组（或字符串）里连续的一段，用 <code>window_start</code> 和 <code>window_end</code> 两个下标表示，两端都包含。窗口只会做两种动作：</p>
 <ul>
   <li><b>扩张</b>：<code>window_end</code> 右移一格，把一个新元素放进窗口。</li>
@@ -64,7 +77,7 @@ recent_errors = deque(maxlen=100)          # maxlen=N：最多存 N 条，满了
   <span class="label">window_start = 1，window_end = 3，窗口是 "bca"</span></div>
 <p>它是上一课“快慢指针”的近亲：两个下标同方向走，都不回头。不同的是，滑动窗口关心的是两个下标<b>之间的整段内容</b>，所以通常要额外维护一份“窗口里有什么”的统计，比如窗口里的字符集合、每个字符的个数、窗口里数字的和。每次扩张或收缩时，只更新进来或出去的那一个元素，统计就保持正确，不用重新扫一遍窗口。</p>
 
-<h2>通用模板</h2>
+<h2 id="window-template">通用模板</h2>
 <pre>window_start = 0
 for window_end in range(len(items)):
     把 items[window_end] 加进窗口的统计
@@ -82,7 +95,7 @@ for window_end in range(len(items)):
 <p><b>为什么是 O(n)</b>：内层有一个 while，看起来像两层循环，但 <code>window_start</code> 从头到尾只往右走，整个过程中加起来最多走 n 步。所以每个元素最多进窗口一次、出窗口一次，总共 2n 次操作，时间 O(n)。</p>
 <p><b>什么时候不能用</b>：滑动窗口依赖一个前提，就是“窗口扩张时，状态只会往一个方向变”。比如数组全是正数时，窗口越长和越大；收缩一定让和变小。如果数组里有负数，加进一个数和可能反而变小，“该不该收缩”就判断不了，这时要换用下一课的前缀和。</p>
 
-<h2>怎么认出这类题</h2>
+<h2 id="recognize-window">怎么认出这类题</h2>
 <ul>
   <li>题目里出现<b>“连续子数组”“子串”</b>（注意不是“子序列”，子序列可以不连续，通常是动态规划）。</li>
   <li>要找<b>最长 / 最短</b>的、满足某个条件的连续一段，或者要数满足条件的段有多少个。</li>
@@ -239,7 +252,7 @@ return shortest_length or 0</pre>
   <li>在有负数的数组上用滑动窗口找“和为某值”的子数组。负数会破坏“窗口越长和越大”的前提，要换用第 27 课的前缀和。</li>
 </ul>
 
-<h2>练习</h2>
+<h2 id="practice-window">练习</h2>
 <p>补全 <code>dsa/sliding_window.py</code>。建议顺序：<code>min_subarray_length</code>（最简单，只维护一个和）→ <code>longest_substring_without_repeat</code> → <code>min_window_substring</code>。每写完一个函数，运行下面的命令，看每个例子的“期望”和“实际”是否一致：</p>
 <pre>uv run dsa/sliding_window.py</pre>
 <p>都通过之后，再去 LeetCode 上做上面表格里的题，特别是 438 和 567，它们和最小覆盖子串几乎是同一个模板。</p>
