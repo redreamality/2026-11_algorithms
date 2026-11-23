@@ -19,11 +19,16 @@ table.dp td.off { background: #f0f0f0; }
 <p><a href="index.html">← 目录</a></p>
 <h1>第 38 课 · 二维 DP 高频题</h1>
 <p class="one-line">二维 DP 就是填一张表。做题前先回答两个问题：<b>表里的每一格代表什么</b>，<b>它从哪几格推过来</b>。这两个问题答清楚了，代码只是把表填满。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#comprehension">推导式（二维表别用 <code>[[0] * n] * m</code>）</a>、<a href="python-basics.html#lambda-key">元组的比较与排序</a>、<a href="python-basics.html#unpack">解包（<code>*arguments</code>）</a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="19-dp-memo.html">第 19 课 · DP（一）记忆化</a>、<a href="20-dp-knapsack.html">第 20 课 · DP（二）背包与序列</a>、<a href="37-dp-1d.html">第 37 课 · 一维 DP（四步法）</a>。</p>
 
 <p>第 19 课写过“不同路径”，第 20 课写过最长公共子序列（LCS），编辑距离当时只是选做。这一课把它们串起来，补上带障碍的路径、最小路径和、完整的编辑距离和最长回文子串，并把<b>读一张二维表的方法</b>讲透。四步法（定义状态 → 写转移 → 定初始值 → 定遍历顺序）见第 37 课，这里照样用。</p>
 
-<h2>实战里怎么写：先用 difflib</h2>
+<h2>应用场景：先用 difflib</h2>
 <p>二维 DP 在真实代码里最常见的身份是“比较两个字符串 / 两份文本”：命令拼错时提示“您是不是要找 install”、搜索纠错、显示配置文件改了哪几行。标准库 <code>difflib</code> 已经做好了这些事。</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
