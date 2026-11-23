@@ -22,6 +22,11 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 39 课 · 位运算技巧</h1>
 <p class="one-line">位运算是把一个整数看成<b>一排开关</b>（二进制的每一位是 0 或 1），一次性对所有开关做同样的操作。面试里常考的就几招：<b>异或让成对的数抵消</b>、<b>n &amp; (n - 1) 去掉最低位的 1</b>、<b>用一个整数的各位表示“选了哪些东西”</b>。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#numbers">整数运算（<code>//</code>、大整数）</a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#loop-tools"><code>enumerate</code></a>、<a href="python-basics.html#class">类（这里用 <code>enum.Flag</code> 写一个类）</a>、<a href="python-basics.html#dunder"><code>in</code> 背后的魔法方法</a>；前面的课 —— <a href="21-backtracking.html">第 21 课 · 回溯（子集）</a>、<a href="37-dp-1d.html">第 37 课 · 一维 DP（四步法）</a>。位运算本身（<code>&amp;</code>、<code>|</code>、<code>^</code>、<code>&lt;&lt;</code>、<code>&gt;&gt;</code>）是这一课第一次正式讲，从下面第一节开始。</p>
 
 <h2>五个运算符的直觉</h2>
@@ -41,7 +46,7 @@ bin(12)           # '0b1100'
 </table>
 <p>还有一个取反 <code>~a</code>：每一位都翻过来。在 Python 里整数没有固定位数，<code>~a</code> 的结果是 <code>-a - 1</code>，平时很少单独用，主要和 <code>&amp;</code> 搭配“清掉某些位”（下面的实战和小招式里都会见到）。和 <code>+=</code> 一样，这些运算也有 <code>&amp;=</code>、<code>|=</code>、<code>^=</code> 的简写。</p>
 
-<h2>实战里怎么写：enum.Flag、bit_count、ipaddress</h2>
+<h2>应用场景：enum.Flag、bit_count、ipaddress</h2>
 <p>Python 业务代码里很少直接写 <code>&amp;</code>、<code>|</code>，但位运算无处不在：权限和开关、子网掩码、用一个整数表示一个小集合。多数情况标准库已经包好了。</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
