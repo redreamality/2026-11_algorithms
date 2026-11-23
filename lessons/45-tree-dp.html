@@ -21,6 +21,11 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 45 课 · 树形 DP</h1>
 <p class="one-line">树形 DP 的状态定义在“<b>以 v 为根的子树</b>”上：先算完所有孩子，再用孩子的结果拼出 v 的结果。说白了就是第 31 课的<b>后序位置汇总</b>，只是每个节点要交给父亲的不止一个数。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#lesson-order">阅读路线</a>
+</nav>
+<p id="lesson-order" class="reading-order"><b>阅读路线：</b>先理解本课要解决的问题和核心模板，再看题目如何逐步套用；应用场景用于说明这个方法在真实代码里的位置，最后再做练习和自测。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#unpack">解包（一次返回两个数）</a>、<a href="python-basics.html#comprehension">推导式与生成器表达式</a>、<a href="python-basics.html#loop-tools"><code>range</code> 倒序（本课还会用到 <code>reversed</code>，下面就地讲）</a>、<a href="python-basics.html#dict-tools"><code>setdefault</code></a>、<a href="python-basics.html#type-hints">类型标注</a>；前面的课 —— <a href="10-binary-tree.html">第 10 课 · 二叉树与遍历（后序）</a>、<a href="31-tree-patterns.html">第 31 课 · 二叉树高频题（后序位置汇总、直径）</a>、<a href="13-graph-traversal.html">第 13 课 · 图的表示与 BFS（邻接表）</a>、<a href="05-recursion.html">第 5 课 · 递归（递归深度）</a>、<a href="37-dp-1d.html">第 37 课 · 一维 DP（打家劫舍）</a>。</p>
 
 <p>本课一条主线：一棵 6 个节点的树。先用第 31 课的 <code>TreeNode</code> 二叉树形式做打家劫舍 III（题 1），再把<b>同一棵树</b>换成笔试常见的“节点编号 + 边列表”输入，做同一道题的一般版本（题 2）和树的直径（题 3）。</p>
@@ -40,7 +45,7 @@
 </ul>
 <p>和第 31 课的关系：第 31 课的递归函数每个节点只返回一个数（深度、是否对称……）。树形 DP 常常要返回<b>几个数</b>，因为父亲做决定时，需要知道孩子在不同情况下的结果（比如“孩子被选”和“孩子没被选”）。</p>
 
-<h2>实战里怎么写：父子表 + 倒序处理</h2>
+<h2>应用场景：父子表 + 倒序处理</h2>
 <p>业务里的树很少是 <code>left</code> / <code>right</code>，常见的是“每条记录有一个父亲”：组织架构（每人一个上级）、目录（每个目录一个父目录）、评论楼中楼。典型需求是<b>自底向上汇总</b>：</p>
 <table>
   <tr><th>场景</th><th>每个节点算什么</th><th>从孩子那里要什么</th></tr>
