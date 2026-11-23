@@ -60,3 +60,8 @@ summary { cursor: pointer; }
 
 /* 每课开头的“开始前要会”：链接到预备课和前面的课 */
 .prereq { background: #e8f5e9; padding: 8px 14px; border-radius: 6px; font-size: 15px; }
+
+/* 每课的阅读路线：先说明顺序，再进入正文 */
+.lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+.lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
+.reading-order { background: #eef6ff; padding: 8px 14px; border-radius: 6px; }
