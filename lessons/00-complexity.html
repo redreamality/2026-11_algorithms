@@ -9,9 +9,54 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 0 课 · 复杂度</h1>
 <p class="one-line">复杂度说的不是“跑几秒”，而是<b>数据变多时，要做的工作涨得多快</b>。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#idea">先理解</a>
+  <a href="#objects">核心对象</a>
+  <a href="#template">判断模板</a>
+  <a href="#applications">应用场景</a>
+  <a href="#practice">练习与自测</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#main">uv run 与 assert</a>、<a href="python-basics.html#fstring">f-string</a>、<a href="python-basics.html#comprehension">推导式与生成器表达式</a>、<a href="python-basics.html#lambda-key">lambda</a>、<a href="python-basics.html#dict-tools">dict.fromkeys 与 Counter</a>、<a href="python-basics.html#type-hints">类型标注</a>、<a href="python-basics.html#generator">生成器只能走一遍</a>；前面的课 —— 这是第一课，先读完<a href="python-basics.html">预备课 · Python 基础</a>即可。</p>
 
-<h2>实战里怎么写：复杂度藏在一行代码里</h2>
+<h2 id="idea">先理解：工作量如何随数据增长</h2>
+<h2>一个类比</h2>
+<p>你在班里找一个人：</p>
+<ul>
+  <li>挨个问“你是小明吗？”：人数翻倍，问的次数也翻倍。这是 <b>O(n)</b>。</li>
+  <li>让每两个人都握一次手：人数翻倍，握手次数变成 4 倍。这是 <b>O(n²)</b>。</li>
+  <li>名单按字母排好了，每次翻到中间、扔掉一半：1000 人也只要翻 10 次左右。这是 <b>O(log n)</b>。</li>
+</ul>
+
+<h2 id="objects">核心对象：复杂度档位</h2>
+<h2>常见的几档（从快到慢）</h2>
+<table>
+  <tr><th>写法</th><th>n = 1000 时大约要做几步</th><th>典型例子</th></tr>
+  <tr><td>O(1)</td><td>1</td><td>按下标取数组元素</td></tr>
+  <tr><td>O(log n)</td><td>10</td><td>二分查找（第 6 课）</td></tr>
+  <tr><td>O(n)</td><td>1,000</td><td>遍历一遍</td></tr>
+  <tr><td>O(n log n)</td><td>10,000</td><td>好的排序，比如 <code>sorted()</code>（第 8 课）</td></tr>
+  <tr><td>O(n²)</td><td>1,000,000</td><td>两层循环</td></tr>
+</table>
+<p>表里的二分查找和排序后面会专门讲，这一课只需要记住它们各在哪一档。</p>
+<p><b>动手：</b>把 n 从 1 拖到 100，看 O(n²) 怎么把其他几档甩开（条形以 n² 为满格）。</p>
+<div class="demo" id="growth"></div>
+
+<h2 id="template">判断模板：数循环与隐藏操作</h2>
+<h2>怎么看出来</h2>
+<p>只看<b>循环套了几层、每层跑多少次</b>，常数和小项都扔掉：</p>
+<pre>for i in range(n):          # n 次
+    for j in range(n):      #   × n 次
+        ...                 # → O(n²)
+
+for i in range(n): ...      # n
+for j in range(n): ...      # + n  → 2n → 还是 O(n)</pre>
+<p>注意“藏起来的循环”：<code>x in list</code>、<code>sorted()</code>、<code>list.insert(0, x)</code> 看着只有一行，其实都不是 O(1)。</p>
+
+<h2>空间复杂度</h2>
+<p>同样的道理，问的是：<b>额外</b>开了多少内存？只用几个变量是 O(1)；新建一个和输入一样大的 set 就是 O(n)。
+很多时候是<b>拿空间换时间</b>，这节课的练习就是例子。</p>
+
+<h2 id="applications">应用场景：复杂度藏在一行代码里</h2>
 <p>日常 Python 代码里很少需要“专门写算法”，真正踩坑的往往是一行看着无害的代码。最常见的就是在循环里对 <code>list</code> 用 <code>in</code>：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
@@ -37,45 +82,11 @@ seconds = timeit(lambda: sorted(range(100_000)), number=3)
 print(f"排序 3 次共 {seconds:.3f} 秒")</pre>
 <p>表里说 set 的 <code>in</code> “平均 O(1)”，为什么能这么快、为什么是“平均”，第 4 课讲哈希表时揭晓；现在先记住结论。</p>
 
-<h2>一个类比</h2>
-<p>你在班里找一个人：</p>
-<ul>
-  <li>挨个问“你是小明吗？”：人数翻倍，问的次数也翻倍。这是 <b>O(n)</b>。</li>
-  <li>让每两个人都握一次手：人数翻倍，握手次数变成 4 倍。这是 <b>O(n²)</b>。</li>
-  <li>名单按字母排好了，每次翻到中间、扔掉一半：1000 人也只要翻 10 次左右。这是 <b>O(log n)</b>。</li>
-</ul>
-
-<h2>常见的几档（从快到慢）</h2>
-<table>
-  <tr><th>写法</th><th>n = 1000 时大约要做几步</th><th>典型例子</th></tr>
-  <tr><td>O(1)</td><td>1</td><td>按下标取数组元素</td></tr>
-  <tr><td>O(log n)</td><td>10</td><td>二分查找（第 6 课）</td></tr>
-  <tr><td>O(n)</td><td>1,000</td><td>遍历一遍</td></tr>
-  <tr><td>O(n log n)</td><td>10,000</td><td>好的排序，比如 <code>sorted()</code>（第 8 课）</td></tr>
-  <tr><td>O(n²)</td><td>1,000,000</td><td>两层循环</td></tr>
-</table>
-<p>表里的二分查找和排序后面会专门讲，这一课只需要记住它们各在哪一档。</p>
-<p><b>动手：</b>把 n 从 1 拖到 100，看 O(n²) 怎么把其他几档甩开（条形以 n² 为满格）。</p>
-<div class="demo" id="growth"></div>
-
-<h2>怎么看出来</h2>
-<p>只看<b>循环套了几层、每层跑多少次</b>，常数和小项都扔掉：</p>
-<pre>for i in range(n):          # n 次
-    for j in range(n):      #   × n 次
-        ...                 # → O(n²)
-
-for i in range(n): ...      # n
-for j in range(n): ...      # + n  → 2n → 还是 O(n)</pre>
-<p>注意“藏起来的循环”：<code>x in list</code>、<code>sorted()</code>、<code>list.insert(0, x)</code> 看着只有一行，其实都不是 O(1)。</p>
-
-<h2>空间复杂度</h2>
-<p>同样的道理，问的是：<b>额外</b>开了多少内存？只用几个变量是 O(1)；新建一个和输入一样大的 set 就是 O(n)。
-很多时候是<b>拿空间换时间</b>，这节课的练习就是例子。</p>
-
 <h2>动手：两种办法找重复</h2>
 <p>同一组数，分别用两种办法跑一遍，比比底下的次数。再点“换一组数”多试几次。</p>
 <div class="demo" id="dup"></div>
 
+<h2 id="practice">练习与自测</h2>
 <h2>练习</h2>
 <p>场景：活动报名表里，有没有人用同一个邮箱报了两次？在 <code>dsa/complexity.py</code> 里用三种办法各写一遍，再写一个业务里真正会用的：</p>
 <ol>
