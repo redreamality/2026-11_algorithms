@@ -9,9 +9,14 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 2 课 · 链表</h1>
 <p class="one-line">链表的每个节点只记两样东西：<b>自己的值</b>和<b>下一个是谁</b>。像寻宝游戏，每张纸条告诉你下一张在哪。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#idea">先理解</a><a href="#objects">核心对象</a><a href="#template">模板与不变量</a><a href="#applications">应用场景</a><a href="#practice">练习与自测</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器、yield 与 next(迭代器, 默认值)</a>、<a href="python-basics.html#itertools">itertools.islice</a>、<a href="python-basics.html#dunder">魔法方法</a>（<code>__iter__</code>、<code>__contains__</code>、<code>__eq__</code>）、<a href="python-basics.html#type-hints">类型标注 <code>Node | None</code> 与引号前向引用</a>、<a href="python-basics.html#unpack">多重赋值（交换）</a>、<a href="python-basics.html#exceptions">异常约定（IndexError、ValueError）</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>、<a href="01-dynamic-array.html">第 1 课 · 动态数组</a>（拿来对比）。</p>
 
-<h2>实战里怎么写：没人写 LinkedList 类，但“指向下一个”的对象到处都是</h2>
+<h2 id="idea">先理解：为什么需要“指向下一个”</h2>
+<p>数组适合按下标访问；如果更常见的是在已知位置增删，连续搬动元素就很贵。链表把“下一个位置”存进节点，让连接关系成为核心。</p>
+<h2 id="applications">应用场景：没人写 LinkedList 类，但“指向下一个”的对象到处都是</h2>
 <p>业务代码里几乎没人专门写一个链表类。但“每个对象记着上一个 / 下一个是谁”的结构很常见，最典型的是<b>版本历史</b>：git 的每次提交只记“我的上一次提交是谁”（parent），一个分支就是指向最新提交的名字，整条历史就是一条单链表。</p>
 <table>
   <tr><th>场景</th><th>怎么做</th><th>代价</th></tr>
@@ -46,6 +51,7 @@ print(list(history(feature)))               # ['加支付', '修复样式', '加
 </ul>
 <p>下面看链表为什么能把头部增删做到 O(1)。</p>
 
+<h2 id="objects">核心对象：节点、head 与 tail</h2>
 <h2>长什么样</h2>
 <div class="row">
   <span class="label">head →</span>
@@ -67,6 +73,7 @@ print(list(history(feature)))               # ['加支付', '修复样式', '加
 </table>
 <p>一句话：数组擅长<b>随机访问</b>，链表擅长<b>在已知位置增删</b>。</p>
 
+<h2 id="template">模板与不变量：改指针前先保存连接</h2>
 <h2>头部插入：两步，顺序不能反</h2>
 <div class="row">
   <span class="box hot">0</span><span>→</span><span class="box">1</span><span>→</span><span class="box">2</span><span>→</span><span class="label">None</span>
@@ -110,6 +117,7 @@ print(list(history(feature)))               # ['加支付', '修复样式', '加
 </ul>
 <p>测试会专门检查这三种情况。</p>
 
+<h2 id="practice">练习与自测</h2>
 <h2>练习</h2>
 <p>补全 <code>dsa/linked_list.py</code> 里的 <code>LinkedList</code>。方法名照搬标准库队列 <code>deque</code> 的叫法（第 3 课会讲，到时候你会觉得眼熟）：<code>append</code>、<code>appendleft</code>、<code>popleft</code>、<code>remove</code>、<code>reverse</code>，再加上 <code>len()</code>、<code>for</code>、<code>in</code>。动画里的 <code>push_front</code> / <code>push_back</code> / <code>pop_front</code> 分别对应 <code>appendleft</code> / <code>append</code> / <code>popleft</code>。异常和标准库一致：空链表 <code>popleft</code> 抛 <code>IndexError</code>，<code>remove</code> 找不到抛 <code>ValueError</code>。</p>
 <p>建议顺序：<code>appendleft</code> → <code>__iter__</code>（用 <code>yield</code>）→ <code>append</code> → <code>popleft</code> → <code>__contains__</code> → <code>remove</code> → <code>reverse</code>。</p>
