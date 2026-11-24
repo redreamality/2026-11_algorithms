@@ -15,15 +15,62 @@
   .graph .edge.relax { stroke: #e65100; stroke-width: 5; }
   .graph .edge.nope { stroke: #999; stroke-width: 5; stroke-dasharray: 6 4; }
   .box.fixed { background: #c8e6c9; border-color: #2e7d32; }
+  .lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
+  .template-note { margin: 8px 0; padding: 8px 10px; background: #e3f2fd; }
 </style>
 </head>
 <body>
 <p><a href="index.html">← 目录</a></p>
 <h1>第 16 课 · 最短路径（Dijkstra）</h1>
 <p class="one-line">从起点出发，<b>每次确定一个“离起点最近、还没确定”的点</b>，再用它去更新邻居的距离。像水波一圈圈往外扩。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#model">先定义加权图</a>
+  <a href="#template">Dijkstra 模板</a>
+  <a href="#correctness">正确性直觉</a>
+  <a href="#practice">标准库应用</a>
+  <a href="#demo">动画与练习</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器</a>（<code>yield</code>、<code>next()</code>、for 背后的协议）、<a href="python-basics.html#dict-tools">dict 的 get 与 setdefault</a>、<a href="python-basics.html#lambda-key">lambda 与 key=</a>、<a href="python-basics.html#numbers">math.inf</a>、<a href="python-basics.html#loop-tools">切片与 [::-1] 反转</a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="12-heap.html">第 12 课 · 堆与优先队列</a>（heapq 的用法）、<a href="13-graph-traversal.html">第 13 课 · 图的表示与 BFS</a>、<a href="00-complexity.html">第 0 课 · 复杂度</a>。</p>
 
-<h2>实战里怎么写：dict 存图 + heapq</h2>
+<h2 id="model">先定义加权图：边、距离和状态</h2>
+<p>图的边上有<b>权重</b>（路长、耗时）。求起点到每个点的最短距离。BFS 只能数“几步”，权重不一样就不灵了。</p>
+<div class="row">
+  <span class="box">A</span><span>—4—</span><span class="box">B</span>
+  <span class="label">直接走是 4；</span>
+  <span class="box">A</span><span>—1—</span><span class="box">C</span><span>—2—</span><span class="box">B</span>
+  <span class="label">绕一下只要 3</span>
+</div>
+
+<h2 id="template">先记 Dijkstra 模板</h2>
+<ul>
+  <li><code>dist[v]</code>：目前已知的起点到 v 的最短距离，起点为 0，其余先记 ∞。</li>
+  <li>最小堆（第 12 课）：存 <code>(距离, 点)</code>，每次 O(log V) 取出最近的那个。</li>
+</ul>
+<pre>import heapq
+
+def shortest_distances(graph, source):       # graph: {点: {邻点: 权重}}
+    distances = {source: 0}                  # 没出现的点就是“目前还到不了”
+    heap = [(0, source)]
+    while heap:
+        distance, node = heapq.heappop(heap)
+        if distance &gt; distances[node]:       # 过期的旧记录，跳过
+            continue
+        for neighbor, weight in graph.get(node, {}).items():
+            candidate = distance + weight
+            if candidate &lt; distances.get(neighbor, float("inf")):   # 松弛：经过 node 去 neighbor 更近
+                distances[neighbor] = candidate
+                heapq.heappush(heap, (candidate, neighbor))
+    return distances</pre>
+<p><b>松弛</b>就是一句话：“经过 u 绕过去，比现在记着的更短吗？更短就改。”</p>
+<p>heapq 没法修改堆里已有的元素，所以变短时直接再塞一条新记录，旧的取出来时跳过就行。</p>
+
+<h2 id="correctness">为什么取出来就“确定”了</h2>
+<p>堆顶的 u 是剩下的点里最近的。别的路要先到一个更远的点，再走<b>非负</b>的边，只会更长，不可能反超。</p>
+<p>所以<b>负权边不能用</b>：一条 −5 的边能让“更远的点”绕回来反超，已确定的答案就错了。负权要用 Bellman-Ford。</p>
+<p class="template-note"><b>状态检查句：</b><code>dist[v]</code> 是当前已知最短值，堆里是待处理候选，<code>previous</code> 只负责复原路径；每次松弛都保持“已确定点的距离不会再变短”。</p>
+
+<h2 id="practice">标准库应用：dict 存图 + heapq</h2>
 <p>地图导航、地铁换乘、网络路由、游戏寻路，都是“边上有耗时，找最快的路”。标准库没有现成的 Dijkstra，但 <b>dict 套 dict 存图 + <code>heapq</code></b>，二三十行就写完了。</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
@@ -53,7 +100,7 @@ def plan_route(network, origin, destination):
         if station in finished:              # 过期记录，跳过
             continue
         finished.add(station)
-        if station == destination:           # 终点确定了，立刻返回
+        if station == destination:
             route = [station]
             while route[-1] != origin:
                 route.append(previous[route[-1]])
@@ -64,47 +111,10 @@ def plan_route(network, origin, destination):
                 best_minutes[neighbor] = arrival
                 previous[neighbor] = station
                 heapq.heappush(heap, (arrival, next(sequence), neighbor))
-    return None                              # 到不了
-
-plan_route(network, "静安寺", "陆家嘴")     # (10, ['静安寺', '南京西路', '人民广场', '陆家嘴'])</pre>
+    return None</pre>
+<p><code>plan_route(network, "静安寺", "陆家嘴")</code> 会得到 <code>(10, ['静安寺', '南京西路', '人民广场', '陆家嘴'])</code>。</p>
 <p>完整可运行的版本（路线规划、“10 分钟内能到哪些站”）在 <code>examples/dijkstra_in_practice.py</code>（<code>uv run examples/dijkstra_in_practice.py</code>）。下面看为什么这样做是对的。</p>
 <p>上面用到两个预备课没讲的 <code>itertools</code> 工具，就地补一句：<code>count()</code> 是一个数不完的计数器，每次 <code>next(sequence)</code> 依次给出 0、1、2……用来给堆里的记录编号，这样距离相同时比编号、不去比站名；<code>takewhile(条件, 序列)</code> 从头挨个取元素，条件一旦不满足就<b>立刻停</b>，后面的全不要——比如“只看 5 分钟内能到的站”，一超过 5 就停。</p>
-
-<h2>问题长什么样</h2>
-<p>图的边上有<b>权重</b>（路长、耗时）。求起点到每个点的最短距离。BFS 只能数“几步”，权重不一样就不灵了。</p>
-<div class="row">
-  <span class="box">A</span><span>—4—</span><span class="box">B</span>
-  <span class="label">直接走是 4；</span>
-  <span class="box">A</span><span>—1—</span><span class="box">C</span><span>—2—</span><span class="box">B</span>
-  <span class="label">绕一下只要 3</span>
-</div>
-
-<h2>两样东西：dist 表 + 最小堆</h2>
-<ul>
-  <li><code>dist[v]</code>：目前已知的起点到 v 的最短距离，起点为 0，其余先记 ∞。</li>
-  <li>最小堆（第 12 课）：存 <code>(距离, 点)</code>，每次 O(log V) 取出最近的那个。</li>
-</ul>
-<pre>import heapq
-
-def shortest_distances(graph, source):       # graph: {点: {邻点: 权重}}
-    distances = {source: 0}                  # 没出现的点就是“目前还到不了”
-    heap = [(0, source)]
-    while heap:
-        distance, node = heapq.heappop(heap)
-        if distance &gt; distances[node]:       # 过期的旧记录，跳过
-            continue
-        for neighbor, weight in graph.get(node, {}).items():
-            candidate = distance + weight
-            if candidate &lt; distances.get(neighbor, float("inf")):   # 松弛：经过 node 去 neighbor 更近
-                distances[neighbor] = candidate
-                heapq.heappush(heap, (candidate, neighbor))
-    return distances</pre>
-<p><b>松弛</b>就是一句话：“经过 u 绕过去，比现在记着的更短吗？更短就改。”</p>
-<p>heapq 没法修改堆里已有的元素，所以变短时直接再塞一条新记录，旧的取出来时跳过就行。</p>
-
-<h2>为什么取出来就“确定”了</h2>
-<p>堆顶的 u 是剩下的点里最近的。别的路要先到一个更远的点，再走<b>非负</b>的边，只会更长，不可能反超。</p>
-<p>所以<b>负权边不能用</b>：一条 −5 的边能让“更远的点”绕回来反超，已确定的答案就错了。负权要用 Bellman-Ford。</p>
 
 <h2>复杂度</h2>
 <table>
@@ -114,7 +124,7 @@ def shortest_distances(graph, source):       # graph: {点: {邻点: 权重}}
   <tr><th>合计</th><th>O((V + E) log V)</th></tr>
 </table>
 
-<h2>动手玩</h2>
+<h2 id="demo">动手玩</h2>
 <p>点<b>从 A 出发</b>。橙色粗线是正在松弛、成功变短的边，灰色虚线是“试了但没变短”。注意 B：先被记成 4，经过 C 又改成 3，于是堆里留下一条过期的 (4, B)。</p>
 <div class="demo" id="dijkstra"></div>
 
