@@ -14,9 +14,14 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 4 课 · 哈希表（拉链法）</h1>
 <p class="one-line">哈希表 = <b>数组</b> + <b>链表</b>：用哈希函数把 key 算成一个下标，直接跳到那一格；同一格装不下的，就挂成一串。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#idea">先理解</a><a href="#objects">核心对象</a><a href="#template">模板与不变量</a><a href="#applications">应用场景</a><a href="#practice">练习与自测</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#dict-tools">Counter、defaultdict、get</a>、<a href="python-basics.html#comprehension">推导式</a>、<a href="python-basics.html#abc">继承 MutableMapping</a>、<a href="python-basics.html#dunder">魔法方法</a>、<a href="python-basics.html#exceptions">异常约定（KeyError）</a>、<a href="python-basics.html#class">@property 与 @dataclass</a>、<a href="python-basics.html#decorator">functools.cache</a>、<a href="python-basics.html#closure">global</a>、<a href="python-basics.html#generator">生成器</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>（“平均 O(1)”的伏笔在这里揭晓）、<a href="01-dynamic-array.html">第 1 课 · 动态数组</a>（翻倍扩容、均摊）、<a href="02-linked-list.html">第 2 课 · 链表</a>（拉链法的“链”）。</p>
 
-<h2>实战里怎么写：dict、set 和它们的亲戚</h2>
+<h2 id="idea">先理解：从 key 直接找到位置</h2>
+<p>如果每次查找都从头比较，数据越多越慢。哈希表先把 key 变成桶的下标，再只检查那个桶里的少量候选。</p>
+<h2 id="applications">应用场景：dict、set 和它们的亲戚</h2>
 <p><code>dict</code> 和 <code>set</code> 就是哈希表，业务代码里没人另造一个。要会的是按场景挑对工具：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
@@ -46,6 +51,7 @@ for user, path in access_log:
 visitors = {user for user, _ in access_log}              # 去重：{'alice', 'bob'}</pre>
 <p>完整可运行的版本在 <code>examples/hash_table_in_practice.py</code>（<code>uv run examples/hash_table_in_practice.py</code>），还有用 <code>functools.cache</code> 缓存运费查询的例子（这里只当“同样的参数不再重算”来用；拿它解决算法题的“记忆化”，第 19 课专门讲）。下面看 dict 为什么查找平均是 O(1)。</p>
 
+<h2 id="objects">核心对象：桶、hash 与冲突链</h2>
 <h2>类比：按姓氏分的储物柜</h2>
 <p>一排柜子，按名字首字母放东西。找“张三”不用一个个翻，直接去 Z 柜。Z 柜里有好几个人（冲突）？没关系，柜子里挨个看就行，人不多，很快。</p>
 
@@ -56,6 +62,7 @@ visitors = {user for user, _ in access_log}              # 去重：{'alice', 'b
 <div class="row"><span class="box small">[3]</span><span>→</span><span class="label">空</span></div>
 <p>4 个桶。<code>下标 = hash(key) % 桶数</code>：8 和 4 除以 4 都余 0，<b>冲突</b>了，于是挂在 0 号桶的同一条链上。</p>
 
+<h2 id="template">模板与不变量：定位、比较、更新</h2>
 <h2>三步走：读、写、删都一样</h2>
 <p>手写版做成一个和 <code>dict</code> 用法一样的 <code>HashMap</code>。<code>table[key]</code> 的实现：</p>
 <pre>def __getitem__(self, key):
@@ -88,6 +95,7 @@ visitors = {user for user, _ in access_log}              # 去重：{'alice', 'b
   <li>key 不存在时，<code>table[key]</code> 和 <code>del table[key]</code> 都要抛 <code>KeyError</code>，和 dict 一样。<code>in</code> 和 <code>get</code> 是靠接住这个 KeyError 实现的，抛错了别的异常它们就坏了。</li>
 </ul>
 
+<h2 id="practice">练习与自测</h2>
 <h2>练习</h2>
 <p>补全 <code>dsa/hash_table.py</code> 里的 <code>HashMap</code>。它继承 <code>collections.abc.MutableMapping</code>：你只写 <code>__setitem__</code>、<code>__getitem__</code>、<code>__delitem__</code>、<code>__iter__</code>，<code>get</code>、<code>pop</code>、<code>setdefault</code>、<code>in</code>、<code>items()</code>、<code>==</code> 都是 Python 自动送的，写完就能像 dict 一样直接用。</p>
 <p>建议顺序：<code>_index</code> → <code>__setitem__</code>（先不管扩容）→ <code>__getitem__</code> → <code>__delitem__</code> → <code>__iter__</code> → <code>_resize</code>，最后在 <code>__setitem__</code> 里接上扩容。</p>
