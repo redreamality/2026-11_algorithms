@@ -14,49 +14,27 @@
   .graph .done circle { fill: #c8e6c9; }
   .graph text { font: 16px Consolas, monospace; text-anchor: middle; dominant-baseline: central; }
   .graph text.dist { font-size: 13px; fill: #0b62c4; text-anchor: start; }
+  .lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
+  .template-note { margin: 8px 0; padding: 8px 10px; background: #e3f2fd; }
 </style>
 </head>
 <body>
 <p><a href="index.html">← 目录</a></p>
 <h1>第 13 课 · 图的表示、BFS、DFS</h1>
 <p class="one-line">图就是<b>点</b>加<b>连线</b>。遍历有两种走法：BFS 像水波，一圈圈往外扩；DFS 像走迷宫，一条路走到底，走不通再回头。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#model">先定义图</a>
+  <a href="#templates">算法模板</a>
+  <a href="#correctness">正确性直觉</a>
+  <a href="#practice">标准库应用</a>
+  <a href="#demo">动画与练习</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#dict-tools">defaultdict 与 get</a>、<a href="python-basics.html#generator">生成器与 next()</a>、<a href="python-basics.html#comprehension">生成器表达式</a>、<a href="python-basics.html#loop-tools">切片步长（<code>chain[::-1]</code>）</a>；前面的课 —— <a href="03-stack-queue.html">第 3 课 · 队列与栈（deque）</a>、<a href="05-recursion.html">第 5 课 · 递归</a></p>
 
-<h2>实战里怎么写：一个 dict 就是图</h2>
-<p>Python 没有内置的图类型，日常也用不着：<b>dict 就是邻接表</b>，键是节点，值是邻居 list。节点直接用业务里的东西（用户名、URL、<code>(行, 列)</code> 坐标），不用编号成 0..n-1。</p>
-<table>
-  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
-  <tr><td>好友推荐、最短引荐链、爬虫限深</td><td><code>dict</code> + <code>collections.deque</code> 写 BFS</td><td>O(V + E)，十来行</td></tr>
-  <tr><td>网格地图、连通区域、迷宫</td><td>节点用 <code>(行, 列)</code>，邻居现算，不用先建图；<code>list</code> 当栈做 DFS</td><td>O(格子数)</td></tr>
-  <tr><td>大图、要跑很多种图算法</td><td>第三方库 networkx（本课不依赖）</td><td>好用，但比手写慢很多</td></tr>
-</table>
-<pre>from collections import defaultdict, deque
-
-follows = defaultdict(list)                       # 用户 -&gt; 好友列表
-for left, right in [("ann", "bob"), ("bob", "dan"), ("dan", "eve")]:
-    follows[left].append(right)
-    follows[right].append(left)
-
-def degrees_of_separation(follows, source, target):
-    """source 到 target 的最短引荐链；连不上返回 None。"""
-    came_from = {source: None}                    # 兼当 seen：也记下是从谁那里过来的
-    queue = deque([source])
-    while queue:
-        person = queue.popleft()
-        if person == target:
-            chain = []
-            while person is not None:             # 顺着 came_from 倒着走回起点
-                chain.append(person)
-                person = came_from[person]
-            return chain[::-1]
-        for friend in follows.get(person, ()):
-            if friend not in came_from:
-                came_from[friend] = person
-                queue.append(friend)
-    return None
-
-degrees_of_separation(follows, "ann", "eve")      # ['ann', 'bob', 'dan', 'eve']</pre>
-<p>完整可运行的版本（还有爬虫限深、数地图上的陆地块）在 <code>examples/graph_in_practice.py</code>（<code>uv run examples/graph_in_practice.py</code>）。下面看为什么这么写。</p>
+<h2 id="model">先定义图：点、边和遍历状态</h2>
+<p>图由<b>点（vertex）</b>和<b>边（edge）</b>组成。无向边表示两边互相可达，有向边表示只能沿箭头走。遍历时至少要维护两个状态：<code>seen</code> 记录已经发现的点，队列或栈记录“已经发现但还没处理”的 frontier。</p>
+<p>本课默认图可以不连通，节点可以是任意可哈希对象。V 是点数，E 是边数；一次遍历要做到每个点只发现一次、每条边只检查有限次。</p>
 
 <h2>怎么存：邻接表 vs 邻接矩阵</h2>
 <p>同一张图 <code>0-1, 0-2, 1-2</code>，两种存法：</p>
@@ -77,6 +55,33 @@ degrees_of_separation(follows, "ann", "eve")      # ['ann', 'bob', 'dan', 'eve']
   <tr><td>列出 u 的所有邻居</td><td>O(u 的邻居数)</td><td>O(V)</td></tr>
 </table>
 <p>实际的图大多很<b>稀疏</b>（边远少于 V²），所以默认用邻接表。V 是点数，E 是边数。</p>
+
+<h2 id="templates">先记两个遍历模板</h2>
+<div class="template-note"><b>BFS 的状态：</b><code>queue</code> 保存待处理点，<code>seen</code> 在入队时更新；<b>DFS 的状态：</b><code>stack</code> 或递归调用栈保存当前路径，<code>seen</code> 防止沿环反复走。</div>
+<pre>from collections import deque
+
+def bfs(graph, start):
+    seen = {start}
+    queue = deque([start])
+    while queue:
+        node = queue.popleft()
+        yield node
+        for neighbor in graph.get(node, ()):
+            if neighbor not in seen:
+                seen.add(neighbor)
+                queue.append(neighbor)
+
+def dfs(graph, start):
+    seen = set()
+    stack = [start]
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        yield node
+        stack.extend(reversed(graph.get(node, ())))</pre>
+<p id="correctness"><b>正确性直觉：</b>BFS 先处理距离起点 0 的点，再处理距离 1、2……的点，所以第一次发现一个点时，走过的边数最少。DFS 只保证沿着当前路径深入；它适合完整访问、连通块和回溯式处理，但第一次到达终点不保证最短。</p>
 
 <h2>BFS：用队列，一层层往外</h2>
 <pre>from collections import deque
@@ -107,7 +112,41 @@ next(person for person in bfs(graph, "ann") if person.startswith("d"))  # 找到
 <p>递归本身就是一个栈。图里有一条几万个点的长链时，递归会超过 Python 的递归深度（默认约 1000 层），实际项目里要用显式栈：栈里放每个点的“邻居迭代器”，栈顶取下一个没见过的邻居就往下钻，取完了就出栈（回头）。练习要求写的就是这个版本。</p>
 <p>两种都是 <b>O(V + E)</b>：每个点进出一次，每条边看一到两次。</p>
 
-<h2>动手玩</h2>
+<h2 id="practice">标准库应用：dict + deque 就够了</h2>
+<p>Python 没有内置的图类型，日常也用不着：<b>dict 就是邻接表</b>，键是节点，值是邻居 list。节点直接用业务里的东西（用户名、URL、<code>(行, 列)</code> 坐标），不用编号成 0..n-1。</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>好友推荐、最短引荐链、爬虫限深</td><td><code>dict</code> + <code>collections.deque</code> 写 BFS</td><td>O(V + E)，十来行</td></tr>
+  <tr><td>网格地图、连通区域、迷宫</td><td>节点用 <code>(行, 列)</code>，邻居现算，不用先建图；<code>list</code> 当栈做 DFS</td><td>O(格子数)</td></tr>
+  <tr><td>大图、要跑很多种图算法</td><td>第三方库 networkx（本课不依赖）</td><td>好用，但比手写慢很多</td></tr>
+</table>
+<pre>from collections import defaultdict, deque
+
+follows = defaultdict(list)                       # 用户 -&gt; 好友列表
+for left, right in [("ann", "bob"), ("bob", "dan"), ("dan", "eve")]:
+    follows[left].append(right)
+    follows[right].append(left)
+
+def degrees_of_separation(follows, source, target):
+    """source 到 target 的最短引荐链；连不上返回 None。"""
+    came_from = {source: None}                    # 兼当 seen：也记下是从谁那里过来的
+    queue = deque([source])
+    while queue:
+        person = queue.popleft()
+        if person == target:
+            chain = []
+            while person is not None:             # 顺着 came_from 倒着走回起点
+                chain.append(person)
+                person = came_from[person]
+            return chain[::-1]
+        for friend in follows.get(person, ()):
+            if friend not in came_from:
+                came_from[friend] = person
+                queue.append(friend)
+    return None</pre>
+<p>完整可运行的版本（还有爬虫限深、数地图上的陆地块）在 <code>examples/graph_in_practice.py</code>（<code>uv run examples/graph_in_practice.py</code>）。</p>
+
+<h2 id="demo">动手玩</h2>
 <p>先点 <b>BFS</b>，看橙色的点怎么排进队列、蓝色数字怎么一层层变大；再点 <b>DFS</b>，留意走到 2 之后栈怎么退回 3。也可以换个起点试试。</p>
 <div class="demo" id="graph"></div>
 <p class="label">白色：没见过；橙色：在队列 / 栈里等着；红框：正在处理；绿色：处理完了。粗橙线是“第一次发现它”走的边。</p>
