@@ -5,6 +5,8 @@
 <title>第 12 课 · 堆与优先队列</title>
 <link rel="stylesheet" href="style.css">
 <style>
+  .lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
 .tree { position: relative; width: 600px; max-width: 100%; margin: 6px 0 18px; }
 .tree svg { position: absolute; left: 0; top: 0; }
 .tree .box { position: absolute; transform: translate(-50%, -50%); background: #fff; }
@@ -18,33 +20,21 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 12 课 · 堆与优先队列</h1>
 <p class="one-line">堆是一棵<b>“父亲总比孩子小”</b>的二叉树，所以最小值永远在顶上。它其实就存在一个普通数组里。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#problem">问题直觉</a>
+  <a href="#definition">核心定义与不变量</a>
+  <a href="#template">通用操作模板</a>
+  <a href="#demo">题目与动画</a>
+  <a href="#application">应用场景</a>
+  <a href="#pitfalls">易错点与练习</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#numbers">// 与 %（算父亲孩子的下标）</a>、<a href="python-basics.html#dunder">魔法方法（<code>__len__</code>、<code>__bool__</code>）</a>、<a href="python-basics.html#lambda-key">lambda 与 key=</a>、<a href="python-basics.html#unpack">解包</a>、<a href="python-basics.html#exceptions">异常约定（IndexError）</a>、<a href="python-basics.html#generator">生成器（merge 是生成器）</a>；前面的课 —— <a href="10-binary-tree.html">第 10 课 · 二叉树</a>、<a href="08-merge-sort.html">第 8 课 · 归并排序（merge 的思路）</a></p>
 
-<h2>实战里怎么写：标准库 heapq</h2>
-<p>业务代码里没人手写堆，Python 标准库 <code>heapq</code> 直接把普通 <code>list</code> 当堆用。按场景选：</p>
-<table>
-  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
-  <tr><td>任务调度、“谁最急谁先做”</td><td><code>heapq.heappush</code> / <code>heappop</code>，存 (优先级, 序号, 任务)</td><td>push / pop O(log n)，看堆顶 O(1)</td></tr>
-  <tr><td>最大 / 最小的 k 个</td><td><code>heapq.nlargest</code> / <code>nsmallest</code></td><td>O(n log k)，不用全排序</td></tr>
-  <tr><td>合并多个已排序的大文件</td><td><code>heapq.merge</code>（惰性）</td><td>O(总数 · log 文件数)，内存 O(文件数)</td></tr>
-  <tr><td>多线程生产者 / 消费者</td><td><code>queue.PriorityQueue</code></td><td>同上，外加锁和阻塞等待</td></tr>
-</table>
-<pre>import heapq
-from itertools import count
+<h2 id="problem">问题直觉：如何反复取出当前最小值</h2>
+<p>如果每次都在无序数组里扫描最小值，会重复做很多工作；如果每次都完整排序，又浪费了不需要的顺序。优先队列只保证“最小值在顶上”，把取最小值变成稳定的局部维护。</p>
 
-heap = []
-sequence = count()                 # count() 产出 0、1、2……，每次 next() 拿下一个数，永远数不完
-                                   # 用它当序号：同优先级先进先出，也避免去比较任务本身
-heapq.heappush(heap, (run_at, next(sequence), "生成日报"))
-
-while heap and heap[0][0] &lt;= now:  # heap[0] 就是最早到期的，看一眼 O(1)
-    _, _, task_name = heapq.heappop(heap)
-    run(task_name)
-
-heapq.nlargest(2, requests, key=lambda request: request[1])   # 最慢的两个请求</pre>
-<p>完整可运行的版本在 <code>examples/heap_in_practice.py</code>（<code>uv run examples/heap_in_practice.py</code>）。下面看 heapq 背后的这个 list 是怎么维持“最小值在下标 0”的。</p>
-
-<h2>长什么样：树是想象出来的，数组才是真的</h2>
+<h2 id="definition">核心定义与不变量：父节点不大于孩子</h2>
+<h3>长什么样：树是想象出来的，数组才是真的</h3>
 <div class="row" style="justify-content:center"><span class="box">1</span></div>
 <div class="row" style="justify-content:center;gap:80px"><span class="box">3</span><span class="box">2</span></div>
 <div class="row" style="justify-content:center;gap:24px"><span class="box">6</span><span class="box">4</span><span class="box">5</span><span class="box empty">·</span></div>
@@ -57,7 +47,8 @@ heapq.nlargest(2, requests, key=lambda request: request[1])   # 最慢的两个�
 右孩子 2*i + 2</pre>
 <p>注意：堆只管<b>父子</b>，不管兄弟。上面的 3 和 2 谁在左都行，所以堆<b>不是</b>排好序的数组。</p>
 
-<h2>push：放到末尾，往上浮</h2>
+<h2 id="template">通用操作模板：上浮、下沉与建堆</h2>
+<h3>push：放到末尾，往上浮</h3>
 <pre>def _sift_up(heap, index):
     while index &gt; 0:
         parent = (index - 1) // 2
@@ -94,11 +85,32 @@ _sift_up(heap, len(heap) - 1)</pre>
 <p><b>堆排序</b>：先 heapify，再 pop n 次，拿出来的就是从小到大。教科书上的原地版本用最大堆，每次把堆顶换到数组末尾。</p>
 <p><b>优先队列</b>就是“谁最小谁先出”的队列，堆是它最常见的实现。Python 里是 <code>heapq</code>，第 16 课的 Dijkstra 就靠它。</p>
 
-<h2>动手玩</h2>
+<h2 id="application">应用场景：调度、Top-K、归并与并发队列</h2>
+<p>业务代码里没人手写堆，Python 标准库 <code>heapq</code> 直接把普通 <code>list</code> 当堆用。按场景选：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>任务调度、“谁最急谁先做”</td><td><code>heapq.heappush</code> / <code>heappop</code>，存 (优先级, 序号, 任务)</td><td>push / pop O(log n)，看堆顶 O(1)</td></tr>
+  <tr><td>最大 / 最小的 k 个</td><td><code>heapq.nlargest</code> / <code>nsmallest</code></td><td>O(n log k)，不用全排序</td></tr>
+  <tr><td>合并多个已排序的大文件</td><td><code>heapq.merge</code>（惰性）</td><td>O(总数 · log 文件数)，内存 O(文件数)</td></tr>
+  <tr><td>多线程生产者 / 消费者</td><td><code>queue.PriorityQueue</code></td><td>同上，外加锁和阻塞等待</td></tr>
+</table>
+<pre>import heapq
+from itertools import count
+
+heap = []
+sequence = count()
+heapq.heappush(heap, (run_at, next(sequence), "生成日报"))
+while heap and heap[0][0] &lt;= now:
+    _, _, task_name = heapq.heappop(heap)
+    run(task_name)
+heapq.nlargest(2, requests, key=lambda request: request[1])</pre>
+<p>完整可运行的版本在 <code>examples/heap_in_practice.py</code>（<code>uv run examples/heap_in_practice.py</code>）。</p>
+
+<h2 id="demo">题目与动画</h2>
 <p>建议依次试试：push 一个 0，看它一路浮到顶；点 <b>pop</b>，看末尾的数怎么沉下去；点 <b>heapify 乱序数组</b> 看建堆；最后点 <b>堆排序</b>。</p>
 <div class="demo" id="heap"></div>
 
-<h2>最容易错的地方</h2>
+<h2 id="pitfalls">易错点与练习</h2>
 <ul>
   <li>下沉时要和<b>较小的孩子</b>换，换成较大的那个，堆就坏了。</li>
   <li>节点可能<b>只有左孩子</b>：先检查右孩子下标有没有越界。</li>
