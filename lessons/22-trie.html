@@ -13,6 +13,8 @@
 .tree .box.hot { background: #ffe0b2; border-color: #e65100; }
 .box.new { border-style: dashed; }
 .demo input[type=text] { width: 90px; }
+.lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+.lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -20,6 +22,18 @@
 <h1>第 22 课 · 选修 · Trie（字典树）</h1>
 <p class="one-line">Trie 把单词<b>一个字母一个节点</b>地挂在树上，开头相同的词共用同一段路。查一个词只要顺着字母往下走，走几步只看<b>词有多长</b>，和存了多少词无关。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#dict-tools">setdefault 与 get</a>、<a href="python-basics.html#dunder">魔法方法</a>（<code>__contains__</code> / <code>__len__</code> / <code>__iter__</code> / <code>__delitem__</code> / <code>__repr__</code>）、<a href="python-basics.html#generator">生成器</a>、<a href="python-basics.html#type-hints">Iterable / Iterator 标注与引号前向引用</a>；前面的课 —— <a href="04-hash-table.html">第 4 课 · 哈希表</a>（每个节点的孩子就是一个 dict）、<a href="10-binary-tree.html">第 10 课 · 二叉树</a>（顺着引用往下走）、<a href="13-graph-traversal.html">第 13 课 · DFS</a>（深度优先遍历子树，递归 + yield）、<a href="06-binary-search.html">第 6 课 · bisect</a>（实战里的对比方案）、<a href="12-heap.html">第 12 课 · 堆</a>（<code>complete</code> 的提示用 heapq.nsmallest）。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#definition">先定义</a>
+  <a href="#structure">核心结构</a>
+  <a href="#operations">操作模板</a>
+  <a href="#practice-scenarios">应用场景</a>
+  <a href="#trie">看动画</a>
+  <a href="#practice">练习与自测</a>
+</nav>
+
+<h2 id="definition">先定义：节点、结束标记和前缀</h2>
+<p>Trie 的状态是“当前走到哪个节点”。每条边代表一个字符；节点的 <code>count</code> 表示有多少个单词在这里结束，因此“走得到”只说明它是前缀，不能直接说明它是完整单词。</p>
 
 <h2>实战里怎么写：多数时候用不着 Trie</h2>
 <p>Python 标准库里没有 Trie。实际项目里按场景选：</p>
@@ -46,7 +60,7 @@ path.startswith(("/admin", "/internal"))       # 一次查多个前缀
 words_with_prefix(sorted(commands), "co")      # ['commit', 'config']</pre>
 <p>完整可运行的版本在 <code>examples/trie_in_practice.py</code>（<code>uv run examples/trie_in_practice.py</code>）。Trie 的优势是：查前缀只看前缀多长，和词表多大无关，而且天然按字母序组织好了。</p>
 
-<h2>长什么样</h2>
+<h2 id="structure">核心结构：共享前缀的树</h2>
 <p>存了 car、cat、dog 三个词（<span class="box small end">绿</span> = 有单词在这里结束）：</p>
 <pre>        (根)
        /    \
@@ -61,7 +75,7 @@ words_with_prefix(sorted(commands), "co")      # ['commit', 'config']</pre>
         self.count = 0        # 有几次单词在这里结束；0 表示不是单词结尾</pre>
 <p>car 和 cat 共用 <code>c → a</code>。结束标记很关键：走得到 <code>ca</code>，不代表 ca 是一个词。这里用 <code>count</code>（被搜索了几次）代替 True / False，自动补全时正好拿它排热度。</p>
 
-<h2>所有操作都是“顺着字母走”</h2>
+<h2 id="operations">操作模板：先走到节点，再做不同事情</h2>
 <pre>def _walk(self, text):
     """沿着 text 的字母往下走，走不通返回 None。"""
     node = self.root
@@ -94,6 +108,9 @@ def __contains__(self, word):                                     # word in trie
 </table>
 <p>一句话：<b>和前缀有关的问题</b>（自动补全、拼写提示、敏感词过滤）就想 Trie。代价是每个节点一个 dict，比较占内存。</p>
 
+<h2 id="practice-scenarios">应用场景：把 Trie 和简单方案比较</h2>
+<p>上面的实战表格放在这里回看：词表小或只做偶尔查询时，<code>startswith</code>、排序列表加 <code>bisect</code> 更直接；词表大、补全请求多且需要边改边查时，Trie 才值得承担额外内存。</p>
+
 <h2>动手玩</h2>
 <p>建议依次试试：插入 <b>cart</b>，看它只新建了一个节点；用 <b>前缀列词</b> 查 <b>ca</b>，看先沿高亮的路走到前缀，再把下面的子树走一遍；最后 <b>search</b> 一下 <b>ca</b>，看为什么它是 False。</p>
 <div class="demo" id="trie"></div>
@@ -105,7 +122,7 @@ def __contains__(self, word):                                     # word in trie
   <li>列词时，前缀节点<b>自己</b>可能就是一个词，别漏了它。</li>
 </ul>
 
-<h2>练习</h2>
+<h2 id="practice">练习</h2>
 <p>补全 <code>dsa/trie.py</code>，做出一个搜索框自动补全：<code>word in trie</code>、<code>len(trie)</code>、<code>for word in trie</code>、<code>del trie[word]</code> 都要能用，另外有 <code>starts_with</code>（生成器）和按热度排序的 <code>complete</code>。</p>
 <p>建议顺序：<code>add</code> → <code>__contains__</code> / <code>count</code> / <code>has_prefix</code>（共用一个“沿前缀走到底”的小函数）→ <code>starts_with</code>（走到前缀节点后递归 <code>yield</code>，孩子按字母排序）→ <code>complete</code> → <code>__delitem__</code>（要把不再通向任何单词的节点剪掉）。</p>
 <pre>uv run dsa/trie.py              # 搜索框补全的端到端例子，逐条打印期望和实际
