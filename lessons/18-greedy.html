@@ -14,15 +14,51 @@
   .act.picked .seg { background: #ffe0b2; }
   .act.skipped { opacity: .3; }
   .endline { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 2px solid #c62828; }
+  .lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
+  .template-note { margin: 8px 0; padding: 8px 10px; background: #e3f2fd; }
 </style>
 </head>
 <body>
 <p><a href="index.html">← 目录</a></p>
 <h1>第 18 课 · 贪心</h1>
 <p class="one-line">贪心就是<b>每一步都拿眼下最好的</b>，拿了不反悔。写起来最短，但只有在“局部最好能推出全局最好”时才对。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#condition">先定义贪心条件</a>
+  <a href="#template">算法模板</a>
+  <a href="#correctness">正确性直觉</a>
+  <a href="#practice">标准库应用</a>
+  <a href="#demo">动画与练习</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#lambda-key">lambda 与 key=</a>（<code>attrgetter</code> 见下方说明）、<a href="python-basics.html#loop-tools">divmod</a>、<a href="python-basics.html#dict-tools">Counter</a>、<a href="python-basics.html#class">NamedTuple</a>、<a href="python-basics.html#type-hints">类型标注</a>、<a href="python-basics.html#exceptions">异常</a>、<a href="python-basics.html#fstring">f-string 格式化</a>；前面的课 —— <a href="00-complexity.html">第 0 课 · 复杂度</a>、<a href="07-simple-sorts.html">第 7 课 · 排序与稳定性</a>（结束时间相同时按输入顺序）。</p>
 
-<h2>实战里怎么写：sorted + 一次遍历</h2>
+<h2 id="condition">先定义贪心条件</h2>
+<p>一个贪心算法需要两件事：每一步有明确的<b>局部选择规则</b>，并且做出这个选择后，剩余问题仍然和原问题同类。局部最优能推出全局最优，通常要靠交换论证、边界推进或“当前选择不会堵死后续”的证明。</p>
+<p class="template-note"><b>先问三句：</b>当前状态是什么？候选动作按什么关键字排序？选择后，哪些候选可以永久丢掉？如果找不到这些答案，先找反例，再考虑动态规划或搜索。</p>
+
+<h2 id="template">先记贪心模板</h2>
+<pre>def greedy(items):
+    state = 初始状态
+    answer = []
+    for item in sorted(items, key=选择关键字):
+        if item 满足当前条件:
+            answer.append(item)
+            state = 更新状态(item)
+    return answer</pre>
+<p id="correctness"><b>正确性直觉：</b>以活动选择为例，结束最早的可行活动给后续留下的时间最多；把任意最优解的第一个活动替换成它，不会减少后面能选的数量。每次都把同一个交换论证应用到剩余区间，就得到全局最优。</p>
+
+<h2>一个类比</h2>
+<p>一天想多参加几个活动：先挑<b>最早结束</b>的那个，剩下的时间最多，后面能塞进去的也最多。然后在不冲突的里面再挑最早结束的……这就是贪心。</p>
+
+<h2>贪心会翻车：硬币 [1, 3, 4] 凑 6</h2>
+<div class="row">
+  <span class="label">贪心：</span><span class="box">4</span><span class="box">1</span><span class="box">1</span><span class="label">3 枚</span>
+  <span class="label">　最优：</span><span class="box hot">3</span><span class="box hot">3</span><span class="label">2 枚</span>
+</div>
+<p>先拿最大的 4，看着赚了，后面只能用 1 补。人民币、美元这种<b>标准币制</b>贪心才是对的；任意面值要用动态规划（第 19、20 课）。</p>
+<p>所以用贪心之前要问一句：<b>“先拿眼下最好的，会不会堵死更好的路？”</b>说不清楚就先找反例。</p>
+
+<h2 id="practice">标准库应用：sorted + 一次遍历</h2>
 <p>贪心在业务代码里不用调任何库，几乎都是“按某个关键字 <code>sorted</code>，再扫一遍，能要就要”。难的不是写，而是<b>选对排序关键字、确认贪心是对的</b>。</p>
 <table>
   <tr><th>场景</th><th>怎么写</th><th>代价</th></tr>
@@ -49,19 +85,7 @@ def make_change_in_cents(amount, denominations=(10000, 5000, 2000, 1000, 500, 10
     if remaining:
         raise ValueError(f"凑不出 {amount} 分")
     return change</pre>
-<p>完整可运行的版本（会议室、空闲时段、找零）在 <code>examples/greedy_in_practice.py</code>（<code>uv run examples/greedy_in_practice.py</code>）。下面讲这些写法为什么对、什么时候会错。</p>
-<p>两个预备课没细讲的写法，就地补一句：<code>attrgetter("end")</code> 和预备课见过的 <code>itemgetter(2)</code> 是一家，只是按<b>属性</b>名取值，这里等价于 <code>lambda booking: booking.end</code>；<code>sorted(denominations, reverse=True)</code> 里的 <code>reverse=True</code> 表示<b>从大到小</b>排（找零要从最大面值开始拿）。</p>
-
-<h2>一个类比</h2>
-<p>一天想多参加几个活动：先挑<b>最早结束</b>的那个，剩下的时间最多，后面能塞进去的也最多。然后在不冲突的里面再挑最早结束的……这就是贪心。</p>
-
-<h2>贪心会翻车：硬币 [1, 3, 4] 凑 6</h2>
-<div class="row">
-  <span class="label">贪心：</span><span class="box">4</span><span class="box">1</span><span class="box">1</span><span class="label">3 枚</span>
-  <span class="label">　最优：</span><span class="box hot">3</span><span class="box hot">3</span><span class="label">2 枚</span>
-</div>
-<p>先拿最大的 4，看着赚了，后面只能用 1 补。人民币、美元这种<b>标准币制</b>贪心才是对的；任意面值要用动态规划（第 19、20 课）。</p>
-<p>所以用贪心之前要问一句：<b>“先拿眼下最好的，会不会堵死更好的路？”</b>说不清楚就先找反例。</p>
+<p>完整可运行的版本（会议室、空闲时段、找零）在 <code>examples/greedy_in_practice.py</code>（<code>uv run examples/greedy_in_practice.py</code>）。<code>attrgetter("end")</code> 等价于 <code>lambda booking: booking.end</code>；<code>reverse=True</code> 表示从大到小排序。</p>
 
 <h2>三个经典例子</h2>
 <table>
@@ -78,7 +102,7 @@ def make_change_in_cents(amount, denominations=(10000, 5000, 2000, 1000, 500, 10
     return chosen</pre>
 <p>为什么按结束时间是对的？任何一个最优解，把它的第一个活动换成“最早结束的那个”，不会和后面冲突，个数不变。换完再对剩下的部分重复这个论证。</p>
 
-<h2>动手玩</h2>
+<h2 id="demo">动手玩</h2>
 <p>先点<b>按结束时间选</b>，看红线（上一个选中活动的结束时间）怎么往右推；再点<b>按开始时间选</b>，看最长的 C 怎么把后面挤掉。</p>
 <div class="demo" id="acts"></div>
 
