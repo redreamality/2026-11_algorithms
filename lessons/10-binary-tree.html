@@ -5,6 +5,8 @@
 <title>第 10 课 · 二叉树与递归遍历</title>
 <link rel="stylesheet" href="style.css">
 <style>
+  .lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
 .tree { position: relative; width: 480px; max-width: 100%; margin: 6px 0; }
 .tree svg { position: absolute; left: 0; top: 0; }
 .tree .box { position: absolute; transform: translate(-50%, -50%); background: #fff; }
@@ -16,9 +18,21 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 10 课 · 二叉树与递归遍历</h1>
 <p class="one-line">二叉树就是每个节点最多有<b>两个孩子</b>的链表。处理一棵树 = 处理根 + 处理左子树 + 处理右子树，所以几乎所有树的代码都是<b>递归</b>。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#problem">问题直觉</a>
+  <a href="#definition">核心定义与不变量</a>
+  <a href="#template">通用操作模板</a>
+  <a href="#demo">题目与动画</a>
+  <a href="#application">应用场景</a>
+  <a href="#pitfalls">易错点与练习</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器（yield）</a>、<a href="python-basics.html#yield-from">yield from</a>、<a href="python-basics.html#class">@dataclass 与 isinstance</a>、<a href="python-basics.html#type-hints">类型标注（<code>X | None</code>、引号前向引用）</a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归与分治</a>、<a href="03-stack-queue.html">第 3 课 · 队列（层序要用 deque）</a></p>
 
-<h2>长什么样</h2>
+<h2 id="problem">问题直觉：把“处理一棵树”拆成三个动作</h2>
+<p>树没有数组那样的顺序下标，但每个节点都把问题分成“自己、左子树、右子树”。只要先约定访问根的时机，四种遍历就只是同一个递归模板的不同插入点。</p>
+
+<h2 id="definition">核心定义与不变量：节点、空树和遍历顺序</h2>
+<h3>长什么样</h3>
 <div class="row" style="justify-content:center;max-width:300px"><span class="box">1</span></div>
 <div class="row" style="justify-content:center;gap:90px;max-width:300px"><span class="box">2</span><span class="box">3</span></div>
 <div class="row" style="justify-content:center;gap:22px;max-width:300px"><span class="box">4</span><span class="box">5</span><span class="box empty">·</span><span class="box">6</span></div>
@@ -29,7 +43,18 @@
         self.right = right</pre>
 <p>虚线格表示 3 没有左孩子。没有孩子的节点叫<b>叶子</b>（4、5、6）。空树就是 <code>None</code>。</p>
 
-<h2>实战里怎么写：树形数据到处都是</h2>
+<h2 id="template">通用操作模板：四种遍历与递归出口</h2>
+<h3>四种遍历</h3>
+<p>前、中、后说的是<b>根</b>排在第几个，左永远在右前面：</p>
+<table>
+  <tr><th>遍历</th><th>顺序</th><th>上面这棵树</th></tr>
+  <tr><td>前序</td><td>根 → 左 → 右</td><td>1 2 4 5 3 6</td></tr>
+  <tr><td>中序</td><td>左 → 根 → 右</td><td>4 2 5 1 3 6</td></tr>
+  <tr><td>后序</td><td>左 → 右 → 根</td><td>4 5 2 6 3 1</td></tr>
+  <tr><td>层序</td><td>一层一层，从左到右</td><td>1 2 3 4 5 6</td></tr>
+</table>
+
+<h2 id="application">应用场景：配置、源代码与目录树</h2>
 <p>业务代码里几乎没人自己定义 <code>TreeNode</code>，但<b>树形数据</b>天天碰到，处理它们用的正是本课的递归遍历：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
@@ -52,16 +77,6 @@
 dict(flatten({"database": {"host": "localhost", "port": 5432}, "debug": False}))
 # {'database.host': 'localhost', 'database.port': 5432, 'debug': False}</pre>
 <p>完整可运行的版本在 <code>examples/binary_tree_in_practice.py</code>（<code>uv run examples/binary_tree_in_practice.py</code>），还演示了用 <code>ast</code> 列出“每个函数调用了谁”。注意它用的是 <b>yield</b>：遍历写成生成器，调用方可以 <code>list()</code> 全拿，也可以找到想要的就 <code>break</code>。</p>
-
-<h2>四种遍历</h2>
-<p>前、中、后说的是<b>根</b>排在第几个，左永远在右前面：</p>
-<table>
-  <tr><th>遍历</th><th>顺序</th><th>上面这棵树</th></tr>
-  <tr><td>前序</td><td>根 → 左 → 右</td><td>1 2 4 5 3 6</td></tr>
-  <tr><td>中序</td><td>左 → 根 → 右</td><td>4 2 5 1 3 6</td></tr>
-  <tr><td>后序</td><td>左 → 右 → 根</td><td>4 5 2 6 3 1</td></tr>
-  <tr><td>层序</td><td>一层一层，从左到右</td><td>1 2 3 4 5 6</td></tr>
-</table>
 <pre>def preorder(root):
     if root is None:          # 空树：什么都不产出
         return
@@ -103,11 +118,11 @@ list(level_order(root))       # [[1], [2, 3], [4, 5, 6]]</pre>
   <tr><td>层序</td><td>O(n)</td><td>O(w)，w 是最宽一层的节点数</td></tr>
 </table>
 
-<h2>动手玩</h2>
+<h2 id="demo">题目与动画</h2>
 <p>依次点四种遍历，用“上一步 / 下一步”看访问顺序。橙色是正在访问的节点，绿色是已经输出的；递归遍历下面会显示调用栈，层序显示队列。</p>
 <div class="demo" id="btree"></div>
 
-<h2>最容易错的三个地方</h2>
+<h2 id="pitfalls">易错点与练习</h2>
 <ul>
   <li>忘了写<b>空树</b>的出口，递归一路走到 <code>None.left</code> 就报错。</li>
   <li>高度的定义：本课约定空树是 0、只有根是 1（有的书从 -1 数起）。</li>
