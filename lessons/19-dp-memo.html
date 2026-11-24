@@ -14,6 +14,8 @@
 .box.hit { background: #bbdefb; border-color: #1565c0; }
 .tree .box.cut { opacity: .25; }
 .tree .box.cur { outline: 3px solid #e65100; outline-offset: 1px; }
+.lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+.lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -22,31 +24,16 @@
 <p class="one-line">动态规划 = <b>递归 + 不做重复的事</b>。同一个子问题只算一次，把答案记下来，下次直接查。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#decorator">装饰器与 functools.cache</a>（怎么<b>写</b>一个装饰器见下方说明）、<a href="python-basics.html#closure">闭包与 nonlocal</a>（写装饰器、记命中次数都要用）、<a href="python-basics.html#unpack">*args 解包</a>、<a href="python-basics.html#dict-tools">dict 当缓存</a>、<a href="python-basics.html#numbers">math.inf</a>、<a href="python-basics.html#comprehension">二维表推导式</a>、<a href="python-basics.html#class">NamedTuple</a>、<a href="python-basics.html#type-hints">类型标注</a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归与分治</a>（DP 就是递归加记忆）、<a href="18-greedy.html">第 18 课 · 贪心</a>（找零的对比）、<a href="00-complexity.html">第 0 课 · 复杂度</a>。</p>
 
-<h2>实战里怎么写：一行装饰器</h2>
-<p>Python 项目里几乎没人手写 memo 字典，标准库 <code>functools</code> 已经做好了：</p>
-<table>
-  <tr><th>场景</th><th>用什么</th><th>代价 / 注意</th></tr>
-  <tr><td>参数种类有限的纯函数（递归求解、切词、解析）</td><td><code>@functools.cache</code></td><td>不限条数，内存随参数种类增长</td></tr>
-  <tr><td>参数无穷多（查汇率、查用户资料）</td><td><code>@functools.lru_cache(maxsize=N)</code></td><td>最多存 N 条，满了淘汰最久没用的</td></tr>
-  <tr><td>状态很多、递归很深（n 上千）</td><td>改成<b>填表</b>，或先从小到大预热缓存</td><td>默认递归上限约 1000 层，超了 <code>RecursionError</code></td></tr>
-</table>
-<pre>from functools import cache, lru_cache
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#definition">先定义</a>
+  <a href="#templates">两种写法</a>
+  <a href="#practice-scenarios">应用场景</a>
+  <a href="#dpmemo">看动画</a>
+  <a href="#practice">练习与自测</a>
+</nav>
 
-@cache
-def fibonacci(n: int) -&gt; int:
-    return n if n &lt;= 1 else fibonacci(n - 1) + fibonacci(n - 2)
-
-fibonacci(80)              # 一眨眼：每个 n 只真正算一次
-fibonacci.cache_info()     # CacheInfo(hits=78, misses=81, maxsize=None, currsize=81)
-
-@lru_cache(maxsize=1024)
-def exchange_rate(currency: str) -&gt; float:
-    return remote_api.fetch(currency)   # 很慢的远程调用，重复的币种直接走缓存
-
-total = cache(sum)
-total((1, 2, 3))           # 6
-total([1, 2, 3])           # TypeError: unhashable type: 'list'：参数必须可哈希，list 先转 tuple</pre>
-<p>还有一条：<b>只缓存纯函数</b>。结果依赖当前时间、数据库这类外部状态时，缓存会一直返回旧值。完整可运行的例子（切词、带淘汰的汇率缓存、阶梯运费）在 <code>examples/dp_memo_in_practice.py</code>（<code>uv run examples/dp_memo_in_practice.py</code>）。下面拆开看这个装饰器到底省掉了什么。</p>
+<h2 id="definition">先定义：状态、转移和重复子问题</h2>
+<p>动态规划先不急着写缓存。先把一个大问题拆成同类型的更小问题：用<b>状态</b>描述“小问题是什么”，用<b>转移</b>说明它怎样由更小状态得到，再给出<b>初始值</b>。如果这些小问题会反复出现，就值得把答案保存下来。</p>
 
 <h2>问题出在哪：重复计算</h2>
 <pre>def fibonacci(n: int) -&gt; int:
@@ -56,7 +43,7 @@ total([1, 2, 3])           # TypeError: unhashable type: 'list'：参数必须�
 <p>算 fib(5) 时，fib(3) 被算了 2 次，fib(2) 被算了 3 次……调用次数大约按 1.6<sup>n</sup> 增长，fib(40) 要调一亿多次。</p>
 <div class="row"><span class="label">fib(5) 调到的 n：</span><span class="box">5</span><span class="box">4</span><span class="box">3</span><span class="box found">3</span><span class="box">2</span><span class="box found">2</span><span class="box found">2</span><span class="label">……红色是算过的又算一遍</span></div>
 
-<h2>办法一：记忆化（自顶向下）</h2>
+<h2 id="templates">母模板一：记忆化（自顶向下）</h2>
 <p>类比：做题时把算过的答案写在草稿纸上，再遇到同一题就直接抄。</p>
 <pre>def fibonacci(n: int, memo: dict[int, int]) -&gt; int:
     if n &lt;= 1:
@@ -70,7 +57,7 @@ fibonacci(80, {})</pre>
 <p>递归的写法几乎没变，只多了“先查、再存”两行。每个 n 只真正算一次：O(n)。<code>@cache</code> 做的就是这件事：把“先查、再存”包在一个装饰器里，键是参数，所以参数必须可哈希。练习里你会自己写一个同样用法的 <code>memoize</code>。</p>
 <p>预备课只讲了怎么<b>用</b>装饰器，这里补上<b>写</b>一个要用到的几个写法。装饰器本身就是一个“收一个函数、返回一个新函数”的普通函数，新函数靠<b>闭包</b>（<a href="python-basics.html#closure">预备课第 15 节</a>）记住缓存用的数据；<code>def wrapper(*args, **kwargs)</code> 里的 <code>*args</code> 把位置参数收成一个元组（第 4 节），<code>**kwargs</code> 同理把关键字参数收成一个 dict，调用时再写 <code>function(*args, **kwargs)</code> 原样摊开传回去；函数也是对象，可以往上挂属性，写完 <code>wrapper.cache_info = 某个函数</code> 之后，就能像 <code>fibonacci.cache_info()</code> 那样调。另外 <code>from functools import wraps</code> 后，在 <code>def wrapper</code> 的上一行加 <code>@wraps(function)</code>，会把原函数的名字和 docstring 抄到包装函数上，报错信息更好认。</p>
 
-<h2>办法二：填表（自底向上）</h2>
+<h2>母模板二：填表（自底向上）</h2>
 <p>反过来想：既然 fib(n) 只依赖更小的数，就从小往大，一格一格填满一张表。</p>
 <div class="row">
   <span class="label">dp =</span><span class="box">0</span><span class="box">1</span><span class="box">1</span><span class="box">2</span><span class="box hot">3</span><span class="box hot">5</span><span class="box found">8</span>
@@ -101,6 +88,32 @@ fibonacci(80, {})</pre>
   <li><b>初始值</b>：最小的几个状态是多少？例：<code>dp[0] = 1</code>（站着不动也算一种），<code>dp[1] = 1</code>。</li>
 </ol>
 
+<h2 id="practice-scenarios">应用场景：实战里怎么写一行装饰器</h2>
+<p>Python 项目里几乎没人手写 memo 字典，标准库 <code>functools</code> 已经做好了：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价 / 注意</th></tr>
+  <tr><td>参数种类有限的纯函数（递归求解、切词、解析）</td><td><code>@functools.cache</code></td><td>不限条数，内存随参数种类增长</td></tr>
+  <tr><td>参数无穷多（查汇率、查用户资料）</td><td><code>@functools.lru_cache(maxsize=N)</code></td><td>最多存 N 条，满了淘汰最久没用的</td></tr>
+  <tr><td>状态很多、递归很深（n 上千）</td><td>改成<b>填表</b>，或先从小到大预热缓存</td><td>默认递归上限约 1000 层，超了 <code>RecursionError</code></td></tr>
+</table>
+<pre>from functools import cache, lru_cache
+
+@cache
+def fibonacci(n: int) -&gt; int:
+    return n if n &lt;= 1 else fibonacci(n - 1) + fibonacci(n - 2)
+
+fibonacci(80)              # 一眨眼：每个 n 只真正算一次
+fibonacci.cache_info()     # CacheInfo(hits=78, misses=81, maxsize=None, currsize=81)
+
+@lru_cache(maxsize=1024)
+def exchange_rate(currency: str) -&gt; float:
+    return remote_api.fetch(currency)   # 很慢的远程调用，重复的币种直接走缓存
+
+total = cache(sum)
+total((1, 2, 3))           # 6
+total([1, 2, 3])           # TypeError: unhashable type: 'list'：参数必须可哈希，list 先转 tuple</pre>
+<p>还有一条：<b>只缓存纯函数</b>。结果依赖当前时间、数据库这类外部状态时，缓存会一直返回旧值。完整可运行的例子（切词、带淘汰的汇率缓存、阶梯运费）在 <code>examples/dp_memo_in_practice.py</code>（<code>uv run examples/dp_memo_in_practice.py</code>）。</p>
+
 <h2>动手玩</h2>
 <p>建议依次试试：n = 5 点 <b>朴素递归</b>，看红色的重复调用；再点 <b>记忆化</b>，同一棵树里蓝色是“查 memo 命中”，它下面整棵子树都被剪掉了；最后点 <b>填表</b>。方块里的数字是 n，代表一次 fib(n) 调用。</p>
 <div class="demo" id="dpmemo"></div>
@@ -112,7 +125,7 @@ fibonacci(80, {})</pre>
   <li>凑零钱里“凑不出”要用一个不可能的值（比如 <code>inf</code>）表示，最后再换成 -1，别和 0 混了。</li>
 </ul>
 
-<h2>练习</h2>
+<h2 id="practice">练习</h2>
 <p>补全 <code>dsa/dp_memo.py</code>。建议顺序：<code>memoize</code>（自己写一个带 <code>cache_info()</code> / <code>cache_clear()</code> 的装饰器，用法和 <code>@functools.cache</code> 一样）→ <code>fibonacci_memo</code>（用你的 <code>@memoize</code>）→ <code>fibonacci_table</code> → <code>climb_stairs</code> → <code>unique_paths</code>（网格里可以有堵住的格子）→ <code>min_coins</code>（返回用了哪些面值的 <code>Counter</code>，不只是张数）。每题先写下三问的答案再动手。<code>unique_paths</code> 的 <code>blocked</code> 参数是 <code>frozenset</code>：它就是<b>不可变的 set</b>，<code>in</code> 判断、遍历都和 set 一样，好处是能当 dict 的键、被缓存（实战里的词典也用它传，所以切词函数只有一个 int 参数）。</p>
 <pre>uv run dsa/dp_memo.py               # 汇率缓存、代币凑数、机器人走网格的端到端例子
 uv run pytest tests/test_dp_memo.py</pre>
