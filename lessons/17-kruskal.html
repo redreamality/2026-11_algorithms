@@ -16,15 +16,48 @@
   .graph .edge.skip line { stroke: #ccc; stroke-dasharray: 5 4; }
   .box.pick { background: #c8e6c9; border-color: #2e7d32; }
   .box.skip { color: #aaa; border-color: #ccc; text-decoration: line-through; }
+  .lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
+  .template-note { margin: 8px 0; padding: 8px 10px; background: #e3f2fd; }
 </style>
 </head>
 <body>
 <p><a href="index.html">← 目录</a></p>
 <h1>第 17 课 · 最小生成树（Kruskal）</h1>
 <p class="one-line">给几座村子修路，要让<b>所有村子都连通</b>，又要<b>总花费最少</b>。Kruskal 的办法很朴素：<b>从最便宜的路开始修，会绕成圈的就不修</b>。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#model">先定义树和边</a>
+  <a href="#template">Kruskal 模板</a>
+  <a href="#correctness">正确性直觉</a>
+  <a href="#practice">实际应用</a>
+  <a href="#demo">动画与练习</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#lambda-key">key=、operator.itemgetter 与排序稳定性</a>、<a href="python-basics.html#comprehension">字典推导式与生成器表达式</a>（<code>{room: room for room in rooms}</code>、<code>sum(w for _, _, w in tree)</code>）、<a href="python-basics.html#unpack">解包</a>（<code>for start, end, meters in ...</code>）、<a href="python-basics.html#exceptions">异常</a>（找不到答案时 <code>raise ValueError</code>）、<a href="python-basics.html#dict-tools">setdefault</a>、<a href="python-basics.html#type-hints">类型标注</a>、<a href="python-basics.html#fstring">f-string</a>；前面的课 —— <a href="15-union-find.html">第 15 课 · 并查集</a>（判环靠它）、<a href="13-graph-traversal.html">第 13 课 · 图</a>（连通块）、<a href="00-complexity.html">第 0 课 · 复杂度</a>。</p>
 
-<h2>实战里怎么写：sorted + 小并查集</h2>
+<h2 id="model">先定义最小生成树：点、边和连通状态</h2>
+<p>无向带权图，n 个点。挑出一些边，让所有点连通、<b>没有环</b>，这就是一棵<b>生成树</b>，它恰好有 <b>n − 1</b> 条边。总权最小的那棵叫<b>最小生成树（MST）</b>。</p>
+<div class="row">
+  <span class="box">A</span><span>—2—</span><span class="box">D</span>
+  <span class="label">　</span>
+  <span class="box">A</span><span>—4—</span><span class="box">B</span><span>—3—</span><span class="box">E</span><span>—1—</span><span class="box">C</span><span>—8—</span><span class="box">F</span>
+</div>
+<p class="label">上面 5 条边就是动画里那张图的 MST，总权 2+4+3+1+8 = 18。</p>
+
+<h2 id="template">先记 Kruskal 模板</h2>
+<pre>chosen = []
+for start, end, weight in sorted(edges, key=lambda edge: edge[2]):   # ① 按权从小到大
+    if find(start) != find(end):          # ② 两头不在同一块：连上不会成环
+        union(start, end)
+        chosen.append((start, end, weight))
+        if len(chosen) == node_count - 1: # 选够了，提前收工
+            break
+    # 否则两头早就连通了，再加这条边就成环，跳过
+if len(chosen) &lt; node_count - 1:
+    raise ValueError("图不连通")</pre>
+<p>“会不会成环”就是问 <b>u 和 v 是不是已经连通</b>，这正是上一课<b>并查集</b>最擅长的：<code>find</code> 看是不是同一个老大，<code>union</code> 把两块合并。</p>
+<p id="correctness" class="template-note"><b>正确性直觉：</b>按权从小到大考察边。若一条边连接两个不同连通块，它可以安全加入；若两端已经连通，加入就会成环。每次选择都保留当前连通块之间最便宜的连接，直到得到 n − 1 条边。</p>
+
+<h2 id="practice">实际应用：sorted + 小并查集</h2>
 <p>布网线、铺管道、修路这类“全连上、总成本最低”的问题，以及把相近的东西分组（门店划片区、相似文档归类），用的都是最小生成树。标准库没有现成的 MST，不过 Kruskal 就是 <b><code>sorted</code> 加上第 15 课的小并查集</b>，十几行就能写完。</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
@@ -58,29 +91,7 @@ rooms = ["机房", "前台", "会议室", "研发区"]
 routes = [("机房", "前台", 30), ("机房", "研发区", 12), ("前台", "会议室", 8), ("会议室", "研发区", 15)]
 cheapest_cabling(rooms, routes)
 # [('前台', '会议室', 8), ('机房', '研发区', 12), ('会议室', '研发区', 15)]，共 35 米</pre>
-<p>注意排序要写 <code>key=itemgetter(2)</code>：直接 <code>sorted(routes)</code> 会先按房间名排序，排出来的顺序就不是按成本了。完整可运行的版本（布线方案，以及把门店分成两个配送片区）在 <code>examples/kruskal_in_practice.py</code>，运行 <code>uv run examples/kruskal_in_practice.py</code>。下面讲为什么“先挑最便宜的”不会出错。</p>
-
-<h2>什么是最小生成树</h2>
-<p>无向带权图，n 个点。挑出一些边，让所有点连通、<b>没有环</b>，这就是一棵<b>生成树</b>，它恰好有 <b>n − 1</b> 条边。总权最小的那棵叫<b>最小生成树（MST）</b>。</p>
-<div class="row">
-  <span class="box">A</span><span>—2—</span><span class="box">D</span>
-  <span class="label">　</span>
-  <span class="box">A</span><span>—4—</span><span class="box">B</span><span>—3—</span><span class="box">E</span><span>—1—</span><span class="box">C</span><span>—8—</span><span class="box">F</span>
-</div>
-<p class="label">上面 5 条边就是动画里那张图的 MST，总权 2+4+3+1+8 = 18。</p>
-
-<h2>Kruskal：贪心 + 判环</h2>
-<pre>chosen = []
-for start, end, weight in sorted(edges, key=lambda edge: edge[2]):   # ① 按权从小到大
-    if find(start) != find(end):          # ② 两头不在同一块：连上不会成环
-        union(start, end)
-        chosen.append((start, end, weight))
-        if len(chosen) == node_count - 1: # 选够了，提前收工
-            break
-    # 否则两头早就连通了，再加这条边就成环，跳过
-if len(chosen) &lt; node_count - 1:
-    raise ValueError("图不连通")</pre>
-<p>“会不会成环”就是问 <b>u 和 v 是不是已经连通</b>，这正是上一课<b>并查集</b>最擅长的：<code>find</code> 看是不是同一个老大，<code>union</code> 把两块合并。</p>
+<p>注意排序要写 <code>key=itemgetter(2)</code>：直接 <code>sorted(routes)</code> 会先按房间名排序，排出来的顺序就不是按成本了。完整可运行的版本（布线方案，以及把门店分成两个配送片区）在 <code>examples/kruskal_in_practice.py</code>，运行 <code>uv run examples/kruskal_in_practice.py</code>。</p>
 <div class="row">
   <span class="label">已连通的一块：</span><span class="box">{A, B, C, D, E}</span><span class="label">考察 B–D：两头都在里面 → 跳过</span><span class="box skip">B–D 5</span>
 </div>
@@ -94,7 +105,7 @@ if len(chosen) &lt; node_count - 1:
 </table>
 <p>瓶颈在排序。选够 n − 1 条边就可以提前收工。</p>
 
-<h2>动手玩</h2>
+<h2 id="demo">动手玩</h2>
 <p>点<b>开始 Kruskal</b>，看下面的边列表按权排好后一条条被考察：<b>绿色</b>是选中，<b>划线</b>是因为成环跳过。再点<b>不连通的图</b>：F 没有路，边看完了也凑不够 n − 1 条。</p>
 <div class="demo" id="kruskal"></div>
 
