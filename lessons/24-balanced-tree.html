@@ -14,6 +14,8 @@
 .tree .box.done { background: #c8e6c9; border-color: #2e7d32; }
 .tree .bf { position: absolute; transform: translate(-50%, -50%); font-size: 12px; color: #0b62c4; }
 .tree .bf.bad { color: #c62828; font-weight: bold; }
+.lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+.lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -21,6 +23,19 @@
 <h1>第 24 课 · 选修 · 平衡树思路（AVL 旋转）</h1>
 <p class="one-line">AVL 树就是一棵<b>会自己扶正</b>的二叉搜索树：每插入一个值，沿路往回看，哪里歪了就<b>转一下</b>，树高始终是 O(log n)。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#abc">继承 MutableMapping</a>（<code>update</code> / <code>items</code> 都是白送的）、<a href="python-basics.html#class">@classmethod</a>、<a href="python-basics.html#generator">生成器</a>（<code>__iter__</code> 用 yield 中序产出、<code>next(iter(orders))</code>）、<a href="python-basics.html#type-hints">X | None 与引号前向引用</a>、<a href="python-basics.html#sortedcontainers">sortedcontainers 用法</a>（实战当黑盒）；前面的课 —— <a href="11-bst.html">第 11 课 · 二叉搜索树</a>（本课直接在它上面改：退化问题、递归插入改父指针、删除的三种情况都来自那里）、<a href="05-recursion.html">第 5 课 · 递归与分治</a>、<a href="06-binary-search.html">第 6 课 · bisect</a>（实战里的对比方案）。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#definition">先定义</a>
+  <a href="#invariant">平衡不变量</a>
+  <a href="#template">旋转母模板</a>
+  <a href="#cases">逐题比较</a>
+  <a href="#practice-scenarios">应用场景</a>
+  <a href="#avl">看动画</a>
+  <a href="#practice">练习与自测</a>
+</nav>
+
+<h2 id="definition">先定义：保持 BST 顺序，同时控制树高</h2>
+<p>AVL 仍然是一棵二叉搜索树：左子树所有键更小，右子树所有键更大。新增的不变量是每个节点左右子树的高度差不能超过 1；插入后只修复从插入点回到根的路径。</p>
 
 <h2>实战里怎么写：sortedcontainers</h2>
 <p>Python 标准库没有平衡树，业务代码里也没人手写 AVL。需要“边改边保持有序”时：</p>
@@ -45,11 +60,11 @@ ranking[:3]                                 # 前三名</pre>
 <div class="row"><span class="box">1</span><span>↘</span><span class="box">2</span><span>↘</span><span class="box">3</span><span>↘</span><span class="box">4</span><span class="label">按顺序插入，树高 = n，查找 O(n)</span></div>
 <p>第 11 课见过：有序插入时 BST 只往一边长。平衡树的目标就是：<b>不管按什么顺序插入，h 都保持在 O(log n)</b>。</p>
 
-<h2>平衡因子：左高 − 右高</h2>
+<h2 id="invariant">平衡因子：左高 − 右高</h2>
 <pre>bf = height(node.left) - height(node.right)</pre>
 <p>AVL 只要求每个节点的 bf 是 <b>-1、0、1</b> 之一。插入后从新节点往根走，遇到第一个 bf 变成 <b>+2 或 -2</b> 的节点，就在那里旋转。每个节点记着自己的 <code>height</code>，算 bf 是 O(1)。</p>
 
-<h2>旋转：换个节点当根，中序不变</h2>
+<h2 id="template">旋转母模板：换个节点当根，中序不变</h2>
 <p>右旋（左边太高）：左孩子 x 升上来当根，原来的根 y 降到 x 的右边，x 原来的右子树 B 挂到 y 的左边。</p>
 <div class="row">
   <span class="box">y</span><span class="label">左 x(A, B)，右 C</span>
@@ -68,7 +83,7 @@ def rotate_right(top):                  # 图里的 y
     return new_top                      # 新的子树根</pre>
 <p>左旋完全对称。旋转只改了几根指针，<b>O(1)</b>，而且 A &lt; x &lt; B &lt; y &lt; C 的大小关系没变。</p>
 
-<h2>四种情况</h2>
+<h2 id="cases">四种情况：只比较失衡方向和插入方向</h2>
 <table>
   <tr><th>失衡节点</th><th>新值插在</th><th>怎么转</th></tr>
   <tr><td>bf = +2</td><td>左孩子的左边（LL）</td><td>对它右旋一次</td></tr>
@@ -103,6 +118,9 @@ def _insert(self, node, key, value):
         node.right = self._insert(node.right, key, value)
     return rebalance(node)</pre>
 
+<h2 id="practice-scenarios">应用场景：什么时候用现成的有序容器</h2>
+<p>上面的 <code>sortedcontainers</code> 示例给出实际选择：偶尔排序用 <code>sorted()</code>，静态数据查询用排序列表加 <code>bisect</code>，需要边修改边保持有序时才考虑有序容器或平衡树。</p>
+
 <h2>动手玩</h2>
 <p>先点 <b>插入 1, 2, 3</b>，看 1 的 bf 变成 -2 后怎么左旋；再点 <b>插入 3, 1, 2</b>，看 LR 情况的两次旋转。最后点 <b>插入 1～7</b>，和第 11 课退化成链表的样子比一比。每个节点上方的小数字是它的 bf。</p>
 <div class="demo" id="avl"></div>
@@ -117,7 +135,7 @@ def _insert(self, node, key, value):
 <h2>其它平衡树（了解即可）</h2>
 <p><b>红黑树</b>用“红黑颜色”代替精确高度，平衡得松一些，但插入删除时旋转更少，Java 的 TreeMap、C++ 的 std::map 都用它。Python 标准库没有平衡树；第三方的 <code>sortedcontainers</code> 走另一条路：把数据切成很多段<b>有序的小 list</b>，靠二分查找定位，实践中往往比平衡树还快。</p>
 
-<h2>练习</h2>
+<h2 id="practice">练习</h2>
 <p>补全 <code>dsa/avl.py</code> 里的 <code>AVLTreeMap</code>：用法和第 11 课的 <code>TreeMap</code>、和 <code>dict</code> 一样（<code>tree[key] = value</code>、<code>in</code>、<code>for</code>、<code>len</code>），只是不管按什么顺序插入都不会退化。</p>
 <p>建议顺序：<code>rotate_right</code> → <code>rotate_left</code> → <code>rebalance</code> → <code>__setitem__</code>（递归，回来的路上 rebalance）→ <code>__getitem__</code> → <code>__iter__</code> → <code>height</code> → <code>is_balanced</code> → 选做 <code>__delitem__</code>（以 <code>_optional</code> 结尾的两个测试）。</p>
 <pre>uv run dsa/avl.py               # 1 万个自增订单号的端到端例子，逐条打印期望和实际
