@@ -5,6 +5,8 @@
 <title>第 9 课 · 快速排序</title>
 <link rel="stylesheet" href="style.css">
 <style>
+  .lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
   .box.small.less { background: #e3f2fd; }
   .box.small.done { background: #e8f5e9; }
   .box.small.pivot { border-color: #c62828; border-width: 2px; }
@@ -15,26 +17,23 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 9 课 · 快速排序</h1>
 <p class="one-line">挑一个<b>基准</b>，比它小的放左边，比它大的放右边，基准就站到了<b>最终位置</b>。再对左右两边各做一遍。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#problem">问题直觉</a>
+  <a href="#definition">核心定义与不变量</a>
+  <a href="#template">通用操作模板</a>
+  <a href="#demo">题目与动画</a>
+  <a href="#application">应用场景</a>
+  <a href="#pitfalls">易错点与练习</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#lambda-key">lambda 与 key=</a>、<a href="python-basics.html#numbers">random.randint</a>、<a href="python-basics.html#unpack">元组解包（for name, _ in ...）</a>、<a href="python-basics.html#type-hints">类型标注（Callable、Iterable）</a>、<a href="python-basics.html#fstring">f-string 的 !r</a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归与分治</a>、<a href="08-merge-sort.html">第 8 课 · 归并排序</a>（复杂度对比）、<a href="07-simple-sorts.html">第 7 课</a>（稳定性）。</p>
 
-<h2>实战里怎么写：排序、中位数、前 k 名都有现成的</h2>
-<p>Python 的 <code>sorted()</code> 是 Timsort，不是快排。快排的“分区”思想解决的那些问题，标准库都备好了：</p>
-<table>
-  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
-  <tr><td>排序</td><td><code>sorted()</code> / <code>list.sort()</code></td><td>O(n log n)，稳定</td></tr>
-  <tr><td>中位数、P95 延迟</td><td><code>statistics.median</code> / <code>statistics.quantiles</code></td><td>内部会排序，O(n log n)</td></tr>
-  <tr><td>前 k 名</td><td><code>sorted(..., key=..., reverse=True)[:k]</code>；数据特别大时用标准库 <code>heapq.nlargest(k, ...)</code>（内部靠堆，第 12 课讲用法、第 33 课细讲，这里不展开）</td><td>前者 O(n log n)；nlargest O(n log k)</td></tr>
-  <tr><td>只要第 k 小的一个值，数据很大</td><td>本课手写 quickselect（见练习的 <code>select</code>）</td><td>平均 O(n)</td></tr>
-</table>
-<pre>import statistics
+<h2 id="problem">问题直觉：先把一个位置确定下来</h2>
+<p>排序难在每个元素都还没有位置。快排先挑一个基准，只解决“谁应该在它左边、谁应该在它右边”，让基准一次到达最终位置，再递归处理两侧。</p>
 
-statistics.median(latencies)                                       # 中位数，不受个别 3000ms 的极端值影响
-statistics.quantiles(latencies, n=100, method="inclusive")[94]     # P95
-sorted(sales.items(), key=lambda item: item[1], reverse=True)[:3]   # 销量前三的商品：先整体排，再切前 3 个
-players.sort(key=lambda player: player[1], reverse=True)            # 排行榜</pre>
-<p>完整可运行的版本在 <code>examples/quick_sort_in_practice.py</code>（<code>uv run examples/quick_sort_in_practice.py</code>）。下面看快排和 quickselect 本身。</p>
+<h2 id="definition">核心定义与不变量：分区后的左右边界</h2>
+<p>分区完成后，基准左侧都小于它，右侧都大于或等于它；两侧内部是否有序暂时不重要。递归出口是区间最多一个元素。</p>
 
-<h2>核心是“分区”（partition）</h2>
+<h3>核心是“分区”（partition）</h3>
 <p>像体育课排队：老师指定一个同学当基准，矮的站他左边，高的站他右边。站完之后，他的位置就定了，不用再动。</p>
 <div class="row">
   <span class="box">2</span><span class="box">1</span><span class="box">3</span>
@@ -44,7 +43,7 @@ players.sort(key=lambda player: player[1], reverse=True)            # 排行榜<
 </div>
 <p>左右两边内部还是乱的，没关系，递归下去分别排就行。和归并排序反过来：归并是“先递归，再合并”，快排是“先分区，再递归”，最后什么都不用合并。</p>
 
-<h2>Lomuto 分区：两个指针</h2>
+<h2 id="template">通用操作模板：Lomuto 分区与递归</h2>
 <pre>def partition(items, low, high):
     pivot = items[high]                  # 拿最后一个当基准
     boundary = low                       # items[low..boundary-1] 是“小于区”
@@ -66,11 +65,28 @@ players.sort(key=lambda player: player[1], reverse=True)            # 排行榜<
 </table>
 <p>基准每次都把数组分成差不多的两半，就是 log n 层，和归并一样。可如果总拿最后一个当基准，而数组<b>已经有序</b>，每次只分出“n-1 个 + 0 个”，就退化成 O(n²)。办法很简单：<b>随机挑一个</b>和 a[hi] 交换再分区，坏情况几乎碰不到（例外：大量相同元素时 Lomuto 仍会退化，这里不展开）。</p>
 
-<h2>动手玩</h2>
+<h2 id="application">应用场景：排序、分位数与前 k 名</h2>
+<p>Python 的 <code>sorted()</code> 是 Timsort，不是快排。快排的“分区”思想解决的那些问题，标准库都备好了：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>排序</td><td><code>sorted()</code> / <code>list.sort()</code></td><td>O(n log n)，稳定</td></tr>
+  <tr><td>中位数、P95 延迟</td><td><code>statistics.median</code> / <code>statistics.quantiles</code></td><td>内部会排序，O(n log n)</td></tr>
+  <tr><td>前 k 名</td><td><code>sorted(..., key=..., reverse=True)[:k]</code>；数据特别大时用 <code>heapq.nlargest(k, ...)</code></td><td>前者 O(n log n)；nlargest O(n log k)</td></tr>
+  <tr><td>只要第 k 小的一个值</td><td>手写 quickselect（练习的 <code>select</code>）</td><td>平均 O(n)</td></tr>
+</table>
+<pre>import statistics
+
+statistics.median(latencies)
+statistics.quantiles(latencies, n=100, method="inclusive")[94]
+sorted(sales.items(), key=lambda item: item[1], reverse=True)[:3]
+players.sort(key=lambda player: player[1], reverse=True)</pre>
+<p>完整可运行的版本在 <code>examples/quick_sort_in_practice.py</code>（<code>uv run examples/quick_sort_in_practice.py</code>）。</p>
+
+<h2 id="demo">题目与动画</h2>
 <p>先点 <b>partition</b> 一步步看 i、j 怎么走（橙色是正在比的，蓝色是“小于区”，红框是基准）。再点 <b>quick_sort</b> 看整个递归过程，绿色是已经站到最终位置的。试试输入 <code>1 2 3 4 5 6</code>，数一数比较次数有多少。</p>
 <div class="demo" id="qsort"></div>
 
-<h2>最容易错的三个地方</h2>
+<h2 id="pitfalls">易错点与练习</h2>
 <ul>
   <li>区间是 <b>items[low..high] 两端都包含</b>。递归时是 <code>(low, pivot_index - 1)</code> 和 <code>(pivot_index + 1, high)</code>，基准不要再带进去，否则可能死循环。</li>
   <li>递归出口是 <code>low &gt;= high</code>（0 或 1 个元素），不是 <code>low == high</code>：基准在边上时会出现 low &gt; high。</li>
