@@ -9,9 +9,14 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 3 课 · 栈与队列</h1>
 <p class="one-line"><b>栈</b>是后进先出（LIFO），像一摞盘子，只能动最上面那个；<b>队列</b>是先进先出（FIFO），像排队买票，从队尾进、从队头出。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#idea">先理解</a><a href="#objects">核心对象</a><a href="#template">模板与不变量</a><a href="#applications">应用场景</a><a href="#practice">练习与自测</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#dunder">魔法方法</a>（<code>__len__</code>、<code>__iter__</code>、<code>__bool__</code> 的退路）、<a href="python-basics.html#generator">生成器</a>、<a href="python-basics.html#class">@property</a>、<a href="python-basics.html#exceptions">异常约定（IndexError）</a>、<a href="python-basics.html#numbers"><code>%</code> 取余</a>、<a href="python-basics.html#closure">嵌套函数</a>、<a href="python-basics.html#walrus">海象运算符 :=</a>；前面的课 —— <a href="01-dynamic-array.html">第 1 课 · 动态数组</a>（翻倍扩容、均摊 O(1)）、<a href="02-linked-list.html">第 2 课 · 链表</a>（<code>append</code> / <code>popleft</code> 这套方法名）。</p>
 
-<h2>实战里怎么写：list 当栈，deque 当队列</h2>
+<h2 id="idea">先理解：两种取出顺序</h2>
+<p>问题先看“谁应该先出来”：后进先出就是栈，先进先出就是队列。这个顺序决定了入口、出口和底层结构。</p>
+<h2 id="applications">应用场景：list 当栈，deque 当队列</h2>
 <p>业务代码里没人专门写 Stack / Queue 类，直接用现成的：</p>
 <table>
   <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
@@ -53,6 +58,7 @@ print(recent)                   # deque(['搜索', '商品', '购物车'], maxle
 <p>第 1 课里“只留最近 3 条”要手动 <code>del items[0]</code>（O(n)），换成 <code>deque(maxlen=3)</code> 就是 O(1)。CPython 的 deque 底层是一串定长小块串成的双向链表（第 2 课链表的升级版）；下面讲另一种做到两头都快的办法：环形队列。</p>
 <p>完整可运行的版本在 <code>examples/stack_queue_in_practice.py</code>（<code>uv run examples/stack_queue_in_practice.py</code>），还有用两个栈做的撤销 / 重做和一个 <code>queue.Queue</code> 工作线程。多线程不是这门课的内容，那一段只需看懂三件事：<code>threading.Thread(target=函数)</code> 造一个线程、<code>start()</code> 让它和主程序同时跑、<code>join()</code> 等它跑完；<code>queue.Queue</code> 的 <code>put</code> 放进队尾，<code>get</code> 从队头取，队列空时 <code>get</code> 会停下来等。</p>
 
+<h2 id="objects">核心对象：栈、队列与环形下标</h2>
 <h2>栈：一个 list 就够了</h2>
 <div class="row">
   <span class="label">栈底</span><span class="box">1</span><span class="box">2</span><span class="box hot">3</span><span class="label">← 栈顶（list 末尾）</span>
@@ -62,6 +68,7 @@ items.pop()       # pop：O(1)
 items[-1]         # peek：O(1)</pre>
 <p>只在 list 的<b>末尾</b>进出，第 1 课讲过，这都是 O(1)。撤销、括号匹配用的都是栈；Python 执行函数调用时也靠一个栈记住“回到哪里”，第 5 课讲递归时会看到。</p>
 
+<h2 id="template">模板与不变量：head、size 与回绕</h2>
 <h2>队列：为什么不能也用 list</h2>
 <p>队列要从<b>头部</b>取。<code>list.pop(0)</code> 会让后面所有元素往左挪一格，是 O(n)。</p>
 <p>办法：元素不挪，<b>只挪下标</b>。用 <code>head</code> 记住队头在哪，出队时 <code>head += 1</code> 就行。可这样前面空出来的格子就浪费了。</p>
@@ -115,6 +122,7 @@ def popleft(self):
   <li>扩容时按旧下标顺序复制，队列顺序乱掉。</li>
 </ul>
 
+<h2 id="practice">练习与自测</h2>
 <h2>练习</h2>
 <p>补全 <code>dsa/stack_queue.py</code>。接口按标准库的习惯：<code>Stack</code> 有 <code>push</code> / <code>pop</code> / <code>peek</code>；<code>CircularQueue</code> 的方法名和 <code>deque</code> 一样，<code>append</code> 放队尾、<code>popleft</code> 取队头（动画里的 <code>enqueue</code> / <code>dequeue</code> 就是它们）。两个类都支持 <code>len()</code>、<code>if queue:</code> 判空、<code>for</code> 遍历；空的时候取元素抛 <code>IndexError</code>。</p>
 <p>先写 <code>Stack</code>（几行就完），再写 <code>CircularQueue</code>：<code>__len__</code> → <code>peek</code> → <code>popleft</code> → <code>__iter__</code>（按队列顺序，不是按下标顺序）→ <code>append</code>（最后加扩容）。</p>
