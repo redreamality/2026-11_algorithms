@@ -5,6 +5,8 @@
 <title>第 11 课 · 二叉搜索树</title>
 <link rel="stylesheet" href="style.css">
 <style>
+  .lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
 .tree { position: relative; width: 480px; max-width: 100%; margin: 6px 0; }
 .tree svg { position: absolute; left: 0; top: 0; }
 .tree .box { position: absolute; transform: translate(-50%, -50%); background: #fff; }
@@ -18,39 +20,28 @@
 <p><a href="index.html">← 目录</a></p>
 <h1>第 11 课 · 二叉搜索树</h1>
 <p class="one-line">二叉搜索树（BST）只多一条规则：<b>左边都比我小，右边都比我大</b>。于是每比一次就能扔掉一半，像在树上做二分查找。</p>
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#problem">问题直觉</a>
+  <a href="#definition">核心定义与不变量</a>
+  <a href="#template">通用操作模板</a>
+  <a href="#demo">题目与动画</a>
+  <a href="#application">应用场景</a>
+  <a href="#pitfalls">易错点与练习</a>
+</nav>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#abc">继承 MutableMapping（白送的方法）</a>、<a href="python-basics.html#sortedcontainers">sortedcontainers</a>、<a href="python-basics.html#exceptions">异常约定（KeyError）</a>、<a href="python-basics.html#generator">生成器（yield）</a>、<a href="python-basics.html#dict-tools">setdefault</a>、<a href="python-basics.html#class">@classmethod</a>；前面的课 —— <a href="10-binary-tree.html">第 10 课 · 二叉树</a>、<a href="06-binary-search.html">第 6 课 · 二分查找（bisect）</a>、<a href="05-recursion.html">第 5 课 · 递归（删除用递归写）</a></p>
 
-<h2>长什么样</h2>
+<h2 id="problem">问题直觉：怎样在动态数据里保持有序</h2>
+<p>数组适合二分查找，却不适合频繁插入；哈希表适合查找，却不提供顺序。BST 把“查找路径”和“有序结构”放进同一棵树，关键是每个子树都继续满足同一条规则。</p>
+
+<h2 id="definition">核心定义与不变量：左小右大</h2>
+<h3>长什么样</h3>
 <div class="row" style="justify-content:center;max-width:300px"><span class="box">5</span></div>
 <div class="row" style="justify-content:center;gap:90px;max-width:300px"><span class="box">3</span><span class="box">8</span></div>
 <div class="row" style="justify-content:center;gap:22px;max-width:300px"><span class="box">1</span><span class="box">4</span><span class="box">7</span><span class="box">9</span></div>
 <p>规则对<b>每个节点</b>都成立，管的是整棵子树，不只是直接的孩子：8 在 5 的右边，所以 8 的左子树里也不能出现 4（虽然 4 &lt; 8，但它比 5 小）。中序遍历（左 → 根 → 右）的结果正好从小到大：1 3 4 5 7 8 9。</p>
 
-<h2>实战里怎么写：先别急着手写</h2>
-<p>业务代码里几乎没人手写 BST。Python 没有内置的有序字典（<code>dict</code> 只记插入顺序，不按大小排），实际按场景二选一：</p>
-<table>
-  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
-  <tr><td>数据基本不变，只查询</td><td>排好序的 <code>list</code> + 标准库 <code>bisect</code>（<a href="06-binary-search.html">第 6 课</a>）</td><td>查 O(log n)，插入要挪元素 O(n)</td></tr>
-  <tr><td>边查边改</td><td>第三方库 <code>sortedcontainers</code> 的 <code>SortedDict</code> / <code>SortedList</code></td><td>增删查都约 O(log n)</td></tr>
-</table>
-<pre>from bisect import bisect_right
-from sortedcontainers import SortedDict
-
-# 配置变更历史（按时间排好序）：某一时刻生效的是哪个版本？= 找“&lt;= 该时刻的最后一条”
-times = [changed_at for changed_at, _ in history]
-index = bisect_right(times, moment) - 1
-version = history[index][1] if index &gt;= 0 else None
-
-# 商品按价格建索引，随时上下架，按价格区间筛选
-by_price = SortedDict()                 # 价格（分） -&gt; 商品名
-by_price[1999] = "鼠标"
-by_price[4599] = "键盘"
-del by_price[1999]
-list(by_price.irange(2000, 9000))       # 区间里的价格，只走范围内的部分
-by_price.peekitem(0)                    # 最便宜的 (价格, 商品)</pre>
-<p>完整可运行的版本在 <code>examples/bst_in_practice.py</code>（<code>uv run examples/bst_in_practice.py</code>）。这些“查区间、找不超过 x 的最大值、取最小值”正是 BST 擅长的事，下面看它们是怎么做到的。</p>
-
-<h2>查找和插入：小往左，大往右</h2>
+<h2 id="template">通用操作模板：查找、插入、删除</h2>
+<h3>查找和插入：小往左，大往右</h3>
 <p>手写版做成一个和 <code>dict</code> 用法一样的 <code>TreeMap</code>：每个节点存 <code>key</code> 和 <code>value</code>，按 key 排。<code>tree[key]</code> 的实现就是从根往下走：</p>
 <pre>def __getitem__(self, key):
     node = self.root
@@ -83,11 +74,35 @@ prices[4599]                     # '键盘'
 </table>
 <p>按 1、2、3…… 的顺序插入，每个值都只能挂在最右边，树就变成一条链。红黑树、AVL 这类<b>平衡树</b>会在插入删除时自动调整，保证 h = O(log n)（选修课再讲）。</p>
 
-<h2>动手玩</h2>
+<h2 id="application">应用场景：有序索引与区间查询</h2>
+<p>业务代码里几乎没人手写 BST。Python 没有内置的有序字典（<code>dict</code> 只记插入顺序，不按大小排），实际按场景二选一：</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>数据基本不变，只查询</td><td>排好序的 <code>list</code> + 标准库 <code>bisect</code>（<a href="06-binary-search.html">第 6 课</a>）</td><td>查 O(log n)，插入要挪元素 O(n)</td></tr>
+  <tr><td>边查边改</td><td>第三方库 <code>sortedcontainers</code> 的 <code>SortedDict</code> / <code>SortedList</code></td><td>增删查都约 O(log n)</td></tr>
+</table>
+<pre>from bisect import bisect_right
+from sortedcontainers import SortedDict
+
+# 配置变更历史（按时间排好序）：某一时刻生效的是哪个版本？= 找“&lt;= 该时刻的最后一条”
+times = [changed_at for changed_at, _ in history]
+index = bisect_right(times, moment) - 1
+version = history[index][1] if index &gt;= 0 else None
+
+# 商品按价格建索引，随时上下架，按价格区间筛选
+by_price = SortedDict()                 # 价格（分） -&gt; 商品名
+by_price[1999] = "鼠标"
+by_price[4599] = "键盘"
+del by_price[1999]
+list(by_price.irange(2000, 9000))       # 区间里的价格，只走范围内的部分
+by_price.peekitem(0)                    # 最便宜的 (价格, 商品)</pre>
+<p>完整可运行的版本在 <code>examples/bst_in_practice.py</code>（<code>uv run examples/bst_in_practice.py</code>）。这些“查区间、找不超过 x 的最大值、取最小值”正是 BST 擅长的事，下面看它们是怎么做到的。</p>
+
+<h2 id="demo">题目与动画</h2>
 <p>建议依次试试：值设成 2 点 <b>insert</b> 看它走哪条路；把值设成 1、8、5 分别点 <b>remove</b>，看三种删除情况（5 有两个孩子，注意后继 6 怎么上去）；最后点 <b>有序插入 1～7</b>，看树怎么退化成链表。</p>
 <div class="demo" id="bst"></div>
 
-<h2>最容易错的地方</h2>
+<h2 id="pitfalls">易错点与练习</h2>
 <ul>
   <li>删的是<b>根</b>，而且根只有一个孩子：要改的是 <code>self.root</code>，不是哪个父亲的指针。</li>
   <li>两个孩子的情况，复制完后继的值，<b>忘了删掉后继原来的节点</b>，树里就出现两个一样的值。</li>
