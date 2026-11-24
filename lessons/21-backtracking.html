@@ -9,6 +9,8 @@
 .board .box.cell { height: 24px; padding: 4px 0; font-size: 18px; line-height: 24px; }
 .box.queen { background: #c8e6c9; border-color: #2e7d32; }
 .box.queen.hot { background: #ffe0b2; border-color: #e65100; }
+.lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+.lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -17,36 +19,19 @@
 <p class="one-line">回溯 = <b>试一步，不行就退回来换一条路</b>。像走迷宫：每个岔口挑一条走，走到死胡同就退回上一个岔口。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器与 next()</a>、<a href="python-basics.html#yield-from">yield from</a>（本课的核心写法）、<a href="python-basics.html#itertools">itertools 的 permutations / combinations / product / islice</a>、<a href="python-basics.html#unpack">* 解包</a>（实战里 <code>set().union(*(people[name] for name in team))</code>、<code>product(*dimensions.values())</code> 用到）、<a href="python-basics.html#dict-tools">dict.fromkeys 与 get</a>、<a href="python-basics.html#type-hints">Iterator 标注</a>；前面的课 —— <a href="05-recursion.html">第 5 课 · 递归与分治</a>、<a href="10-binary-tree.html">第 10 课 · 二叉树</a>（深度优先地走一棵树）、<a href="20-dp-knapsack.html">第 20 课 · 背包 DP</a>（自测第 3 题要把两者放在一起比）。</p>
 
-<h2>实战里怎么写：先看 itertools 够不够</h2>
-<p>只是“把所有排列 / 组合列出来”，标准库 <code>itertools</code> 已经写好了，而且都是<b>惰性生成器</b>：要几个算几个。</p>
-<table>
-  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
-  <tr><td>几个步骤的所有顺序、值班轮换</td><td><code>itertools.permutations</code></td><td>n! 个</td></tr>
-  <tr><td>从候选人里挑 k 个组队</td><td><code>itertools.combinations</code></td><td>C(n, k) 个</td></tr>
-  <tr><td>CI 测试矩阵、所有配置组合</td><td><code>itertools.product</code></td><td>各维度大小相乘</td></tr>
-  <tr><td>约束多、规模大：排班、数独、选课</td><td><b>自己写回溯生成器</b>，边放边检查</td><td>最坏指数级，靠剪枝提速</td></tr>
-</table>
-<pre>from itertools import combinations, islice, product
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#definition">先定义</a>
+  <a href="#template">三步母模板</a>
+  <a href="#problem-compare">逐题比较</a>
+  <a href="#practice-scenarios">应用场景</a>
+  <a href="#queens">看动画</a>
+  <a href="#practice">练习与自测</a>
+</nav>
 
-# CI 测试矩阵：所有组合，排除不支持的
-matrix = [
-    {"os": os_name, "version": version}
-    for os_name, version in product(["linux", "windows"], ["3.11", "3.12", "3.13"])
-]
+<h2 id="definition">先定义：状态、不变量和结束条件</h2>
+<p>回溯每一层都表示一个选择位置，<code>path</code> 保存已经做出的选择，其他集合或计数器保存“不变量”：它们准确描述当前路径已经占用了什么。走到结束条件就得到一个解；走不通或约束不满足，就停止向下展开。</p>
 
-# 规模小：先全部生成再过滤；next() 找到第一个就停
-team = next(
-    (team for team in combinations(people, 2) if {"前端", "后端"} &lt;= set().union(*(people[name] for name in team))),
-    None,
-)
-
-# 规模大：生成 3^5 种排班再过滤太浪费，回溯在填每一格时就把冲突剪掉
-plans = assign_shifts(["张", "李", "王"], shifts, unavailable, max_shifts_per_person=2)
-first_plan = next(plans)                     # 只算出第一种就停
-first_ten = list(islice(plans, 10))          # 想要更多再接着拿</pre>
-<p>完整可运行的版本在 <code>examples/backtracking_in_practice.py</code>（<code>uv run examples/backtracking_in_practice.py</code>）。<code>itertools</code> 管不了“边生成边检查约束”，这时就要自己写回溯。下面看它的结构。</p>
-
-<h2>三步模板：选择 → 递归 → 撤销</h2>
+<h2 id="template">三步母模板：选择 → 递归 → 撤销</h2>
 <p>写成生成器，每找到一个解就 <code>yield</code> 出去，用法就和 <code>itertools</code> 一样了（<code>yield</code> 和 <code>yield from</code> 的用法见<a href="python-basics.html#yield-from">预备课</a>；递归见<a href="05-recursion.html">第 5 课</a>）：</p>
 <pre>def permutations(items):
     used = [False] * len(items)
@@ -77,7 +62,7 @@ next(permutations(list(range(20))))          # 马上返回；20! 个排列不�
 <div class="row"><span class="label">叶子：</span><span class="box hot">[1,2,3]</span><span class="box">[1,2]</span><span class="box">[1,3]</span><span class="box">[1]</span><span class="box">[2,3]</span><span class="box">[2]</span><span class="box">[3]</span><span class="box">[]</span></div>
 <p>回溯就是<b>深度优先地走一遍这棵树</b>：一路走到叶子，再退回最近的岔口换另一边。</p>
 
-<h2>四道经典题</h2>
+<h2 id="problem-compare">四道经典题：只替换每层的选择和约束</h2>
 <table>
   <tr><th>题</th><th>每层在选什么</th><th>答案个数 / 时间</th></tr>
   <tr><td>全排列</td><td>还没用过的数里挑一个（用 used 记录）</td><td>n! 个，O(n · n!)</td></tr>
@@ -93,6 +78,35 @@ next(permutations(list(range(20))))          # 马上返回；20! 个排列不�
   <li>组合总和：候选数排好序，当前数已经大于剩下的 target，后面更大的也不用试，<code>break</code>。</li>
 </ul>
 
+<h2 id="practice-scenarios">应用场景：实战里怎么写，先看 itertools 够不够</h2>
+<p>只是“把所有排列 / 组合列出来”，标准库 <code>itertools</code> 已经写好了，而且都是<b>惰性生成器</b>：要几个算几个。</p>
+<table>
+  <tr><th>场景</th><th>用什么</th><th>代价</th></tr>
+  <tr><td>几个步骤的所有顺序、值班轮换</td><td><code>itertools.permutations</code></td><td>n! 个</td></tr>
+  <tr><td>从候选人里挑 k 个组队</td><td><code>itertools.combinations</code></td><td>C(n, k) 个</td></tr>
+  <tr><td>CI 测试矩阵、所有配置组合</td><td><code>itertools.product</code></td><td>各维度大小相乘</td></tr>
+  <tr><td>约束多、规模大：排班、数独、选课</td><td><b>自己写回溯生成器</b>，边放边检查</td><td>最坏指数级，靠剪枝提速</td></tr>
+</table>
+<pre>from itertools import combinations, islice, product
+
+# CI 测试矩阵：所有组合，排除不支持的
+matrix = [
+    {"os": os_name, "version": version}
+    for os_name, version in product(["linux", "windows"], ["3.11", "3.12", "3.13"])
+]
+
+# 规模小：先全部生成再过滤；next() 找到第一个就停
+team = next(
+    (team for team in combinations(people, 2) if {"前端", "后端"} &lt;= set().union(*(people[name] for name in team))),
+    None,
+)
+
+# 规模大：生成 3^5 种排班再过滤太浪费，回溯在填每一格时就把冲突剪掉
+plans = assign_shifts(["张", "李", "王"], shifts, unavailable, max_shifts_per_person=2)
+first_plan = next(plans)                     # 只算出第一种就停
+first_ten = list(islice(plans, 10))          # 想要更多再接着拿</pre>
+<p>完整可运行的版本在 <code>examples/backtracking_in_practice.py</code>（<code>uv run examples/backtracking_in_practice.py</code>）。<code>itertools</code> 管不了“边生成边检查约束”，这时就要自己写回溯。</p>
+
 <h2>动手玩</h2>
 <p>建议依次试试：n = 4 点 <b>找第一个解</b>，用“上一步 / 下一步”慢慢看：红色 × 是冲突被剪掉的格子，橙色是和它冲突的皇后；再点 <b>找全部解</b>，看找到一个解之后它怎么继续回溯；最后把 n 改成 5，对比尝试次数。</p>
 <div class="demo" id="queens"></div>
@@ -105,7 +119,7 @@ next(permutations(list(range(20))))          # 马上返回；20! 个排列不�
   <li>组合总和出现 [2, 3] 和 [3, 2]：没用 start 限制“只往后选”。</li>
 </ul>
 
-<h2>练习</h2>
+<h2 id="practice">练习</h2>
 <p>补全 <code>dsa/backtracking.py</code>。每个函数都是生成器，逐个 <code>yield</code> tuple；<code>permutations</code> 的顺序要和 <code>itertools.permutations</code> 完全一样，<code>n_queens</code> 产出每个解的摆法（第 row 行放在第几列），数个数用 <code>sum(1 for _ in n_queens(8))</code>。建议顺序：<code>subsets</code> → <code>permutations</code> → <code>combination_sum</code> → <code>n_queens</code> →（选做）<code>solve_sudoku</code>。</p>
 <pre>uv run dsa/backtracking.py               # 值班排法、配件组合、代金券凑数、数独的端到端例子
 uv run pytest tests/test_backtracking.py</pre>
