@@ -13,6 +13,8 @@
 .box.ok { background: #c8e6c9; border-color: #2e7d32; }
 .box.bad { background: #ffcdd2; border-color: #c62828; }
 .demo input[type=text] { width: 140px; }
+.lesson-route { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+.lesson-route a { background: #f1f5f9; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -20,6 +22,18 @@
 <h1>第 23 课 · 选修 · KMP 字符串匹配</h1>
 <p class="one-line">在文本里找模式串。暴力法一失配就<b>退回去从头比</b>；KMP 记住“刚才已经对上了哪些字符”，失配时<b>文本指针不回头</b>，模式按一张前缀表直接往右跳。</p>
 <p class="prereq">开始前要会：Python —— <a href="python-basics.html#generator">生成器与 next(gen, 默认值)</a>（<code>find_all</code> 是生成器，<code>find</code> 靠 <code>next(..., -1)</code>）、<a href="python-basics.html#loop-tools">enumerate</a>、<a href="python-basics.html#exceptions">try / except 与 ValueError</a>（<code>index</code> 找不到要抛）、<a href="python-basics.html#lambda-key">lambda</a>（实战里给 <code>re.sub</code> 传替换函数）；预备课没讲标准库 <code>re</code>，下面实战一节开头就地补了最小用法。前面的课 —— 本课自成一体，暴力匹配和 KMP 都只用循环和字符串下标，不依赖某棵具体的前置结构。</p>
+
+<nav class="lesson-route" aria-label="本课内容">
+  <a href="#definition">先定义</a>
+  <a href="#naive">暴力基线</a>
+  <a href="#prefix">前缀表</a>
+  <a href="#practice-scenarios">应用场景</a>
+  <a href="#kmp">看动画</a>
+  <a href="#practice">练习与自测</a>
+</nav>
+
+<h2 id="definition">先定义：匹配状态和不变量</h2>
+<p>扫描文本时，<code>i</code> 只向右走；<code>j</code> 表示当前已经和模式串对上的长度。每次失配都要保留“已经知道的前缀信息”，这就是 KMP 的核心不变量：不重新检查文本中已经看过的字符。</p>
 
 <h2>实战里怎么写：直接用 str 和 re</h2>
 <p>日常代码里没人手写 KMP。Python 的字符串方法和 <code>re</code> 已经够用。<code>re</code> 是标准库的正则表达式模块（预备课没讲，这里只补本课用到的三样）：<code>re.finditer(模式, 文本)</code> 逐个给出每个匹配对象，用 <code>match.start()</code> 拿起点；<code>(?=...)</code> 叫<b>前瞻</b>，意思是“这个位置后面要跟得上一段内容”，所以匹配位置可以重叠（普通匹配会互相吃掉）；<code>re.escape(词)</code> 把普通字符串里的特殊字符转义掉，让它按字面意思匹配：</p>
@@ -41,7 +55,7 @@ log.count("ERROR")                    # 2
 [match.start() for match in re.finditer("(?=ATA)", "ATATATA")]                   # 重叠位置 [0, 2, 4]</pre>
 <p>完整可运行的版本在 <code>examples/kmp_in_practice.py</code>（<code>uv run examples/kmp_in_practice.py</code>）。CPython 的 <code>str.find</code> 用的是 Boyer-Moore 一类的算法加启发式，平均比 KMP 还快。学 KMP 是为了两件事：最坏情况 O(n + m) 有保证，以及“前缀表”这个思路（很多字符串题都要用到）。</p>
 
-<h2>暴力匹配：失配就从头</h2>
+<h2 id="naive">暴力匹配：失配就从头</h2>
 <p>把模式放在每个起点上，逐个字符比，一不等就右移一格、从模式开头再来：</p>
 <div class="row">
   <span class="label">文本</span><span class="box ok">A</span><span class="box ok">B</span><span class="box ok">A</span><span class="box ok">B</span><span class="box bad">A</span><span class="box">B</span><span class="box">C</span>
@@ -51,7 +65,7 @@ log.count("ERROR")                    # 2
 </div>
 <p>前 4 个刚比完都相等，暴力法却把它们全扔掉，下一轮又从头比。最坏要 <b>O(n·m)</b>。</p>
 
-<h2>前缀表：开头和结尾有多少一样</h2>
+<h2 id="prefix">前缀表：开头和结尾有多少一样</h2>
 <p><code>π[k]</code> = 模式前 k+1 个字符里，<b>开头和结尾相同</b>的最长长度（不能是整段本身）。以 <code>ABABC</code> 为例：</p>
 <table>
   <tr><th>前缀</th><th>开头 = 结尾</th><th>π</th></tr>
@@ -89,6 +103,9 @@ def find(text, pattern):
 </table>
 <p>为什么是 O(n + m)：i 从不回退，j 每次往回跳的总量不会超过它往前走的总量。</p>
 
+<h2 id="practice-scenarios">应用场景：什么时候直接用标准库</h2>
+<p>上面的 <code>str</code> 和 <code>re</code> 表格是选择依据：普通包含、首次位置和计数直接调用字符串方法；需要模式、忽略大小写或重叠位置时用正则；只有需要最坏 O(n + m) 保证或要学习前缀表时，才手写 KMP。</p>
+
 <h2>动手玩</h2>
 <p>先点 <b>暴力匹配</b>，再点 <b>KMP</b>，看比较次数差多少。KMP 失配那一帧会把用到的 π 格子标亮。也可以试试文本 <code>AAAAAAAAB</code>、模式 <code>AAAB</code>，这是暴力法的最坏情况。</p>
 <div class="demo" id="kmp"></div>
@@ -100,7 +117,7 @@ def find(text, pattern):
   <li>找到一处后别把 j 清零，要 <code>j = pi[j - 1]</code>，否则会漏掉重叠的匹配（"aaaa" 里找 "aa" 应得 [0, 1, 2]）。</li>
 </ul>
 
-<h2>练习</h2>
+<h2 id="practice">练习</h2>
 <p>补全 <code>dsa/kmp.py</code>。接口和标准库对齐：<code>find</code> ≈ <code>str.find</code>、<code>index</code> ≈ <code>str.index</code>、<code>count</code> ≈ <code>str.count</code>，<code>find_all</code> 是产出所有（可重叠）位置的生成器。测试会拿它们和标准库逐个对比，空模式等边界也照标准库的约定。</p>
 <p>建议顺序：<code>naive_find_all</code> → <code>prefix_function</code> → <code>find_all</code> → <code>find</code> → <code>index</code> → <code>count</code>。</p>
 <pre>uv run dsa/kmp.py               # 在日志里定位错误的端到端例子，逐条打印期望和实际
